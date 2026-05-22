@@ -13,9 +13,9 @@
  * Empty input (`{}`) clears all channels for both rule kinds.
  */
 
+import type { AlertKind } from "../severity";
 import type { AlertChannel } from "./alert-channel";
 import type { AlertChannelRepository } from "./alert-channel.repository";
-import type { AlertKind } from "../severity";
 
 const SLACK_PREFIX = "https://hooks.slack.com/";
 const DISCORD_PREFIXES = [

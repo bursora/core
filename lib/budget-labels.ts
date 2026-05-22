@@ -1,5 +1,3 @@
-import type { StatusTagTone } from "./status-tag-tone";
-import type { BudgetMode, Period, ScopeType } from "./budgeting";
 import {
     Bell,
     Bot,
@@ -10,6 +8,8 @@ import {
     Workflow,
     type LucideIcon,
 } from "lucide-react";
+import type { BudgetMode, Period, ScopeType } from "./budgeting";
+import type { StatusTagTone } from "./status-tag-tone";
 
 interface ScopeMeta {
     readonly Icon: LucideIcon;

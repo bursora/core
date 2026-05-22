@@ -14,8 +14,8 @@ import {
     buildRows,
 } from "@/app/(dashboard)/workspace/[workspaceId]/spend/_lib/build-rows";
 import { Card } from "@/components/ui/card";
-import { SwatchDot } from "@/components/ui/swatch-dot";
 import { useReducedMotion } from "@/components/ui/hooks/use-reduced-motion";
+import { SwatchDot } from "@/components/ui/swatch-dot";
 import { formatCount, formatUsd } from "@/lib/format";
 import type { FacetedSeries } from "@/lib/metering";
 import { useMemo } from "react";

@@ -21,12 +21,7 @@
  */
 
 import { overageCentsAt } from "@/lib/event-bundle/counter";
-import {
-    CAP_CENTS,
-    FLOOR_CENTS,
-    clampPercentage,
-    rawPercentageCents,
-} from "./calculate-bill";
+import { CAP_CENTS, FLOOR_CENTS, clampPercentage, rawPercentageCents } from "./calculate-bill";
 import { daysActiveInclusive, daysInUtcMonth, prorateFraction } from "./prorate";
 import { pushStripeInvoiceUseCase } from "./push-stripe-invoice.usecase";
 import {

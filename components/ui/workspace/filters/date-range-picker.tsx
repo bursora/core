@@ -1,5 +1,8 @@
 "use client";
 
+import { CalendarIcon } from "lucide-react";
+import * as React from "react";
+import type { DateRange } from "react-day-picker";
 import { Button } from "../../button";
 import { Calendar } from "../../calendar";
 import { Input } from "../../input";
@@ -13,9 +16,6 @@ import {
     PRESETS,
     type PresetId,
 } from "./date-range-picker-logic";
-import { CalendarIcon } from "lucide-react";
-import * as React from "react";
-import type { DateRange } from "react-day-picker";
 
 interface DateRangePickerProps {
     from: Date;

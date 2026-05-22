@@ -1,6 +1,6 @@
-import { LandingFillBar } from "./landing-bar";
 import { cn } from "@/lib/utils";
 import type { ReactNode } from "react";
+import { LandingFillBar } from "./landing-bar";
 
 export type KpiTone = "up" | "down" | "neut";
 

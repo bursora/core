@@ -11,6 +11,8 @@
  * immediately. No URL commit happens here — that's the value picker's job.
  */
 
+import { PlusCircleIcon, type LucideIcon } from "lucide-react";
+import { useEffect, useState } from "react";
 import { Button } from "../../button";
 import {
     Command,
@@ -21,8 +23,6 @@ import {
     CommandList,
 } from "../../command";
 import { Popover, PopoverContent, PopoverTrigger } from "../../popover";
-import { PlusCircleIcon, type LucideIcon } from "lucide-react";
-import { useEffect, useState } from "react";
 
 export interface AddFilterOption<K extends string> {
     readonly key: K;

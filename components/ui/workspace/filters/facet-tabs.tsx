@@ -12,10 +12,10 @@
  * The href shape for link mode matches `GroupByFilter.buildHref` exactly.
  */
 
-import { buildHref } from "./group-by-filter";
 import type { Facet } from "@/lib/metering/spend-series";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
+import { buildHref } from "./group-by-filter";
 
 const OPTIONS: readonly { readonly key: Facet; readonly label: string }[] = [
     { key: "tenant", label: "Tenant" },

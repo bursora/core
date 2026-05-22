@@ -2,8 +2,8 @@
 // No chrome, no rounded pill - just colored mono text. Optional filled
 // variant for higher-priority callouts (still no border).
 
-import { cn } from "@/lib/utils";
 import type { StatusTagTone } from "@/lib/status-tag-tone";
+import { cn } from "@/lib/utils";
 import type { ReactNode } from "react";
 
 export type { StatusTagTone };

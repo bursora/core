@@ -1,7 +1,7 @@
-import { AnthropicLogo, DeepSeekLogo, OpenAILogo } from "./icons/brand-logos";
-import type { FacetedFilterOption } from "./filter-option";
 import { Server } from "lucide-react";
 import type { ReactNode } from "react";
+import type { FacetedFilterOption } from "./filter-option";
+import { AnthropicLogo, DeepSeekLogo, OpenAILogo } from "./icons/brand-logos";
 
 const PROVIDER_LABELS: Readonly<Record<string, string>> = {
     openai: "OpenAI",

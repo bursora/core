@@ -1,11 +1,11 @@
-import { TopSpendersSnapshotView } from "@/components/ui/dashboard-views/top-spenders-snapshot-view";
 import { getSpendInWindow } from "@/app/(dashboard)/workspace/[workspaceId]/_lib/dashboard-stats";
-import type { Facet } from "@/lib/spend-types";
+import { TopSpendersSnapshotView } from "@/components/ui/dashboard-views/top-spenders-snapshot-view";
 import type { DashboardWindow, WindowKey } from "@/lib/dashboard-window";
 import { DEFAULT_WINDOW_KEY } from "@/lib/dashboard-window";
 import { getTopSpenders } from "@/lib/metering/server";
 import { resolveModelProviders } from "@/lib/models-server";
 import { buildWorkspacePath } from "@/lib/routes";
+import type { Facet } from "@/lib/spend-types";
 
 interface Props {
     readonly workspaceId: string;

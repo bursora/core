@@ -4,11 +4,11 @@
  * loading, no server-only imports; safe to render from any context.
  */
 
+import type { Route } from "next";
+import Link from "next/link";
 import { Button } from "../button";
 import { FeedItem } from "../feed-item";
 import { DashboardSection } from "../workspace/dashboard-section";
-import type { Route } from "next";
-import Link from "next/link";
 
 export interface RecentAlertsRow {
     readonly key: string;

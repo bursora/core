@@ -3,6 +3,7 @@ import {
     relativeDelta,
 } from "@/app/(dashboard)/workspace/[workspaceId]/_lib/window-delta";
 import { PageHeader } from "@/components/shell/page-header";
+import { TopSpendersTable } from "@/components/ui/dashboard-views/top-spenders-table";
 import { FeedItem } from "@/components/ui/feed-item";
 import { Kpi, type KpiTone } from "@/components/ui/kpi";
 import { DashboardSection } from "@/components/ui/workspace/dashboard-section";
@@ -11,9 +12,9 @@ import { GroupByFilter } from "@/components/ui/workspace/filters/group-by-filter
 import { MeteringActiveFilters } from "@/components/ui/workspace/filters/metering-active-filters";
 import { StatusFilter } from "@/components/ui/workspace/filters/status-filter";
 import { StatusTag } from "@/components/ui/workspace/status-tag";
-import { db } from "@/lib/db";
 import { requireSessionUI } from "@/lib/auth";
 import { getBlockedCallsLastDay } from "@/lib/budgeting/blocked-calls";
+import { db } from "@/lib/db";
 import { flattenScope, listAlerts } from "@/lib/detection";
 import { formatCount, formatDate, formatPercent, formatUsd } from "@/lib/format";
 import { UNTAGGED } from "@/lib/metering";
@@ -26,15 +27,14 @@ import {
 import { resolveModelProviders } from "@/lib/models-server";
 import { buildWorkspacePath } from "@/lib/routes";
 import { readMeteringFilters, readMeteringStatus, readParam } from "@/lib/search-params";
+import { FACETS, FACET_LABEL, type Facet } from "@/lib/spend-types";
 import { oneOf } from "@/lib/type-guards";
 import { AlertTriangle } from "lucide-react";
 import Link from "next/link";
 import { EmptyOnboarding } from "./_components/empty-onboarding";
 import { SpendChart } from "./_components/spend-chart";
-import { TopSpendersTable } from "@/components/ui/dashboard-views/top-spenders-table";
 import { computePeakDay } from "./_lib/peak-day";
 import { resolveSpendWindow } from "./_lib/resolve-window";
-import { FACETS, FACET_LABEL, type Facet } from "@/lib/spend-types";
 
 interface SpendPageProps {
     params: Promise<{ workspaceId: string }>;

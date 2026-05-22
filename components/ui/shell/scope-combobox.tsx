@@ -1,17 +1,11 @@
 "use client";
 
-import {
-    Command,
-    CommandEmpty,
-    CommandGroup,
-    CommandItem,
-    CommandList,
-} from "../command";
-import { Input } from "../input";
-import { Popover, PopoverAnchor, PopoverContent } from "../popover";
 import { cn } from "@/lib/utils";
 import { ChevronsUpDownIcon } from "lucide-react";
 import * as React from "react";
+import { Command, CommandEmpty, CommandGroup, CommandItem, CommandList } from "../command";
+import { Input } from "../input";
+import { Popover, PopoverAnchor, PopoverContent } from "../popover";
 
 type ScopeKind = "tenant" | "agent" | "workflow";
 

@@ -12,9 +12,9 @@
  * latest aggregate; users who want a live view click Refresh.
  */
 
-import { getNextBillEstimate } from "../billing/server";
 import { DashboardSection } from "@/components/ui/workspace/dashboard-section";
 import { formatCount, formatUsd } from "@/lib/format";
+import { getNextBillEstimate } from "../billing/server";
 
 interface NextBillEstimateProps {
     readonly workspaceId: string;

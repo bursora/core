@@ -1,14 +1,8 @@
 "use client";
 
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from "./select";
 import { cn } from "@/lib/utils";
 import type { LucideIcon } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./select";
 
 export interface RichSelectItem<T extends string> {
     readonly value: T;

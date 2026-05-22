@@ -1,9 +1,9 @@
 "use client";
 
-import { Button } from "../../button";
-import { useUrlParamCommit } from "../../hooks/use-url-param-commit";
 import { type WindowKey } from "@/lib/dashboard-window";
 import { cn } from "@/lib/utils";
+import { Button } from "../../button";
+import { useUrlParamCommit } from "../../hooks/use-url-param-commit";
 
 const PILLS: readonly { readonly key: WindowKey; readonly label: string }[] = [
     { key: "today", label: "Today" },

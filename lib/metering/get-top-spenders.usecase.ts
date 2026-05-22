@@ -7,6 +7,7 @@
  * forgot to pass tags.
  */
 
+import { deriveWindow } from "./get-spend-series.usecase";
 import type {
     MeteringFilters,
     MeteringReadRepository,
@@ -15,7 +16,6 @@ import type {
 import type { Facet } from "./spend-series";
 import { UNTAGGED } from "./spend-series";
 import type { TopSpender } from "./top-spender";
-import { deriveWindow } from "./get-spend-series.usecase";
 
 export interface GetTopSpendersInput extends MeteringFilters {
     readonly workspaceId: string;

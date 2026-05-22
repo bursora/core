@@ -4,11 +4,11 @@
  * unique index already scopes the key per user).
  */
 
+import type { Route } from "next";
 import type { AlertRaisedEvent, BudgetAlertRaisedEvent } from "../event-bus";
 import { formatWindowLine } from "../format";
 import { formatBudgetAttribution } from "../notification/budget-attribution";
 import { buildWorkspacePath } from "../routes";
-import type { Route } from "next";
 import type { NotificationsRepository } from "./notifications.repository";
 
 const OUTCOME_SUFFIX: Record<BudgetAlertRaisedEvent["mode"], string | null> = {

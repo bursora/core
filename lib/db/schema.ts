@@ -415,11 +415,7 @@ export const notificationDeliveries = pgTable(
         latencyMs: integer("latency_ms"),
     },
     (t) => [
-        index("notification_deliveries_lookup_idx").on(
-            t.workspaceId,
-            t.channelKind,
-            t.attemptedAt,
-        ),
+        index("notification_deliveries_lookup_idx").on(t.workspaceId, t.channelKind, t.attemptedAt),
     ],
 );
 

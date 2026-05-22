@@ -19,9 +19,9 @@ import "server-only";
 
 import type { Db } from "@/lib/db";
 import { schema } from "@/lib/db";
+import { and, eq, gte, inArray, lt, sum } from "drizzle-orm";
 import type { ScopeType } from "./budget";
 import type { SpendAggregator, SpendAggregatorQuery } from "./spend-aggregator";
-import { and, eq, gte, inArray, lt, sum } from "drizzle-orm";
 
 type NarrowedScopeType = Exclude<ScopeType, "workspace">;
 

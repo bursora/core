@@ -1,4 +1,3 @@
-import { db, schema } from "@/lib/db";
 import {
     periodWindow,
     type BudgetMode,
@@ -9,6 +8,7 @@ import {
 import { startOfDayUtc } from "@/lib/budgeting/period";
 import { budgetingDeps, listBudgets } from "@/lib/budgeting/server";
 import type { DashboardWindow } from "@/lib/dashboard-window";
+import { db, schema } from "@/lib/db";
 import { listAlerts } from "@/lib/detection";
 import type { MeteringFilters } from "@/lib/metering/metering-read.repository";
 import { usageEventsFilterConditions } from "@/lib/metering/usage-events-filters";

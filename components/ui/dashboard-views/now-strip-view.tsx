@@ -1,6 +1,6 @@
+import { formatCount, formatSignedPercent, formatUsd } from "@/lib/format";
 import { Kpi, type KpiTone } from "../kpi";
 import { SparkChart } from "../spark-chart";
-import { formatCount, formatSignedPercent, formatUsd } from "@/lib/format";
 
 export interface NowStripViewProps {
     readonly suffix: string;

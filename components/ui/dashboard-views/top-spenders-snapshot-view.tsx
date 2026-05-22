@@ -1,13 +1,13 @@
 // Pure presentational sibling of `TopSpendersSnapshot`. Server-renderable.
 
-import { TopSpendersTable } from "./top-spenders-table";
+import type { TopSpender } from "@/lib/metering/top-spender";
 import type { Facet } from "@/lib/spend-types";
+import type { Route } from "next";
+import Link from "next/link";
 import { Button } from "../button";
 import { DashboardSection } from "../workspace/dashboard-section";
 import { FacetTabs } from "../workspace/filters/facet-tabs";
-import type { TopSpender } from "@/lib/metering/top-spender";
-import type { Route } from "next";
-import Link from "next/link";
+import { TopSpendersTable } from "./top-spenders-table";
 
 export type TopSpendersSnapshotGroupBy =
     | {

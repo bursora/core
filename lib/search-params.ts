@@ -1,7 +1,4 @@
-import type {
-    MeteringFilters,
-    MeteringStatusFilter,
-} from "./metering/metering-read.repository";
+import type { MeteringFilters, MeteringStatusFilter } from "./metering/metering-read.repository";
 
 export const readParam = (v: unknown): string | undefined =>
     typeof v === "string" && v.length > 0 ? v : undefined;

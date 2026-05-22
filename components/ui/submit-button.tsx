@@ -6,10 +6,10 @@
  * action or form submission is in flight.
  */
 
-import { Button } from "./button";
 import { Loader2 } from "lucide-react";
 import type { ComponentProps, ReactNode } from "react";
 import { useFormStatus } from "react-dom";
+import { Button } from "./button";
 
 type ButtonProps = ComponentProps<typeof Button>;
 

@@ -6,13 +6,7 @@
  * the copy and the CTA target.
  */
 
-import {
-    Cta,
-    EmailLayout,
-    FallbackLink,
-    Heading,
-    Paragraph,
-} from "./layout";
+import { Cta, EmailLayout, FallbackLink, Heading, Paragraph } from "./layout";
 
 export interface MagicLinkEmailProps {
     readonly url: string;

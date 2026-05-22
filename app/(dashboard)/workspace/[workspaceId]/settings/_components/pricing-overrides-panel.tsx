@@ -21,6 +21,7 @@ import {
     DialogTitle,
     DialogTrigger,
 } from "@/components/ui/dialog";
+import { FacetedFilter, type FacetedFilterOption } from "@/components/ui/filters/faceted-filter";
 import { Input } from "@/components/ui/input";
 import {
     Table,
@@ -32,10 +33,6 @@ import {
 } from "@/components/ui/table";
 import { DashboardSection } from "@/components/ui/workspace/dashboard-section";
 import { EmptyStateCard } from "@/components/ui/workspace/empty-state-card";
-import {
-    FacetedFilter,
-    type FacetedFilterOption,
-} from "@/components/ui/filters/faceted-filter";
 import { StatTile } from "@/components/ui/workspace/stat-tile";
 import { StatusTag, type StatusTagTone } from "@/components/ui/workspace/status-tag";
 import { formatDateTime, formatPreciseUsd } from "@/lib/format";

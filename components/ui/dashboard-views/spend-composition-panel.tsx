@@ -1,11 +1,11 @@
-import { Button } from "../button";
-import { SegmentedBar } from "../segmented-bar";
-import { DashboardSection } from "../workspace/dashboard-section";
 import { formatUsd, formatWholePercent } from "@/lib/format";
 import type { CustomerComposition } from "@/lib/spend-composition";
 import { cn } from "@/lib/utils";
 import type { Route } from "next";
 import Link from "next/link";
+import { Button } from "../button";
+import { SegmentedBar } from "../segmented-bar";
+import { DashboardSection } from "../workspace/dashboard-section";
 
 export interface SpendCompositionPanelProps {
     readonly rows: readonly CustomerComposition[];

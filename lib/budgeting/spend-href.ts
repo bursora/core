@@ -1,7 +1,7 @@
+import type { Route } from "next";
+import { buildWorkspacePath } from "../routes";
 import type { RawBudget } from "./budget.repository";
 import type { BudgetStats } from "./server";
-import { buildWorkspacePath } from "../routes";
-import type { Route } from "next";
 
 export function buildBudgetSpendHref(
     workspaceId: string,

@@ -7,11 +7,7 @@
  */
 
 export { evaluateBudget } from "./evaluate-budget";
-export type {
-    BudgetTrigger,
-    EvaluateBudgetOptions,
-    EvaluateOutcome,
-} from "./evaluate-budget";
+export type { BudgetTrigger, EvaluateBudgetOptions, EvaluateOutcome } from "./evaluate-budget";
 export { periodWindow } from "./period";
 export type { PeriodWindow } from "./period";
 export { spendKey } from "./spend-snapshot";

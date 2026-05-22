@@ -1,6 +1,7 @@
 import "server-only";
 
 import { db, schema, type Db } from "@/lib/db";
+import { and, eq, gte, sql } from "drizzle-orm";
 import { errMessage } from "../error-message";
 import { DrizzleMemberRepository } from "../identity/drizzle-member.repository";
 import { DrizzleWorkspaceRepository } from "../identity/drizzle-workspace.repository";
@@ -10,12 +11,8 @@ import {
     type NotificationsRepository,
 } from "../notifications/notifications.repository";
 import { buildWorkspacePath } from "../routes";
-import {
-    type DashboardSetupErrorCategory,
-    type SetupErrorCategory,
-} from "./category";
 import { isUuid } from "../uuid";
-import { and, eq, gte, sql } from "drizzle-orm";
+import { type DashboardSetupErrorCategory, type SetupErrorCategory } from "./category";
 
 export interface SetupErrorBucketRow {
     readonly category: SetupErrorCategory;

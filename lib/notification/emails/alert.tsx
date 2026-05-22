@@ -8,10 +8,10 @@
 import type { AlertRaisedEvent } from "../../event-bus";
 import { formatAlertPercent, formatUsd, formatWindowRange } from "../../format";
 
-import { EmailLayout, Heading, Paragraph } from "./layout";
-import type { RenderOptions } from "../webhook-payload";
-import type { AlertSeverity } from "../../severity";
 import { Section, Text } from "@react-email/components";
+import type { AlertSeverity } from "../../severity";
+import type { RenderOptions } from "../webhook-payload";
+import { EmailLayout, Heading, Paragraph } from "./layout";
 
 export interface AlertEmailProps {
     readonly event: AlertRaisedEvent;

@@ -12,9 +12,9 @@
  * permitted but the dashboard never asks for more.
  */
 
+import type { AlertKind } from "../severity";
 import type { Alert, AnomalyAlert, BudgetAlert } from "./alert";
 import type { AlertRepository } from "./alert.repository";
-import type { AlertKind } from "../severity";
 
 export interface ListAlertsInput {
     readonly workspaceId: string;

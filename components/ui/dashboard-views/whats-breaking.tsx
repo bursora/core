@@ -2,9 +2,6 @@
 // inline mode tag, ETA pill, usage bar, spend/limit/pct, and action links.
 // Empty state inlines a "create your first budget" CTA.
 
-import { Button } from "../button";
-import { ShareBar } from "../share-bar";
-import { DashboardSection } from "../workspace/dashboard-section";
 import {
     BUDGET_USAGE_DANGER_THRESHOLD,
     ETA_SOON_DAYS,
@@ -18,6 +15,9 @@ import { formatDate, formatUsd } from "@/lib/format";
 import { buildWorkspacePath } from "@/lib/routes";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
+import { Button } from "../button";
+import { ShareBar } from "../share-bar";
+import { DashboardSection } from "../workspace/dashboard-section";
 
 export interface WhatsBreakingPanelProps {
     readonly workspaceId: string;

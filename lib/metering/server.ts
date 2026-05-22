@@ -7,6 +7,7 @@
  */
 
 import { db } from "@/lib/db";
+import "server-only";
 import { countEventsForWorkspaceUseCase } from "./count-events-for-workspace.usecase";
 import { drizzleMeteringReadRepository } from "./drizzle-metering-read.repository";
 import { DrizzleUsageEventRepository } from "./drizzle-usage-event.repository";
@@ -27,7 +28,6 @@ import type { PricingRepository } from "./pricing/pricing-row";
 import type { Facet } from "./spend-series";
 import type { UsageEventInput } from "./usage-event";
 import type { UsageEventRepository } from "./usage-event.repository";
-import "server-only";
 
 export interface MeteringDeps {
     readonly eventsRepo: UsageEventRepository;

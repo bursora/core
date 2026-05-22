@@ -1,7 +1,7 @@
 import "server-only";
 
-import { db } from "@/lib/db";
-import { usageEvents } from "@/lib/db";
+import { db, usageEvents } from "@/lib/db";
+import { and, count, desc, eq, gte, sql } from "drizzle-orm";
 import type { AnomalyAlert } from "../detection";
 import { drizzleAlertRepository } from "../detection";
 import { DrizzleApiKeyRepository } from "../identity/drizzle-api-key.repository";
@@ -17,7 +17,6 @@ import {
     type SetupErrorEvent,
 } from "../metering";
 import { summarizeSetupErrorsSince } from "../setup-errors/server";
-import { and, count, desc, eq, gte, sql } from "drizzle-orm";
 
 export interface ActivityDeps {
     readonly fetchEventBuckets: (

@@ -1,24 +1,17 @@
 "use client";
 
-import { computeSharePercent } from "@/lib/spend-share";
-import type { Facet } from "@/lib/spend-types";
-import { ShareBar } from "../share-bar";
-import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
-} from "../table";
-import { StatusTag } from "../workspace/status-tag";
 import { formatCostPerCall, formatCount, formatUsd } from "@/lib/format";
 import { UNTAGGED, type MeteringStatusFilter, type TopSpender } from "@/lib/metering";
 import { ModelTag } from "@/lib/models";
 import { buildWorkspacePath } from "@/lib/routes";
+import { computeSharePercent } from "@/lib/spend-share";
+import type { Facet } from "@/lib/spend-types";
 import { ArrowDown, ArrowUp } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
+import { ShareBar } from "../share-bar";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../table";
+import { StatusTag } from "../workspace/status-tag";
 
 type SortKey = "share" | "calls" | "perCall" | "cost" | "blocked";
 type SortDir = "asc" | "desc";

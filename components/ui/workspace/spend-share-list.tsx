@@ -4,8 +4,8 @@
  * shape, same primitive, just different facets and labels.
  */
 
-import { ShareBar } from "../share-bar";
 import { formatCount, formatUsd } from "@/lib/format";
+import { ShareBar } from "../share-bar";
 
 export interface SpendShareRow {
     readonly tag: string;

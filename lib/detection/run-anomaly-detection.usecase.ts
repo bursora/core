@@ -17,12 +17,12 @@
  * latest bucket is always ≤ 5 minutes old.
  */
 
+import { ALERT_RAISED_TOPIC, type AlertRaisedEvent, type EventBus } from "../event-bus";
 import type { AnomalyAlert } from "./alert";
 import type { AlertRepository } from "./alert.repository";
 import { DEFAULT_BUCKET_MINUTES } from "./bucket";
 import { detectAnomaly } from "./detect-anomaly";
 import type { SpendSeriesSource } from "./spend-series-source";
-import { ALERT_RAISED_TOPIC, type AlertRaisedEvent, type EventBus } from "../event-bus";
 
 export const DEFAULT_BASELINE_POINTS = 24;
 // Alert when the latest bucket is at least this multiple of the rolling

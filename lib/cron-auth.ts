@@ -15,9 +15,9 @@
 
 import "server-only";
 
-import { env } from "./env";
 import { NextResponse } from "next/server";
 import { timingSafeEqual } from "node:crypto";
+import { env } from "./env";
 
 const UNAUTHORIZED = (): NextResponse =>
     NextResponse.json({ error: "unauthorized" }, { status: 401 });

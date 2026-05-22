@@ -12,9 +12,9 @@
  *   stay byte-identical.
  */
 
+import type { Route } from "next";
 import { buildWorkspacePath } from "../routes";
 import { deterministicUuid } from "../uuid";
-import type { Route } from "next";
 import type { AnomalyAlert } from "./alert";
 
 export interface AlertScope {

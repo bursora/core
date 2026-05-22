@@ -5,9 +5,9 @@
  * the shape of a small numeric trend. Honors prefers-reduced-motion.
  */
 
-import { sparklinePoints } from "./sparkline-data";
-import { useReducedMotion } from "./hooks/use-reduced-motion";
 import { Area, AreaChart, ResponsiveContainer } from "recharts";
+import { useReducedMotion } from "./hooks/use-reduced-motion";
+import { sparklinePoints } from "./sparkline-data";
 
 interface SparklineProps {
     readonly data: readonly number[];

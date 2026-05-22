@@ -7,7 +7,6 @@
  * refunds every paid invoice; failure surfaces via a toast.
  */
 
-import { requestRefundAction } from "../billing-actions";
 import {
     AlertDialog,
     AlertDialogAction,
@@ -24,6 +23,7 @@ import { DashboardSection } from "@/components/ui/workspace/dashboard-section";
 import type { ActionResult } from "@/lib/action-result";
 import { useActionState, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import { requestRefundAction } from "../billing-actions";
 
 interface RefundPanelProps {
     readonly workspaceId: string;

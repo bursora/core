@@ -10,11 +10,11 @@
  * then renders the generic `ActiveFilters`.
  */
 
-import { ActiveFilters } from "./active-filters";
 import type { DistinctValuesByScope, ScopeKind } from "@/lib/metering/metering-read.repository";
 import { decorateModelOptions } from "@/lib/models";
 import { decorateProviderOptions } from "@/lib/providers";
 import { Bot, Cpu, Server, Users, Workflow, type LucideIcon } from "lucide-react";
+import { ActiveFilters } from "./active-filters";
 
 type FilterDimensionKey = "provider" | "tenant_id" | "agent_id" | "workflow_id" | "model";
 

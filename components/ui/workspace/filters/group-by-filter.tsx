@@ -1,9 +1,9 @@
-import { FacetTabs } from "./facet-tabs";
 import type { Facet } from "@/lib/metering/spend-series";
 import { cn } from "@/lib/utils";
 import { Bot, Cpu, Users, Workflow, type LucideIcon } from "lucide-react";
 import type { Route } from "next";
 import Link from "next/link";
+import { FacetTabs } from "./facet-tabs";
 
 interface Option {
     readonly key: Facet;

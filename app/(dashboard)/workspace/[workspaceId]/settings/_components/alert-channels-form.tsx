@@ -24,7 +24,6 @@ import {
     isValidDiscordUrl,
     isValidSlackUrl,
 } from "@/app/(dashboard)/workspace/[workspaceId]/settings/validation";
-import { DiscordLogo, SlackLogo } from "@/lib/icons/brand-logos";
 import { Button } from "@/components/ui/button";
 import {
     Form,
@@ -37,6 +36,7 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
+import { DiscordLogo, SlackLogo } from "@/lib/icons/brand-logos";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Mail } from "lucide-react";
 import { useEffect, useRef, useState, useTransition } from "react";

@@ -8,8 +8,8 @@
  * forged or replayed requests.
  */
 
-import { handleStripeWebhook } from "../billing/server";
 import { NextResponse } from "next/server";
+import { handleStripeWebhook } from "../billing/server";
 
 export const dynamic = "force-dynamic";
 

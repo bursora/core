@@ -11,7 +11,6 @@
  */
 
 import type { SpendAggregator } from "@/lib/budgeting";
-import { budgets as budgetsTable } from "@/lib/db";
 import {
     createBudgetUseCase,
     decideBudgetUseCase,
@@ -25,6 +24,7 @@ import {
     type RawBudget,
     type ScopeType,
 } from "@/lib/budgeting";
+import { budgets as budgetsTable } from "@/lib/db";
 import { InMemoryBudgetRepository } from "@/tests/budgeting/fakes/in-memory-budget.repository";
 import { describe, expect, test } from "bun:test";
 

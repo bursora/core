@@ -5,9 +5,5 @@
  * cost-calculation path. Consumers import everything they need from here.
  */
 
-export type {
-    NewPricingRow,
-    PricingRepository,
-    PricingRow,
-} from "./pricing-row";
 export { lookup, type LookupInput } from "./lookup";
+export type { NewPricingRow, PricingRepository, PricingRow } from "./pricing-row";

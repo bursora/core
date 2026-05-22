@@ -183,10 +183,7 @@ export async function sendAlertEmail(input: SendAlertInput): Promise<void> {
 export type { AlertChannel, AlertChannelKind } from "./alert-channel";
 export type { AlertChannelRepository } from "./alert-channel.repository";
 export { dispatchAlertHandler } from "./dispatch-alert.handler";
-export type {
-    DispatchAlertDeps,
-    DispatchAlertHandler,
-} from "./dispatch-alert.handler";
+export type { DispatchAlertDeps, DispatchAlertHandler } from "./dispatch-alert.handler";
 export { renderWebhookPayload } from "./webhook-payload";
 export type { WebhookPayload } from "./webhook-payload";
 export type { WebhookSender } from "./webhook-sender";

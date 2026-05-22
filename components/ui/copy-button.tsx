@@ -1,9 +1,9 @@
 "use client";
 
-import { Button } from "./button";
 import { CheckIcon, CopyIcon } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { Button } from "./button";
 
 interface CopyButtonProps {
     value: string;

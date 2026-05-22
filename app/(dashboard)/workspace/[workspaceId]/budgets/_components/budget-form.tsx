@@ -1,6 +1,5 @@
 "use client";
 
-import { ScopeCombobox } from "@/components/ui/shell/scope-combobox";
 import {
     Form,
     FormControl,
@@ -12,6 +11,7 @@ import {
 import { MoneyInput } from "@/components/ui/money-input";
 import { RadioGroup, RadioGroupCard } from "@/components/ui/radio-group";
 import { RichSelect, type RichSelectItem } from "@/components/ui/rich-select";
+import { ScopeCombobox } from "@/components/ui/shell/scope-combobox";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { StatusTag } from "@/components/ui/workspace/status-tag";

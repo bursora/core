@@ -9,9 +9,9 @@
  * `Authorization: Bearer <secret>`.
  */
 
-import { runBillingRollup } from "../billing/server";
 import { assertCronAuthorized } from "@/lib/cron-auth";
 import { NextResponse } from "next/server";
+import { runBillingRollup } from "../billing/server";
 
 export const dynamic = "force-dynamic";
 

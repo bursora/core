@@ -11,8 +11,8 @@
  * the read-side feed reachable via `listAlertsUseCase`.
  */
 
+import { alerts as alertsTable } from "@/lib/db";
 import {
-
     listAlertsUseCase,
     runAnomalyDetection,
     type Alert,
@@ -22,7 +22,6 @@ import {
     type SpendPoint,
     type SpendSeriesSource,
 } from "@/lib/detection";
-import { alerts as alertsTable } from "@/lib/db";
 import type { AlertRaisedEvent, EventBus } from "@/lib/event-bus";
 import { describe, expect, test } from "bun:test";
 

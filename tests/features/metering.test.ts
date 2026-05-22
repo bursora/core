@@ -6,6 +6,7 @@
  * flows; lower-level tests in `tests/metering/` cover the deep paths.
  */
 
+import { usageEvents } from "@/lib/db";
 import {
     countEventsForWorkspaceUseCase,
     getSpendSeriesUseCase,
@@ -13,10 +14,8 @@ import {
     ingestEventsUseCase,
     pruneEvents,
     UNTAGGED,
-
     type UsageEventInput,
 } from "@/lib/metering";
-import { usageEvents } from "@/lib/db";
 import { InMemoryMeteringReadRepository } from "@/tests/metering/fakes/in-memory-metering-read.repository";
 import { InMemoryUsageEventRepository } from "@/tests/metering/fakes/in-memory-usage-event.repository";
 import { StubPricingRepository } from "@/tests/metering/fakes/stub-pricing.repository";

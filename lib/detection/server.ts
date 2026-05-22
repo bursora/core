@@ -8,6 +8,10 @@
  */
 
 import { db } from "@/lib/db";
+import "server-only";
+import type { EventBus } from "../event-bus";
+import { eventBus } from "../in-memory-event-bus";
+import { ensureNotificationBootstrap } from "../notification/bootstrap";
 import type { Alert, AnomalyAlert, BudgetAlert } from "./alert";
 import type { AlertRepository } from "./alert.repository";
 import { drizzleAlertRepository } from "./drizzle-alert.repository";
@@ -18,10 +22,6 @@ import {
     type RunAnomalyDetectionSummary,
 } from "./run-anomaly-detection.usecase";
 import type { SpendSeriesSource } from "./spend-series-source";
-import type { EventBus } from "../event-bus";
-import { eventBus } from "../in-memory-event-bus";
-import { ensureNotificationBootstrap } from "../notification/bootstrap";
-import "server-only";
 
 export interface DetectionDeps {
     readonly source: SpendSeriesSource;

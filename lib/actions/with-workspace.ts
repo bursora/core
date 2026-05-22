@@ -5,9 +5,9 @@
  */
 
 import { getRequestSession, type Session } from "@/lib/auth";
+import { redirect } from "next/navigation";
 import type { WorkspaceMember } from "../identity/member";
 import { findMembership } from "../identity/server";
-import { redirect } from "next/navigation";
 
 export interface SessionCtx {
     session: Session;

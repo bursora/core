@@ -17,11 +17,11 @@
 
 import "server-only";
 
-import { lookupApiKey } from "./server";
-import { apiKeyHashPrefix, parseApiKeyPlaintext } from "./api-key.crypto";
-import { recordSetupError } from "../setup-errors/server";
 import { NextResponse } from "next/server";
+import { recordSetupError } from "../setup-errors/server";
 import type { ApiKeyLookup } from "./api-key";
+import { apiKeyHashPrefix, parseApiKeyPlaintext } from "./api-key.crypto";
+import { lookupApiKey } from "./server";
 
 export interface AuthFailureInfo {
     readonly workspaceId: string | null;

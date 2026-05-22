@@ -11,10 +11,7 @@
  */
 
 import type { PricingRepository, PricingRow } from "./pricing-row";
-import {
-    assertEffectiveWindow,
-    assertNonNegativeRate,
-} from "./validate-pricing-input";
+import { assertEffectiveWindow, assertNonNegativeRate } from "./validate-pricing-input";
 
 export interface CreatePricingOverrideInput {
     readonly pricing: PricingRepository;

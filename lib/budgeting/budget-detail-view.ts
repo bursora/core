@@ -1,8 +1,8 @@
+import type { Route } from "next";
 import type { RawBudget } from "./budget.repository";
 import { projectEndOfPeriod } from "./projection";
 import type { BudgetStats } from "./server";
 import { buildBudgetSpendHref } from "./spend-href";
-import type { Route } from "next";
 
 const SCOPE_LABEL: Record<RawBudget["scopeType"], string> = {
     workspace: "Workspace",

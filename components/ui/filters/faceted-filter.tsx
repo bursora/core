@@ -1,5 +1,9 @@
 "use client";
 
+import { type FacetedFilterOption } from "@/lib/filter-option";
+import { cn } from "@/lib/utils";
+import { CheckIcon, PlusCircleIcon, type LucideIcon } from "lucide-react";
+import { useState } from "react";
 import { Badge } from "../badge";
 import { Button } from "../button";
 import {
@@ -11,13 +15,9 @@ import {
     CommandList,
     CommandSeparator,
 } from "../command";
+import { useUrlParamCommit } from "../hooks/use-url-param-commit";
 import { Popover, PopoverContent, PopoverTrigger } from "../popover";
 import { Separator } from "../separator";
-import { type FacetedFilterOption } from "@/lib/filter-option";
-import { cn } from "@/lib/utils";
-import { useUrlParamCommit } from "../hooks/use-url-param-commit";
-import { CheckIcon, PlusCircleIcon, type LucideIcon } from "lucide-react";
-import { useState } from "react";
 
 export type { FacetedFilterOption };
 

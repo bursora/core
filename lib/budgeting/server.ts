@@ -11,12 +11,15 @@
  */
 
 import { db, schema } from "@/lib/db";
+import { and, count, eq, gte, inArray, lt, min, sql, sum } from "drizzle-orm";
+import "server-only";
+import type { AlertRepository } from "../detection/alert.repository";
+import { drizzleAlertRepository } from "../detection/drizzle-alert.repository";
+import type { EventBus } from "../event-bus";
+import { eventBus } from "../in-memory-event-bus";
+import { ensureNotificationBootstrap } from "../notification/bootstrap";
 import type { BudgetMode, Decision, ScopeType } from "./budget";
-import type {
-    BudgetListFilter,
-    BudgetRepository,
-    RawBudget,
-} from "./budget.repository";
+import type { BudgetListFilter, BudgetRepository, RawBudget } from "./budget.repository";
 import { createBudgetUseCase } from "./create-budget.usecase";
 import { decideBudgetUseCase, type RecordBlockedCall } from "./decide-budget.usecase";
 import { deleteBudgetUseCase } from "./delete-budget.usecase";
@@ -25,19 +28,9 @@ import { DrizzleSpendAggregator } from "./drizzle-spend.aggregator";
 import { getBudgetUseCase } from "./get-budget.usecase";
 import { listBudgetsUseCase } from "./list-budgets.usecase";
 import { periodWindow, type Period } from "./period";
-import {
-    recordBlockedWithRetry,
-    type BlockedRowPayload,
-} from "./record-blocked-with-retry";
+import { recordBlockedWithRetry, type BlockedRowPayload } from "./record-blocked-with-retry";
 import type { SpendAggregator } from "./spend-aggregator";
 import { updateBudgetUseCase, type UpdateBudgetPatch } from "./update-budget.usecase";
-import type { AlertRepository } from "../detection/alert.repository";
-import { drizzleAlertRepository } from "../detection/drizzle-alert.repository";
-import type { EventBus } from "../event-bus";
-import { eventBus } from "../in-memory-event-bus";
-import { ensureNotificationBootstrap } from "../notification/bootstrap";
-import { and, count, eq, gte, inArray, lt, min, sql, sum } from "drizzle-orm";
-import "server-only";
 
 export interface BudgetingDeps {
     readonly budgets: BudgetRepository;
@@ -264,7 +257,10 @@ export async function getBudgetStats(
     // (tenant/agent/workflow with a concrete scopeId) group by (period, scopeType).
     const periodWindows = new Map<Period, { from: Date; to: Date }>();
     const workspaceGroups = new Map<Period, RawBudget[]>();
-    const narrowedGroups = new Map<string, { period: Period; scopeType: ScopeType; budgets: RawBudget[] }>();
+    const narrowedGroups = new Map<
+        string,
+        { period: Period; scopeType: ScopeType; budgets: RawBudget[] }
+    >();
 
     for (const b of budgets) {
         if (!periodWindows.has(b.period)) periodWindows.set(b.period, periodWindow(b.period, at));
@@ -283,7 +279,9 @@ export async function getBudgetStats(
         else narrowedGroups.set(key, { period: b.period, scopeType: b.scopeType, budgets: [b] });
     }
 
-    const spendByBudget = new Map<string, SpendBucket>(budgets.map((b) => [b.id, emptySpendBucket()]));
+    const spendByBudget = new Map<string, SpendBucket>(
+        budgets.map((b) => [b.id, emptySpendBucket()]),
+    );
     const tripByBudget = new Map<string, { firstAt: Date | null; crossings: number }>();
 
     const spendQueries: Promise<void>[] = [];

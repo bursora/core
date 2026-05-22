@@ -1,10 +1,13 @@
 import { PageHeader } from "@/components/shell/page-header";
+import { SpendCompositionPanel } from "@/components/ui/dashboard-views/spend-composition-panel";
+import { WhatsBreakingPanel } from "@/components/ui/dashboard-views/whats-breaking";
 import { Skeleton } from "@/components/ui/skeleton";
 import { WindowFilter } from "@/components/ui/workspace/filters/window-filter";
 import { RefreshControls } from "@/components/ui/workspace/refresh-controls";
 import { requireSessionUI } from "@/lib/auth";
 import { parseWindowKey, resolveWindow, type DashboardWindow } from "@/lib/dashboard-window";
 import { buildWorkspacePath } from "@/lib/routes";
+import { FACETS, type Facet } from "@/lib/spend-types";
 import { oneOf } from "@/lib/type-guards";
 import { Suspense } from "react";
 import { BurnRateTile } from "./_components/burn-rate-tile";
@@ -13,15 +16,12 @@ import { NowStrip } from "./_components/now-strip";
 import { PaceTile } from "./_components/pace-tile";
 import { RecentAlertsPanel } from "./_components/recent-alerts-panel";
 import { RunwayProjection } from "./_components/runway-projection";
-import { SpendCompositionPanel } from "@/components/ui/dashboard-views/spend-composition-panel";
 import { StatusStrip } from "./_components/status-strip";
 import { TopSpendersSnapshot } from "./_components/top-spenders-snapshot";
 import { TrajectoriesToWatchPanel } from "./_components/trajectories-to-watch";
-import { WhatsBreakingPanel } from "@/components/ui/dashboard-views/whats-breaking";
 import { getSpendComposition } from "./_lib/spend-composition";
 import { getCustomerTrajectories, getModelTrajectories } from "./_lib/trajectories";
 import { getWhatsBreaking } from "./_lib/whats-breaking";
-import { FACETS, type Facet } from "@/lib/spend-types";
 
 interface DashboardPageProps {
     params: Promise<{ workspaceId: string }>;

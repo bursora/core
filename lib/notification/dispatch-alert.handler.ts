@@ -7,13 +7,13 @@
 
 import { errMessage } from "../error-message";
 import type { AlertRaisedEvent } from "../event-bus";
+import type { NotificationDeliveriesWriter } from "../notifications/notification-deliveries.repository";
+import { recordNotificationDelivery } from "../notifications/record-notification-delivery";
 import type { AlertChannel } from "./alert-channel";
 import type { AlertChannelRepository } from "./alert-channel.repository";
 import { sendAlertEmail, type Mailer } from "./send";
 import { renderWebhookPayload, type RenderOptions } from "./webhook-payload";
 import type { WebhookSender } from "./webhook-sender";
-import type { NotificationDeliveriesWriter } from "../notifications/notification-deliveries.repository";
-import { recordNotificationDelivery } from "../notifications/record-notification-delivery";
 
 export interface DispatchAlertDeps {
     readonly channels: AlertChannelRepository;

@@ -9,13 +9,8 @@
  * `pricing` table is re-exported.
  */
 
-import {
-    lookup,
-
-    type PricingRepository,
-    type PricingRow,
-} from "@/lib/metering/pricing";
 import { pricing as pricingTable } from "@/lib/db";
+import { lookup, type PricingRepository, type PricingRow } from "@/lib/metering/pricing";
 import { describe, expect, test } from "bun:test";
 
 const baseRow = (overrides: Partial<PricingRow> = {}): PricingRow => ({

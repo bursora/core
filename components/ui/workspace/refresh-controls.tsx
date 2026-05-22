@@ -6,12 +6,12 @@
 
 "use client";
 
-import { Button } from "../button";
 import { formatRelativeTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { RotateCw } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState, useSyncExternalStore, useTransition } from "react";
+import { Button } from "../button";
 
 const LIVE_STORAGE_KEY = "bursora.dashboard.live";
 const LIVE_ON_VALUE = "1";

@@ -6,13 +6,7 @@
  * the copy, the CTA target, and the expiry/token lines.
  */
 
-import {
-    Cta,
-    EmailLayout,
-    FallbackLink,
-    Heading,
-    Paragraph,
-} from "./layout";
+import { Cta, EmailLayout, FallbackLink, Heading, Paragraph } from "./layout";
 
 export interface InviteEmailProps {
     readonly acceptUrl: string;

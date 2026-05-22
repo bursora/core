@@ -5,7 +5,6 @@
  * interactive bits live in `*.client.tsx` siblings.
  */
 
-import { Logo } from "@/components/ui/brand/logo";
 import { KeyboardShortcuts } from "@/components/shell/keyboard-shortcuts";
 import { NotificationCenter } from "@/components/shell/notification-center";
 import { SidebarNav } from "@/components/shell/sidebar-nav";
@@ -13,6 +12,7 @@ import { ThemeToggle } from "@/components/shell/theme-toggle";
 import { UserMenu } from "@/components/shell/user-menu";
 import { WorkspaceHeader } from "@/components/shell/workspace-header";
 import { WorkspaceUrlSync } from "@/components/shell/workspace-url-sync";
+import { Logo } from "@/components/ui/brand/logo";
 import {
     Sidebar,
     SidebarContent,

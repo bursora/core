@@ -1,8 +1,8 @@
 "use client";
 
-import { Input } from "./input";
 import { cn } from "@/lib/utils";
 import * as React from "react";
+import { Input } from "./input";
 
 interface MoneyInputProps extends Omit<React.ComponentProps<"input">, "size" | "type"> {
     readonly value: string;

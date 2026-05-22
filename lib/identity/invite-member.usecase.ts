@@ -1,5 +1,5 @@
-import { sendInviteEmail, type Mailer } from "../notification";
 import { randomBytes } from "node:crypto";
+import { sendInviteEmail, type Mailer } from "../notification";
 import type { Invite, MemberRole } from "./member";
 import type { InviteRepository } from "./member.repository";
 

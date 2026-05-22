@@ -8,6 +8,7 @@
  * alert dispatch is covered through `renderWebhookPayload`.
  */
 
+import { alertRules as alertRulesTable } from "@/lib/db";
 import {
     InMemoryMailer,
     renderWebhookPayload,
@@ -15,7 +16,6 @@ import {
     sendMagicLinkEmail,
     type Mailer,
 } from "@/lib/notification";
-import { alertRules as alertRulesTable } from "@/lib/db";
 import { describe, expect, test } from "bun:test";
 
 describe("@/lib/notification public API", () => {

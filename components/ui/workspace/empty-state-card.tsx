@@ -1,6 +1,6 @@
+import type { LucideIcon } from "lucide-react";
 import { Button } from "../button";
 import { Card, CardContent } from "../card";
-import type { LucideIcon } from "lucide-react";
 
 interface EmptyStateCardProps {
     readonly icon: LucideIcon;

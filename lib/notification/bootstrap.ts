@@ -18,13 +18,13 @@ import { countBlockedSinceTrip } from "../budgeting/blocked-calls";
 import { ALERT_RAISED_TOPIC, type AlertRaisedEvent } from "../event-bus";
 import { DrizzleMemberRepository } from "../identity/drizzle-member.repository";
 import { eventBus } from "../in-memory-event-bus";
+import { fanOutAlertNotification } from "../notifications/fan-out-alert";
+import { drizzleNotificationDeliveriesRepository } from "../notifications/notification-deliveries.repository";
+import { drizzleNotificationsRepository } from "../notifications/notifications.repository";
 import { dispatchAlertHandler } from "./dispatch-alert.handler";
 import { drizzleAlertChannelRepository } from "./drizzle-alert-channel.repository";
 import { defaultSmtpMailer } from "./send";
 import { httpWebhookSender } from "./webhook-sender.adapter";
-import { fanOutAlertNotification } from "../notifications/fan-out-alert";
-import { drizzleNotificationDeliveriesRepository } from "../notifications/notification-deliveries.repository";
-import { drizzleNotificationsRepository } from "../notifications/notifications.repository";
 
 let bootstrapped = false;
 

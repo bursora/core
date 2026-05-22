@@ -1,20 +1,14 @@
 "use client";
 
-import { Button } from "../../button";
-import {
-    computeAddableDimensions,
-    computeVisibleDimensions,
-} from "./active-filters-logic";
-import { AddFilterButton } from "./add-filter-button";
-import {
-    FacetedFilter,
-    type FacetedFilterOption,
-} from "../../filters/faceted-filter";
-import { useUrlParamCommit } from "../../hooks/use-url-param-commit";
 import { readParamList } from "@/lib/search-params";
 import { X, type LucideIcon } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { useRef, useState } from "react";
+import { Button } from "../../button";
+import { FacetedFilter, type FacetedFilterOption } from "../../filters/faceted-filter";
+import { useUrlParamCommit } from "../../hooks/use-url-param-commit";
+import { computeAddableDimensions, computeVisibleDimensions } from "./active-filters-logic";
+import { AddFilterButton } from "./add-filter-button";
 
 export interface DimensionConfig {
     readonly paramKey: string;

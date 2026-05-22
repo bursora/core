@@ -1,0 +1,102 @@
+The Bursora Enterprise License (Version 1.0)
+
+Copyright (c) Bursora and contributors. All rights reserved.
+
+This Bursora Enterprise License ("EE License") applies only to the source
+code in the `ee/` directory of the Bursora source distribution. All other
+parts of Bursora are licensed under the Apache License, Version 2.0, as
+noted in the repository LICENSE file.
+
+By accessing, modifying, or distributing the contents of `ee/`, you agree
+to the terms below. If you do not agree, you may not use this directory.
+
+1. Definitions
+
+   "Software" means the source code, object code, configuration files,
+   documentation, and any other materials located in the `ee/` directory
+   of this repository.
+
+   "Bursora" means the project maintainers and contributors that publish
+   the Bursora source distribution.
+
+   "Bursora Cloud" means the hosted service offered by Bursora at
+   bursora.com and successor or replacement services.
+
+   "You" means an individual or legal entity exercising rights under
+   this license.
+
+   "Production Use" means using the Software to serve internal or
+   external users in a live or revenue-generating capacity, including
+   any use that processes data of real customers or end users.
+
+2. Grant of rights
+
+   Subject to the restrictions below, Bursora grants You a non-exclusive,
+   non-transferable, worldwide, royalty-free license to:
+
+   (a) read, copy, and modify the Software for the purposes of
+       development, testing, and evaluation; and
+
+   (b) use the Software in Production only if You hold a current,
+       valid Bursora Cloud subscription that covers the workspace
+       running the Software, or if You have signed a separate
+       commercial agreement with Bursora that explicitly permits
+       Production Use.
+
+3. Restrictions
+
+   You shall not, and shall not permit any third party to:
+
+   (a) offer the Software, in whole or in part, as a hosted, managed,
+       or SaaS service that competes with Bursora Cloud or any other
+       service offered by Bursora;
+
+   (b) remove or alter any proprietary notices, license terms, or
+       copyright statements contained in the Software;
+
+   (c) sublicense, rent, lease, lend, sell, or otherwise transfer the
+       Software to any third party, except as expressly permitted in
+       Section 2.
+
+4. Trademarks
+
+   This license does not grant any rights in the trademarks, service
+   marks, or logos of Bursora.
+
+5. Contributions
+
+   Any contributions You submit to the Software are licensed to Bursora
+   under the terms of this EE License. By contributing, You represent
+   that You have the right to do so and that Your contribution is Your
+   original work.
+
+6. Termination
+
+   This license terminates automatically if You breach any of its
+   terms. Upon termination, You must cease all use of the Software and
+   destroy all copies in Your possession or control. Sections that by
+   their nature should survive termination (including disclaimers,
+   restrictions, and limitations of liability) do so.
+
+7. Disclaimer of warranty
+
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+   EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+   MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, AND
+   NONINFRINGEMENT.
+
+8. Limitation of liability
+
+   IN NO EVENT SHALL BURSORA OR ITS CONTRIBUTORS BE LIABLE FOR ANY
+   CLAIM, DAMAGES, OR OTHER LIABILITY, WHETHER IN AN ACTION OF
+   CONTRACT, TORT, OR OTHERWISE, ARISING FROM, OUT OF, OR IN CONNECTION
+   WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+9. Relationship to Apache 2.0 code
+
+   The remainder of the Bursora source distribution (outside `ee/`) is
+   governed by the Apache License, Version 2.0. Nothing in this EE
+   License modifies, supersedes, or restricts Your rights under that
+   license with respect to non-`ee/` files.
+
+For commercial licensing inquiries: hello@bursora.com.

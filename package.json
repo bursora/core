@@ -1,0 +1,257 @@
+{
+    "name": "@bursora/core",
+    "version": "0.1.0",
+    "private": false,
+    "type": "module",
+    "publishConfig": {
+        "registry": "https://npm.pkg.github.com",
+        "access": "restricted"
+    },
+    "files": [
+        "components/ui/accordion.tsx",
+        "components/ui/brand/logo.tsx",
+        "components/ui/button.tsx",
+        "components/ui/code-block.tsx",
+        "components/ui/copy-button.tsx",
+        "components/ui/dashboard-section.tsx",
+        "components/ui/dashboard-views/",
+        "components/ui/feed-item.tsx",
+        "components/ui/kpi.tsx",
+        "components/ui/label.tsx",
+        "components/ui/landing-bar.tsx",
+        "components/ui/money-input.tsx",
+        "components/ui/nav-item.tsx",
+        "components/ui/radio-group.tsx",
+        "components/ui/rich-select.tsx",
+        "components/ui/shell/scope-combobox.tsx",
+        "components/ui/shell/theme-provider.tsx",
+        "components/ui/spark-chart.tsx",
+        "components/ui/sparkline-data.ts",
+        "components/ui/sparkline.tsx",
+        "components/ui/switch.tsx",
+        "components/ui/table.tsx",
+        "components/ui/toggle-group.tsx",
+        "components/ui/workspace/dashboard-section.tsx",
+        "components/ui/workspace/filters/facet-tabs.tsx",
+        "components/ui/workspace/status-tag.tsx",
+        "lib/budget-labels.ts",
+        "lib/budgeting/",
+        "lib/format.ts",
+        "lib/icons/brand-logos.tsx",
+        "lib/metering/top-spender.ts",
+        "lib/metering/spend-series.ts",
+        "lib/models.tsx",
+        "lib/routes.ts",
+        "lib/spend-composition/",
+        "lib/spend-share.ts",
+        "lib/spend-types.ts",
+        "lib/status-tag-tone.ts",
+        "lib/utils.ts"
+    ],
+    "exports": {
+        "./components/ui/accordion": {
+            "types": "./components/ui/accordion.tsx",
+            "default": "./components/ui/accordion.tsx"
+        },
+        "./components/ui/brand/logo": {
+            "types": "./components/ui/brand/logo.tsx",
+            "default": "./components/ui/brand/logo.tsx"
+        },
+        "./components/ui/button": {
+            "types": "./components/ui/button.tsx",
+            "default": "./components/ui/button.tsx"
+        },
+        "./components/ui/code-block": {
+            "types": "./components/ui/code-block.tsx",
+            "default": "./components/ui/code-block.tsx"
+        },
+        "./components/ui/copy-button": {
+            "types": "./components/ui/copy-button.tsx",
+            "default": "./components/ui/copy-button.tsx"
+        },
+        "./components/ui/dashboard-views/now-strip-view": {
+            "types": "./components/ui/dashboard-views/now-strip-view.tsx",
+            "default": "./components/ui/dashboard-views/now-strip-view.tsx"
+        },
+        "./components/ui/dashboard-views/recent-alerts-panel-view": {
+            "types": "./components/ui/dashboard-views/recent-alerts-panel-view.tsx",
+            "default": "./components/ui/dashboard-views/recent-alerts-panel-view.tsx"
+        },
+        "./components/ui/dashboard-views/spend-composition-panel": {
+            "types": "./components/ui/dashboard-views/spend-composition-panel.tsx",
+            "default": "./components/ui/dashboard-views/spend-composition-panel.tsx"
+        },
+        "./components/ui/dashboard-views/top-spenders-snapshot-view": {
+            "types": "./components/ui/dashboard-views/top-spenders-snapshot-view.tsx",
+            "default": "./components/ui/dashboard-views/top-spenders-snapshot-view.tsx"
+        },
+        "./components/ui/dashboard-views/whats-breaking": {
+            "types": "./components/ui/dashboard-views/whats-breaking.tsx",
+            "default": "./components/ui/dashboard-views/whats-breaking.tsx"
+        },
+        "./components/ui/label": {
+            "types": "./components/ui/label.tsx",
+            "default": "./components/ui/label.tsx"
+        },
+        "./components/ui/landing-bar": {
+            "types": "./components/ui/landing-bar.tsx",
+            "default": "./components/ui/landing-bar.tsx"
+        },
+        "./components/ui/money-input": {
+            "types": "./components/ui/money-input.tsx",
+            "default": "./components/ui/money-input.tsx"
+        },
+        "./components/ui/nav-item": {
+            "types": "./components/ui/nav-item.tsx",
+            "default": "./components/ui/nav-item.tsx"
+        },
+        "./components/ui/radio-group": {
+            "types": "./components/ui/radio-group.tsx",
+            "default": "./components/ui/radio-group.tsx"
+        },
+        "./components/ui/rich-select": {
+            "types": "./components/ui/rich-select.tsx",
+            "default": "./components/ui/rich-select.tsx"
+        },
+        "./components/ui/shell/scope-combobox": {
+            "types": "./components/ui/shell/scope-combobox.tsx",
+            "default": "./components/ui/shell/scope-combobox.tsx"
+        },
+        "./components/ui/shell/theme-provider": {
+            "types": "./components/ui/shell/theme-provider.tsx",
+            "default": "./components/ui/shell/theme-provider.tsx"
+        },
+        "./components/ui/switch": {
+            "types": "./components/ui/switch.tsx",
+            "default": "./components/ui/switch.tsx"
+        },
+        "./components/ui/table": {
+            "types": "./components/ui/table.tsx",
+            "default": "./components/ui/table.tsx"
+        },
+        "./components/ui/toggle-group": {
+            "types": "./components/ui/toggle-group.tsx",
+            "default": "./components/ui/toggle-group.tsx"
+        },
+        "./components/ui/workspace/status-tag": {
+            "types": "./components/ui/workspace/status-tag.tsx",
+            "default": "./components/ui/workspace/status-tag.tsx"
+        },
+        "./lib/budget-labels": {
+            "types": "./lib/budget-labels.ts",
+            "default": "./lib/budget-labels.ts"
+        },
+        "./lib/budgeting/budget": {
+            "types": "./lib/budgeting/budget.ts",
+            "default": "./lib/budgeting/budget.ts"
+        },
+        "./lib/budgeting/period": {
+            "types": "./lib/budgeting/period.ts",
+            "default": "./lib/budgeting/period.ts"
+        },
+        "./lib/budgeting/whats-breaking": {
+            "types": "./lib/budgeting/whats-breaking.ts",
+            "default": "./lib/budgeting/whats-breaking.ts"
+        },
+        "./lib/icons/brand-logos": {
+            "types": "./lib/icons/brand-logos.tsx",
+            "default": "./lib/icons/brand-logos.tsx"
+        },
+        "./lib/metering/top-spender": {
+            "types": "./lib/metering/top-spender.ts",
+            "default": "./lib/metering/top-spender.ts"
+        },
+        "./lib/spend-types": {
+            "types": "./lib/spend-types.ts",
+            "default": "./lib/spend-types.ts"
+        },
+        "./lib/utils": {
+            "types": "./lib/utils.ts",
+            "default": "./lib/utils.ts"
+        }
+    },
+    "scripts": {
+        "dev": "next dev --port 3000",
+        "build": "next build",
+        "build:oss": "OSS_BUILD=true next build",
+        "start": "next start --port 3000",
+        "lint": "eslint .",
+        "lint:fix": "eslint . --fix",
+        "typecheck": "next typegen && tsc --noEmit",
+        "test": "bun test",
+        "format": "prettier --write .",
+        "format:check": "prettier --check .",
+        "check": "bun run typecheck && bun run lint && bun run format:check && bun run test",
+        "db:generate": "drizzle-kit generate",
+        "db:setup": "bun drizzle/setup.ts",
+        "db:migrate": "drizzle-kit migrate",
+        "db:push": "drizzle-kit push",
+        "db:seed": "bun drizzle/seed.ts",
+        "db:reset": "bun run db:setup && bun run db:migrate && bun run db:seed",
+        "db:fresh": "bun drizzle/setup.ts --fresh && bun run db:migrate && bun run db:seed",
+        "db:dev": "bun scripts/dev-setup.ts",
+        "db:studio": "drizzle-kit studio"
+    },
+    "dependencies": {
+        "@base-ui/react": "^1.4.1",
+        "@bursora/sdk": "file:../sdk",
+        "@hookform/resolvers": "^5.2.2",
+        "@react-email/components": "^1.0.12",
+        "@react-email/render": "^2.0.8",
+        "@shikijs/transformers": "^4.0.2",
+        "@tailwindcss/postcss": "^4.3.0",
+        "better-auth": "^1.6.10",
+        "class-variance-authority": "^0.7.1",
+        "clsx": "^2.1.1",
+        "cmdk": "^1.1.1",
+        "drizzle-orm": "^0.45.2",
+        "ioredis": "^5.10.1",
+        "lucide-react": "^1.14.0",
+        "next": "^16.2.6",
+        "next-themes": "^0.4.6",
+        "nodemailer": "^8.0.7",
+        "postcss": "^8.5.14",
+        "postgres": "^3.4.9",
+        "radix-ui": "^1.4.3",
+        "react": "^19.2.6",
+        "react-day-picker": "^10.0.0",
+        "react-dom": "^19.2.6",
+        "react-hook-form": "^7.75.0",
+        "react-hotkeys-hook": "^5.3.2",
+        "react-markdown": "^10.1.0",
+        "react-rough-notation": "^1.0.8",
+        "recharts": "^3.8.1",
+        "server-only": "^0.0.1",
+        "shadcn": "^4.7.0",
+        "shiki": "^4.0.2",
+        "sonner": "^2.0.7",
+        "stripe": "^22.1.1",
+        "swr": "^2.4.1",
+        "tailwind-merge": "^3.6.0",
+        "tailwindcss": "^4.3.0",
+        "tw-animate-css": "^1.4.0",
+        "zod": "^4.4.3"
+    },
+    "devDependencies": {
+        "@eslint/js": "^10.0.1",
+        "@types/bun": "^1.3.13",
+        "@types/node": "^25.6.2",
+        "@types/nodemailer": "^8.0.0",
+        "@types/react": "^19.2.14",
+        "@types/react-dom": "^19.2.3",
+        "drizzle-kit": "^0.31.10",
+        "eslint": "^10.3.0",
+        "eslint-config-next": "^16.2.6",
+        "eslint-import-resolver-typescript": "^4.4.4",
+        "eslint-plugin-import": "^2.32.0",
+        "eslint-plugin-react": "^7.37.5",
+        "prettier": "^3.8.3",
+        "prettier-plugin-organize-imports": "^4.1.0",
+        "typescript": "^6.0.3",
+        "typescript-eslint": "^8.58.1"
+    },
+    "engines": {
+        "node": ">=18",
+        "bun": ">=1.0"
+    }
+}

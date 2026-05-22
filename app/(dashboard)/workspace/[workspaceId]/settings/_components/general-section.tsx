@@ -1,0 +1,100 @@
+/**
+ * General workspace settings: rename, workspace id, danger zone.
+ * Danger zone (delete) only renders for owners.
+ */
+
+import { CopyButton } from "@/components/ui/copy-button";
+import { DashboardSection } from "@/components/ui/workspace/dashboard-section";
+import { env } from "@/lib/env";
+import { formatDate } from "@/lib/format";
+import { getWorkspace } from "@/lib/identity/server";
+import { notFound } from "next/navigation";
+import { DeleteWorkspaceDialog } from "./delete-workspace-dialog";
+import { EnvironmentForm } from "./environment-form";
+import { RenameWorkspaceForm } from "./rename-workspace-form";
+import { SpikeProtectionSection } from "./spike-protection-section";
+
+interface GeneralSectionProps {
+    readonly workspaceId: string;
+    readonly isOwner: boolean;
+}
+
+export async function GeneralSection({ workspaceId, isOwner }: GeneralSectionProps) {
+    const workspace = await getWorkspace(workspaceId);
+    if (!workspace) notFound();
+
+    return (
+        <div className="space-y-6">
+            <DashboardSection
+                label="Workspace name"
+                sublabel="shown in switcher · on shared invites"
+            >
+                <RenameWorkspaceForm workspaceId={workspaceId} currentName={workspace.name} />
+            </DashboardSection>
+
+            <DashboardSection
+                label="Environment"
+                sublabel="prod · staging · dev label shown in sidebar"
+            >
+                <EnvironmentForm
+                    workspaceId={workspaceId}
+                    currentEnvironment={workspace.environment}
+                />
+            </DashboardSection>
+
+            {env().IS_CLOUD ? <SpikeProtectionSection workspaceId={workspaceId} /> : null}
+
+            <DashboardSection
+                label="Workspace details"
+                sublabel="reference info for sdk config and support"
+            >
+                <div className="space-y-4">
+                    <FieldRow label="Workspace ID">
+                        <code className="rounded-md bg-muted px-2 py-1 font-mono text-sm">
+                            {workspace.id}
+                        </code>
+                        <CopyButton value={workspace.id} label="Copy ID" />
+                    </FieldRow>
+                    <FieldRow label="Created">
+                        <span className="text-sm">{formatDate(workspace.createdAt)}</span>
+                    </FieldRow>
+                </div>
+            </DashboardSection>
+
+            {isOwner ? (
+                <section className="rounded-[8px] border border-destructive/40 bg-background p-5">
+                    <h2 className="font-mono text-[10.5px] uppercase tracking-[0.08em] text-destructive">
+                        Danger zone
+                    </h2>
+                    <p className="mt-2 text-sm text-muted-foreground">
+                        Deleting the workspace removes all members, API keys, budgets, pricing
+                        overrides, alert channels, and usage history. This cannot be undone.
+                    </p>
+                    <div className="mt-4">
+                        <DeleteWorkspaceDialog
+                            workspaceId={workspaceId}
+                            workspaceName={workspace.name}
+                        />
+                    </div>
+                </section>
+            ) : null}
+        </div>
+    );
+}
+
+function FieldRow({
+    label,
+    children,
+}: {
+    readonly label: string;
+    readonly children: React.ReactNode;
+}) {
+    return (
+        <div className="space-y-1">
+            <div className="font-mono text-[10.5px] uppercase tracking-[0.08em] text-muted-foreground/70">
+                {label}
+            </div>
+            <div className="flex items-center gap-2">{children}</div>
+        </div>
+    );
+}

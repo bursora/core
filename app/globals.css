@@ -1,0 +1,362 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+:root {
+    --background: oklch(1 0 0);
+    --foreground: oklch(0.145 0 0);
+    --card: oklch(1 0 0);
+    --card-foreground: oklch(0.145 0 0);
+    --popover: oklch(1 0 0);
+    --popover-foreground: oklch(0.145 0 0);
+    --primary: oklch(0.42 0.18 277);
+    --primary-foreground: oklch(0.985 0 0);
+    --secondary: oklch(0.97 0 0);
+    --secondary-foreground: oklch(0.205 0 0);
+    --muted: oklch(0.97 0 0);
+    --muted-foreground: oklch(0.556 0 0);
+    --accent: oklch(0.97 0 0);
+    --accent-foreground: oklch(0.205 0 0);
+    --destructive: oklch(0.62 0.21 14);
+    --destructive-foreground: oklch(0.985 0 0);
+    --warning: oklch(0.78 0.16 75);
+    --warning-foreground: oklch(0.205 0 0);
+    --success: oklch(0.66 0.16 152);
+    --success-foreground: oklch(0.985 0 0);
+    --border: oklch(0.922 0 0);
+    --input: oklch(0.922 0 0);
+    --ring: oklch(0.42 0.18 277);
+    --chart-1: oklch(0.42 0.18 277);
+    --chart-2: oklch(0.66 0.16 152);
+    --chart-3: oklch(0.78 0.16 75);
+    --chart-4: oklch(0.62 0.21 14);
+    --chart-5: oklch(0.556 0 0);
+    --sidebar: oklch(0.985 0 0);
+    --sidebar-foreground: oklch(0.145 0 0);
+    --sidebar-primary: oklch(0.42 0.18 277);
+    --sidebar-primary-foreground: oklch(0.985 0 0);
+    --sidebar-accent: oklch(0.97 0 0);
+    --sidebar-accent-foreground: oklch(0.205 0 0);
+    --sidebar-border: oklch(0.922 0 0);
+    --sidebar-ring: oklch(0.42 0.18 277);
+    --radius: 0.5rem;
+}
+
+.dark {
+    --background: oklch(0.145 0 0);
+    --foreground: oklch(0.985 0 0);
+    --card: oklch(0.205 0 0);
+    --card-foreground: oklch(0.985 0 0);
+    --popover: oklch(0.205 0 0);
+    --popover-foreground: oklch(0.985 0 0);
+    --primary: oklch(0.62 0.19 277);
+    --primary-foreground: oklch(0.985 0 0);
+    --secondary: oklch(0.269 0 0);
+    --secondary-foreground: oklch(0.985 0 0);
+    --muted: oklch(0.269 0 0);
+    --muted-foreground: oklch(0.708 0 0);
+    --accent: oklch(0.269 0 0);
+    --accent-foreground: oklch(0.985 0 0);
+    --destructive: oklch(0.55 0.2 14);
+    --destructive-foreground: oklch(0.985 0 0);
+    --warning: oklch(0.7 0.15 75);
+    --warning-foreground: oklch(0.145 0 0);
+    --success: oklch(0.6 0.15 152);
+    --success-foreground: oklch(0.985 0 0);
+    --border: oklch(1 0 0 / 10%);
+    --input: oklch(1 0 0 / 15%);
+    --ring: oklch(0.62 0.19 277);
+    --chart-1: oklch(0.62 0.19 277);
+    --chart-2: oklch(0.6 0.15 152);
+    --chart-3: oklch(0.7 0.15 75);
+    --chart-4: oklch(0.55 0.2 14);
+    --chart-5: oklch(0.708 0 0);
+    --sidebar: oklch(0.205 0 0);
+    --sidebar-foreground: oklch(0.985 0 0);
+    --sidebar-primary: oklch(0.62 0.19 277);
+    --sidebar-primary-foreground: oklch(0.985 0 0);
+    --sidebar-accent: oklch(0.269 0 0);
+    --sidebar-accent-foreground: oklch(0.985 0 0);
+    --sidebar-border: oklch(1 0 0 / 10%);
+    --sidebar-ring: oklch(0.62 0.19 277);
+}
+
+@theme inline {
+    --color-background: var(--background);
+    --color-foreground: var(--foreground);
+    --color-card: var(--card);
+    --color-card-foreground: var(--card-foreground);
+    --color-popover: var(--popover);
+    --color-popover-foreground: var(--popover-foreground);
+    --color-primary: var(--primary);
+    --color-primary-foreground: var(--primary-foreground);
+    --color-secondary: var(--secondary);
+    --color-secondary-foreground: var(--secondary-foreground);
+    --color-muted: var(--muted);
+    --color-muted-foreground: var(--muted-foreground);
+    --color-accent: var(--accent);
+    --color-accent-foreground: var(--accent-foreground);
+    --color-destructive: var(--destructive);
+    --color-destructive-foreground: var(--destructive-foreground);
+    --color-warning: var(--warning);
+    --color-warning-foreground: var(--warning-foreground);
+    --color-success: var(--success);
+    --color-success-foreground: var(--success-foreground);
+    --color-border: var(--border);
+    --color-input: var(--input);
+    --color-ring: var(--ring);
+    --color-chart-1: var(--chart-1);
+    --color-chart-2: var(--chart-2);
+    --color-chart-3: var(--chart-3);
+    --color-chart-4: var(--chart-4);
+    --color-chart-5: var(--chart-5);
+    --color-sidebar: var(--sidebar);
+    --color-sidebar-foreground: var(--sidebar-foreground);
+    --color-sidebar-primary: var(--sidebar-primary);
+    --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+    --color-sidebar-accent: var(--sidebar-accent);
+    --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+    --color-sidebar-border: var(--sidebar-border);
+    --color-sidebar-ring: var(--sidebar-ring);
+    --radius-sm: calc(var(--radius) - 4px);
+    --radius-md: calc(var(--radius) - 2px);
+    --radius-lg: var(--radius);
+    --radius-xl: calc(var(--radius) + 4px);
+
+    --font-sans:
+        var(--font-space-grotesk), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+        "Helvetica Neue", Arial, sans-serif;
+    --font-mono:
+        var(--font-geist-mono), ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
+        "Liberation Mono", monospace;
+
+    --animate-marquee: marquee 60s linear infinite;
+    @keyframes marquee {
+        from {
+            transform: translateX(0);
+        }
+        to {
+            transform: translateX(-50%);
+        }
+    }
+}
+
+@layer base {
+    * {
+        @apply border-border outline-ring/50;
+    }
+    body {
+        @apply bg-background text-foreground font-sans;
+    }
+}
+
+.shiki {
+    color: var(--shiki-light);
+    background-color: transparent;
+}
+.shiki span {
+    color: var(--shiki-light);
+}
+.dark .shiki,
+.dark .shiki span {
+    color: var(--shiki-dark);
+}
+
+.shiki .line {
+    display: inline-block;
+    width: 100%;
+}
+.shiki .line.highlighted {
+    background-color: rgb(46 160 67 / 0.15);
+    box-shadow: inset 4px 0 0 rgb(63 185 80 / 0.8);
+    padding-left: 12px;
+}
+
+[id^="budget-"]:target {
+    animation: budget-target-flash 2s ease-out;
+    scroll-margin-top: 5rem;
+}
+@keyframes budget-target-flash {
+    0%,
+    60% {
+        background-color: color-mix(in oklch, var(--warning) 18%, transparent);
+        box-shadow: inset 2px 0 0 var(--warning);
+    }
+    100% {
+        background-color: transparent;
+        box-shadow: none;
+    }
+}
+
+.landing-pinstripe {
+    background-image: repeating-linear-gradient(
+        135deg,
+        transparent 0,
+        transparent 22px,
+        color-mix(in oklch, var(--foreground) 2.5%, transparent) 22px,
+        color-mix(in oklch, var(--foreground) 2.5%, transparent) 23px
+    );
+    mask-image: radial-gradient(
+        ellipse 80% 65% at 35% 32%,
+        #000 0%,
+        rgba(0, 0, 0, 0.6) 55%,
+        transparent 92%
+    );
+    -webkit-mask-image: radial-gradient(
+        ellipse 80% 65% at 35% 32%,
+        #000 0%,
+        rgba(0, 0, 0, 0.6) 55%,
+        transparent 92%
+    );
+}
+
+.landing-scanlines {
+    background-image: repeating-linear-gradient(
+        to bottom,
+        transparent 0,
+        transparent 3px,
+        color-mix(in oklch, var(--foreground) 4%, transparent) 3px,
+        color-mix(in oklch, var(--foreground) 4%, transparent) 4px
+    );
+    mask-image: linear-gradient(to bottom, #000 0%, transparent 65vh);
+    -webkit-mask-image: linear-gradient(to bottom, #000 0%, transparent 65vh);
+}
+
+/* Honor user's reduced-motion preference: kill non-essential animations and
+   transitions globally. Anything that needs to remain animated (loading
+   spinners) should opt back in explicitly. */
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+}
+
+/* Budget-check demo on the landing hero. Keyframes live here so multiple
+   instances of <BudgetCheckDemo /> don't emit duplicate <style> blocks. */
+.bcd-row {
+    opacity: 0;
+}
+.bcd-row-0 {
+    animation: bcd-r0 10s ease-out infinite;
+}
+.bcd-row-1 {
+    animation: bcd-r1 10s ease-out infinite;
+}
+.bcd-row-2 {
+    animation: bcd-r2 10s ease-out infinite;
+}
+.bcd-row-3 {
+    animation: bcd-r3 10s ease-out infinite;
+}
+.bcd-row-4 {
+    animation: bcd-r4 10s ease-out infinite;
+}
+@keyframes bcd-r0 {
+    0%,
+    0% {
+        opacity: 0;
+        transform: translateY(3px);
+    }
+    2%,
+    100% {
+        opacity: 1;
+        transform: none;
+    }
+}
+@keyframes bcd-r1 {
+    0%,
+    20% {
+        opacity: 0;
+        transform: translateY(3px);
+    }
+    22%,
+    100% {
+        opacity: 1;
+        transform: none;
+    }
+}
+@keyframes bcd-r2 {
+    0%,
+    40% {
+        opacity: 0;
+        transform: translateY(3px);
+    }
+    42%,
+    100% {
+        opacity: 1;
+        transform: none;
+    }
+}
+@keyframes bcd-r3 {
+    0%,
+    60% {
+        opacity: 0;
+        transform: translateY(3px);
+    }
+    62%,
+    100% {
+        opacity: 1;
+        transform: none;
+    }
+}
+@keyframes bcd-r4 {
+    0%,
+    80% {
+        opacity: 0;
+        transform: translateY(3px);
+    }
+    82%,
+    100% {
+        opacity: 1;
+        transform: none;
+    }
+}
+
+.bcd-bar {
+    animation: bcd-bar 10s ease-in-out infinite;
+    width: 84.5%;
+    background: var(--success);
+}
+@keyframes bcd-bar {
+    0%,
+    2% {
+        width: 84.5%;
+        background: var(--success);
+    }
+    22% {
+        width: 85%;
+        background: var(--success);
+    }
+    42% {
+        width: 85.6%;
+        background: var(--success);
+    }
+    62% {
+        width: 99.9%;
+        background: var(--warning);
+    }
+    82%,
+    100% {
+        width: 100%;
+        background: var(--destructive);
+    }
+}
+
+.bcd-pulse {
+    animation: bcd-pulse 1.6s ease-in-out infinite;
+}
+@keyframes bcd-pulse {
+    0%,
+    100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.3;
+    }
+}

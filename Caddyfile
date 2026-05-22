@@ -1,0 +1,34 @@
+{
+	# Global options. ACME email gets cert-renewal warnings; defaults to a
+	# placeholder if BURSORA_ACME_EMAIL is unset (Caddy still issues, just no
+	# expiry mail). Override in env to receive Let's Encrypt notifications.
+	email {$BURSORA_ACME_EMAIL:ops@example.com}
+}
+
+{$BURSORA_DOMAIN} {
+	encode zstd gzip
+
+	# Reverse-proxy to the Bursora app container on the shared docker network.
+	# Service name `bursora-app` resolves via docker DNS.
+	reverse_proxy bursora-app:3000 {
+		header_up X-Real-IP {remote}
+		header_up X-Forwarded-For {remote}
+		header_up X-Forwarded-Proto {scheme}
+	}
+
+	# Standard hardening headers. HSTS is enabled by Caddy automatically with
+	# a managed cert; we add the rest explicitly.
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		# Remove server fingerprint
+		-Server
+	}
+
+	log {
+		output stdout
+		format console
+	}
+}

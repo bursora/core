@@ -1,0 +1,5 @@
+# `server-only` throws unconditionally outside the React Server Components
+# bundler condition. Bun's test runner does not set that condition, so
+# alias the guard to a no-op for tests.
+[test]
+preload = ["./tests/server-only-shim.ts"]

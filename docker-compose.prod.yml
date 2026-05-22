@@ -1,0 +1,76 @@
+# Bursora production compose. Brings up only the app + Caddy.
+#
+# Reuses the host VPS's existing Postgres container via the shared `develop`
+# network (same network the dev stack uses). DATABASE_URL in .env.prod must
+# point at it by container DNS name, e.g.
+# postgres://postgres:postgres@postgres:5432/bursora_prod.
+#
+# Coexistence with Prowl: Caddy here owns ports 80/443. If Prowl on the same
+# VPS is also bound to 80/443, you must either move Prowl off those ports or
+# merge the two Caddyfiles.
+#
+# Usage (run from the repository root):
+#   docker compose -f bursora/docker-compose.prod.yml build --pull bursora-app
+#   docker compose -f bursora/docker-compose.prod.yml run --rm bursora-app bun run db:migrate
+#   docker compose -f bursora/docker-compose.prod.yml up -d bursora-app caddy bursora-cron
+
+services:
+    bursora-app:
+        build:
+            context: ..
+            dockerfile: bursora/Dockerfile
+        image: bursora-app:latest
+        restart: unless-stopped
+        env_file:
+            - ./.env.prod
+        expose:
+            - "3000"
+        networks:
+            - develop
+
+    caddy:
+        image: caddy:2-alpine
+        restart: unless-stopped
+        env_file:
+            - ./.env.prod
+        ports:
+            - "80:80"
+            - "443:443"
+        volumes:
+            - ./Caddyfile:/etc/caddy/Caddyfile:ro
+            - caddy_data:/data
+            - caddy_config:/config
+        networks:
+            - develop
+        depends_on:
+            - bursora-app
+
+    # Daily pricing-sync trigger. Tiny alpine + busybox crond curls the
+    # internal route over the `develop` network. Cron output lands on
+    # stdout/stderr so `docker logs bursora-cron` surfaces every run.
+    # `$$CRON_SECRET` escapes compose interpolation so the shell expands
+    # it at container start using the value loaded from `.env.prod`.
+    bursora-cron:
+        image: alpine:3
+        restart: unless-stopped
+        env_file:
+            - ./.env.prod
+        networks:
+            - develop
+        depends_on:
+            - bursora-app
+        command:
+            - sh
+            - -c
+            - |
+                apk add --no-cache curl >/dev/null && \
+                echo "0 4 * * * curl --fail-with-body --silent --show-error --max-time 60 -H \"Authorization: Bearer $$CRON_SECRET\" http://bursora-app:3000/api/cron/pricing-sync > /proc/1/fd/1 2>&1" > /etc/crontabs/root && \
+                crond -f -l 2 -L /dev/stderr
+
+volumes:
+    caddy_data: {}
+    caddy_config: {}
+
+networks:
+    develop:
+        external: true

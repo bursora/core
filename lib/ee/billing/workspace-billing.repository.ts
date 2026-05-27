@@ -1,14 +1,15 @@
 /**
  * Read/write the billing-relevant fields on the workspaces row. Lives here
- * (not in the identity context) because Stripe ids and subscription status
- * are billing-owned columns even though the row is shared.
+ * (not in the identity context) because billing-provider ids and
+ * subscription status are billing-owned columns even though the row is
+ * shared.
  *
- * `subscriptionStatus` mirrors the Stripe subscription state verbatim
- * (`active`, `trialing`, `past_due`, `canceled`, `unpaid`, `incomplete`,
- * `incomplete_expired`). `null` means the workspace has never opened
- * Checkout.
+ * `subscriptionStatus` mirrors the upstream provider's subscription state
+ * verbatim (`active`, `trialing`, `past_due`, `canceled`, `unpaid`,
+ * `incomplete`, `incomplete_expired`). `null` means the workspace has
+ * never opened Checkout.
  *
- * `lastInvoiceId` is the most recent invoice the rollup pushed. Surfaced
+ * `lastInvoiceRef` is the most recent invoice the rollup pushed. Surfaced
  * back so the dashboard can deep-link to the receipt and so retries
  * can detect already-pushed months.
  *
@@ -22,31 +23,31 @@
 
 export interface WorkspaceBillingRecord {
     readonly workspaceId: string;
-    readonly stripeCustomerId: string | null;
-    readonly stripeSubscriptionId: string | null;
+    readonly providerCustomerId: string | null;
+    readonly providerSubscriptionId: string | null;
     readonly subscriptionStatus: string | null;
     readonly subscribedAt: Date | null;
     readonly refundEligibleUntil: Date | null;
-    readonly lastInvoiceId: string | null;
+    readonly lastInvoiceRef: string | null;
     /** YYYY-MM of the last month the rollup successfully pushed. */
     readonly lastBilledMonth: string | null;
 }
 
 export interface WorkspaceBillingUpdate {
     readonly workspaceId: string;
-    readonly stripeCustomerId?: string | null;
-    readonly stripeSubscriptionId?: string | null;
+    readonly providerCustomerId?: string | null;
+    readonly providerSubscriptionId?: string | null;
     readonly subscriptionStatus?: string | null;
     readonly subscribedAt?: Date | null;
     readonly refundEligibleUntil?: Date | null;
-    readonly lastInvoiceId?: string | null;
+    readonly lastInvoiceRef?: string | null;
     readonly lastBilledMonth?: string | null;
 }
 
 export interface WorkspaceBillingRepository {
     findById(workspaceId: string): Promise<WorkspaceBillingRecord | null>;
-    findByStripeCustomerId(customerId: string): Promise<WorkspaceBillingRecord | null>;
-    findByStripeInvoiceId(invoiceId: string): Promise<WorkspaceBillingRecord | null>;
+    findByProviderCustomerId(customerId: string): Promise<WorkspaceBillingRecord | null>;
+    findByInvoiceRef(invoiceRef: string): Promise<WorkspaceBillingRecord | null>;
     update(input: WorkspaceBillingUpdate): Promise<void>;
 }
 

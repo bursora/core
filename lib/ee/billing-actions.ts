@@ -8,7 +8,6 @@
 
 import { type ActionResult, actionFail, actionOk } from "@/lib/action-result";
 import {
-    optionalField,
     rethrowRedirect,
     workspaceIdFromForm,
     workspaceIdFromPrevForm,
@@ -20,7 +19,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createCheckoutSession, getBillingPortalUrl, requestRefund } from "./billing/server";
 
-// Stripe-hosted URLs are external and not part of typedRoutes' generated
+// Provider-hosted URLs are external and not part of typedRoutes' generated
 // union. Cast through Route<string> so the redirect call still type-checks.
 const externalRoute = (url: string): Route => url as Route;
 
@@ -58,11 +57,7 @@ export const requestRefundAction = withWorkspace(
                 return actionFail("Only the workspace owner can request a refund.");
             }
             const workspaceId = workspaceIdFromForm(formData);
-            const reason = optionalField(formData, "reason");
-            const result = await requestRefund({
-                workspaceId,
-                ...(reason !== null ? { reason } : {}),
-            });
+            const result = await requestRefund({ workspaceId });
             revalidatePath(buildWorkspacePath(workspaceId, "settings"));
 
             switch (result.status) {

@@ -1,21 +1,23 @@
 /**
  * Integration test for the monthly billing rollup. Wires the use case to
- * in-memory fakes for Stripe + workspace + tracked-spend + event-bundle
- * rollup repos.
+ * in-memory fakes for the LS payment provider + workspace + tracked-spend
+ * + event-bundle rollup repos.
  *
  * Coverage:
- *   - happy path: one workspace, full month → invoice with one line item
- *   - overage line item added when events exceed bundle
+ *   - happy path: one workspace, full month → usage record posted with totalCents = floor
+ *   - overage rolled into totalCents when events exceed the bundle
+ *   - cap clamps the percentage component
  *   - mid-month signup prorates the floor/cap
- *   - retry: month already billed → skipped
- *   - workspace with no Stripe customer → skipped
- *   - Stripe push failure → counted as failed, batch continues
+ *   - retry: month already billed → skipped (no provider call)
+ *   - workspace with no provider customer → skipped
+ *   - provider push failure → counted as failed, batch continues
+ *   - persists usage-record id + month on success
  */
 
 import { CAP_CENTS, FLOOR_CENTS } from "@/lib/ee/billing/calculate-bill";
 import { rollupBillUseCase } from "@/lib/ee/billing/rollup-bill.usecase";
 import { describe, expect, test } from "bun:test";
-import { FakeStripeAdapter } from "./fakes/fake-stripe.adapter";
+import { FakePaymentProviderAdapter } from "./fakes/fake-payment-provider.adapter";
 import { InMemoryEventBundleRollupRepository } from "./fakes/in-memory-event-bundle-rollup.repository";
 import { InMemoryTrackedSpendRepository } from "./fakes/in-memory-tracked-spend.repository";
 import { InMemoryWorkspaceBillingRepository } from "./fakes/in-memory-workspace-billing.repository";
@@ -28,7 +30,7 @@ const JAN_MONTH = "2025-01";
 
 function buildDeps() {
     return {
-        stripe: new FakeStripeAdapter(),
+        provider: new FakePaymentProviderAdapter(),
         workspaces: new InMemoryWorkspaceBillingRepository(),
         trackedSpend: new InMemoryTrackedSpendRepository(),
         eventBundleRollup: new InMemoryEventBundleRollupRepository(),
@@ -36,12 +38,12 @@ function buildDeps() {
 }
 
 describe("rollupBillUseCase", () => {
-    test("pushes a single line item invoice with the floor when spend is light", async () => {
+    test("reports the floor as totalCents when spend is light", async () => {
         const deps = buildDeps();
         deps.workspaces.seed({
             workspaceId: WORKSPACE_A,
-            stripeCustomerId: "cus_a",
-            stripeSubscriptionId: "sub_a",
+            providerCustomerId: "cus_a",
+            providerSubscriptionId: "sub_a",
             subscriptionStatus: "active",
             subscribedAt: new Date("2024-06-01T00:00:00Z"),
         });
@@ -51,19 +53,20 @@ describe("rollupBillUseCase", () => {
         const result = await rollupBillUseCase({ now: FEB_FIRST, ...deps });
 
         expect(result).toEqual({ month: JAN_MONTH, processed: 1, skipped: 0, failed: 0 });
-        expect(deps.stripe.invoiceCalls).toHaveLength(1);
-        const invoice = deps.stripe.invoiceCalls[0]!;
-        expect(invoice.workspaceId).toBe(WORKSPACE_A);
-        expect(invoice.periodMonth).toBe(JAN_MONTH);
-        expect(invoice.lineItems).toHaveLength(1);
-        expect(invoice.lineItems[0]?.amountCents).toBe(FLOOR_CENTS);
+        expect(deps.provider.reportUsageCalls).toHaveLength(1);
+        const call = deps.provider.reportUsageCalls[0]!;
+        expect(call.workspaceId).toBe(WORKSPACE_A);
+        expect(call.periodMonth).toBe(JAN_MONTH);
+        expect(call.subscriptionId).toBe("sub_a");
+        expect(call.totalCents).toBe(FLOOR_CENTS);
     });
 
-    test("adds an overage line item when events exceed the bundle", async () => {
+    test("rolls overage into totalCents when events exceed the bundle", async () => {
         const deps = buildDeps();
         deps.workspaces.seed({
             workspaceId: WORKSPACE_A,
-            stripeCustomerId: "cus_a",
+            providerCustomerId: "cus_a",
+            providerSubscriptionId: "sub_a",
             subscribedAt: new Date("2024-06-01T00:00:00Z"),
         });
         deps.trackedSpend.seedActiveIds([WORKSPACE_A]);
@@ -81,17 +84,16 @@ describe("rollupBillUseCase", () => {
 
         await rollupBillUseCase({ now: FEB_FIRST, ...deps });
 
-        const invoice = deps.stripe.invoiceCalls[0]!;
-        expect(invoice.lineItems).toHaveLength(2);
-        expect(invoice.lineItems[0]?.amountCents).toBe(5000);
-        expect(invoice.lineItems[1]?.amountCents).toBe(300);
+        const call = deps.provider.reportUsageCalls[0]!;
+        expect(call.totalCents).toBe(5000 + 300);
     });
 
-    test("caps the percentage at $499", async () => {
+    test("caps the percentage component at $499", async () => {
         const deps = buildDeps();
         deps.workspaces.seed({
             workspaceId: WORKSPACE_A,
-            stripeCustomerId: "cus_a",
+            providerCustomerId: "cus_a",
+            providerSubscriptionId: "sub_a",
             subscribedAt: new Date("2024-06-01T00:00:00Z"),
         });
         deps.trackedSpend.seedActiveIds([WORKSPACE_A]);
@@ -103,8 +105,8 @@ describe("rollupBillUseCase", () => {
 
         await rollupBillUseCase({ now: FEB_FIRST, ...deps });
 
-        const invoice = deps.stripe.invoiceCalls[0]!;
-        expect(invoice.lineItems[0]?.amountCents).toBe(CAP_CENTS);
+        const call = deps.provider.reportUsageCalls[0]!;
+        expect(call.totalCents).toBe(CAP_CENTS);
     });
 
     test("prorates the floor for a mid-month signup", async () => {
@@ -113,7 +115,8 @@ describe("rollupBillUseCase", () => {
         // round(2900 * 15/31) = 1403c.
         deps.workspaces.seed({
             workspaceId: WORKSPACE_A,
-            stripeCustomerId: "cus_a",
+            providerCustomerId: "cus_a",
+            providerSubscriptionId: "sub_a",
             subscribedAt: new Date("2025-01-17T12:00:00Z"),
         });
         deps.trackedSpend.seedActiveIds([WORKSPACE_A]);
@@ -122,15 +125,16 @@ describe("rollupBillUseCase", () => {
         await rollupBillUseCase({ now: FEB_FIRST, ...deps });
 
         const expectedFloor = Math.round(FLOOR_CENTS * (15 / 31));
-        const invoice = deps.stripe.invoiceCalls[0]!;
-        expect(invoice.lineItems[0]?.amountCents).toBe(expectedFloor);
+        const call = deps.provider.reportUsageCalls[0]!;
+        expect(call.totalCents).toBe(expectedFloor);
     });
 
     test("skips workspaces already invoiced for the period (retry-safe)", async () => {
         const deps = buildDeps();
         deps.workspaces.seed({
             workspaceId: WORKSPACE_A,
-            stripeCustomerId: "cus_a",
+            providerCustomerId: "cus_a",
+            providerSubscriptionId: "sub_a",
             subscribedAt: new Date("2024-06-01T00:00:00Z"),
             lastBilledMonth: JAN_MONTH,
         });
@@ -140,34 +144,62 @@ describe("rollupBillUseCase", () => {
         const result = await rollupBillUseCase({ now: FEB_FIRST, ...deps });
 
         expect(result).toEqual({ month: JAN_MONTH, processed: 0, skipped: 1, failed: 0 });
-        expect(deps.stripe.invoiceCalls).toHaveLength(0);
+        expect(deps.provider.reportUsageCalls).toHaveLength(0);
     });
 
-    test("skips workspaces without a Stripe customer", async () => {
+    test("skips workspaces whose subscription is canceled (post-refund, no further usage reported)", async () => {
+        // LS cancels at end-of-period. After a refund we mark the workspace
+        // canceled in our DB and must NOT report further usage for it — even
+        // if tracked spend keeps accruing during the leftover days.
         const deps = buildDeps();
-        deps.workspaces.seed({ workspaceId: WORKSPACE_A, stripeCustomerId: null });
+        deps.workspaces.seed({
+            workspaceId: WORKSPACE_A,
+            providerCustomerId: "cus_a",
+            providerSubscriptionId: "sub_a",
+            subscriptionStatus: "canceled",
+            subscribedAt: new Date("2024-06-01T00:00:00Z"),
+        });
+        deps.trackedSpend.seedActiveIds([WORKSPACE_A]);
+        deps.trackedSpend.seedSpend({
+            workspaceId: WORKSPACE_A,
+            month: JAN_MONTH,
+            cents: 1_000_000,
+        });
+
+        const result = await rollupBillUseCase({ now: FEB_FIRST, ...deps });
+
+        expect(result.skipped).toBe(1);
+        expect(result.processed).toBe(0);
+        expect(deps.provider.reportUsageCalls).toHaveLength(0);
+    });
+
+    test("skips workspaces without a provider customer", async () => {
+        const deps = buildDeps();
+        deps.workspaces.seed({ workspaceId: WORKSPACE_A, providerCustomerId: null });
         deps.trackedSpend.seedActiveIds([WORKSPACE_A]);
 
         const result = await rollupBillUseCase({ now: FEB_FIRST, ...deps });
 
         expect(result.skipped).toBe(1);
-        expect(deps.stripe.invoiceCalls).toHaveLength(0);
+        expect(deps.provider.reportUsageCalls).toHaveLength(0);
     });
 
-    test("Stripe failure counts the workspace as failed but does not halt the batch", async () => {
+    test("provider failure counts the workspace as failed but does not halt the batch", async () => {
         const deps = buildDeps();
         deps.workspaces.seed({
             workspaceId: WORKSPACE_A,
-            stripeCustomerId: "cus_a",
+            providerCustomerId: "cus_a",
+            providerSubscriptionId: "sub_a",
             subscribedAt: new Date("2024-06-01T00:00:00Z"),
         });
         deps.workspaces.seed({
             workspaceId: WORKSPACE_B,
-            stripeCustomerId: "cus_b",
+            providerCustomerId: "cus_b",
+            providerSubscriptionId: "sub_b",
             subscribedAt: new Date("2024-06-01T00:00:00Z"),
         });
         deps.trackedSpend.seedActiveIds([WORKSPACE_A, WORKSPACE_B]);
-        deps.stripe.pushInvoiceShouldThrow = true;
+        deps.provider.reportUsageShouldThrow = true;
 
         const result = await rollupBillUseCase({ now: FEB_FIRST, ...deps });
 
@@ -175,20 +207,21 @@ describe("rollupBillUseCase", () => {
         expect(result.processed).toBe(0);
     });
 
-    test("persists invoice id + month on success", async () => {
+    test("persists usage-record id + month on success", async () => {
         const deps = buildDeps();
         deps.workspaces.seed({
             workspaceId: WORKSPACE_A,
-            stripeCustomerId: "cus_a",
+            providerCustomerId: "cus_a",
+            providerSubscriptionId: "sub_a",
             subscribedAt: new Date("2024-06-01T00:00:00Z"),
         });
         deps.trackedSpend.seedActiveIds([WORKSPACE_A]);
-        deps.stripe.nextInvoiceId = "in_jan_a";
+        deps.provider.nextUsageRecordId = "usage_jan_a";
 
         await rollupBillUseCase({ now: FEB_FIRST, ...deps });
 
         const record = await deps.workspaces.findById(WORKSPACE_A);
-        expect(record?.lastInvoiceId).toBe("in_jan_a_1");
+        expect(record?.lastInvoiceRef).toBe("usage_jan_a_1");
         expect(record?.lastBilledMonth).toBe(JAN_MONTH);
     });
 });

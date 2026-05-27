@@ -3,9 +3,9 @@
  * REQUIRED for the app to start — there are no sensible defaults for
  * secrets, URLs, or hashing peppers.
  *
- * `IS_CLOUD` toggles cloud-only features (billing, Stripe). When false
- * (default), Stripe variables are optional and the OSS build runs without
- * them. When true, the Stripe trio becomes required.
+ * `IS_CLOUD` toggles cloud-only features (billing, Lemon Squeezy). When false
+ * (default), Lemon Squeezy variables are optional and the OSS build runs
+ * without them. When true, the LS quartet becomes required.
  *
  * `BURSORA_RATE_LIMIT_ENABLED` and `BURSORA_SPIKE_PROTECTION_ENABLED` gate
  * the request-cap stack. Both default to `true` on cloud and `false` on
@@ -30,9 +30,10 @@ const ALWAYS_REQUIRED = [
 ] as const;
 
 const CLOUD_REQUIRED = [
-    "STRIPE_SECRET_KEY",
-    "STRIPE_WEBHOOK_SECRET",
-    "STRIPE_PRICE_ID_TEAM",
+    "LEMONSQUEEZY_API_KEY",
+    "LEMONSQUEEZY_WEBHOOK_SECRET",
+    "LEMONSQUEEZY_STORE_ID",
+    "LEMONSQUEEZY_VARIANT_ID",
 ] as const;
 
 type AlwaysKey = (typeof ALWAYS_REQUIRED)[number];
@@ -53,11 +54,25 @@ export interface Env {
     readonly NEXT_PUBLIC_APP_URL: string;
     readonly IS_CLOUD: boolean;
     /** Empty string when `IS_CLOUD=false`. */
-    readonly STRIPE_SECRET_KEY: string;
+    readonly LEMONSQUEEZY_API_KEY: string;
     /** Empty string when `IS_CLOUD=false`. */
-    readonly STRIPE_WEBHOOK_SECRET: string;
+    readonly LEMONSQUEEZY_WEBHOOK_SECRET: string;
+    /**
+     * Optional second webhook secret for zero-downtime rotation. Empty when
+     * unset (the common case) and always empty when `IS_CLOUD=false`. When
+     * present, the LS adapter accepts signatures from either secret.
+     */
+    readonly LEMONSQUEEZY_WEBHOOK_SECRET_NEXT: string;
     /** Empty string when `IS_CLOUD=false`. */
-    readonly STRIPE_PRICE_ID_TEAM: string;
+    readonly LEMONSQUEEZY_STORE_ID: string;
+    /** Empty string when `IS_CLOUD=false`. */
+    readonly LEMONSQUEEZY_VARIANT_ID: string;
+    /**
+     * Which Lemon Squeezy environment the configured key + store target.
+     * `test` while the LS store is in test mode; `live` once activated.
+     * Defaults to `test`. Always `test` when `IS_CLOUD=false`.
+     */
+    readonly LEMONSQUEEZY_MODE: "test" | "live";
     readonly BURSORA_RATE_LIMIT_ENABLED: boolean;
     readonly BURSORA_SPIKE_PROTECTION_ENABLED: boolean;
     /** Empty string when both rate-limit and spike-protection are off. */
@@ -103,6 +118,15 @@ export function loadEnv(source: Record<string, string | undefined>): Env {
         throw new Error(`Missing required env vars: ${missing.join(", ")}`);
     }
 
+    let lemonSqueezyMode: "test" | "live" = "test";
+    if (isCloud) {
+        const rawMode = (source.LEMONSQUEEZY_MODE ?? "test").trim().toLowerCase();
+        if (rawMode !== "test" && rawMode !== "live") {
+            throw new Error(`LEMONSQUEEZY_MODE must be "test" or "live", got: ${source.LEMONSQUEEZY_MODE}`);
+        }
+        lemonSqueezyMode = rawMode;
+    }
+
     const port = Number(source.SMTP_PORT);
     if (!Number.isInteger(port) || port <= 0) {
         throw new Error(`SMTP_PORT must be a positive integer, got: ${source.SMTP_PORT}`);
@@ -139,9 +163,14 @@ export function loadEnv(source: Record<string, string | undefined>): Env {
         CRON_SECRET: getAlways("CRON_SECRET"),
         NEXT_PUBLIC_APP_URL: getAlways("NEXT_PUBLIC_APP_URL"),
         IS_CLOUD: isCloud,
-        STRIPE_SECRET_KEY: getCloud("STRIPE_SECRET_KEY"),
-        STRIPE_WEBHOOK_SECRET: getCloud("STRIPE_WEBHOOK_SECRET"),
-        STRIPE_PRICE_ID_TEAM: getCloud("STRIPE_PRICE_ID_TEAM"),
+        LEMONSQUEEZY_API_KEY: getCloud("LEMONSQUEEZY_API_KEY"),
+        LEMONSQUEEZY_WEBHOOK_SECRET: getCloud("LEMONSQUEEZY_WEBHOOK_SECRET"),
+        LEMONSQUEEZY_WEBHOOK_SECRET_NEXT: isCloud
+            ? (source.LEMONSQUEEZY_WEBHOOK_SECRET_NEXT ?? "")
+            : "",
+        LEMONSQUEEZY_STORE_ID: getCloud("LEMONSQUEEZY_STORE_ID"),
+        LEMONSQUEEZY_VARIANT_ID: getCloud("LEMONSQUEEZY_VARIANT_ID"),
+        LEMONSQUEEZY_MODE: lemonSqueezyMode,
         BURSORA_RATE_LIMIT_ENABLED: rateLimitEnabled,
         BURSORA_SPIKE_PROTECTION_ENABLED: spikeProtectionEnabled,
         REDIS_URL: needsRedis ? (source.REDIS_URL ?? "") : "",

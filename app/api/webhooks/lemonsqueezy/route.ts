@@ -4,7 +4,7 @@ export const dynamic = "force-dynamic";
 
 const ossBuild = process.env.OSS_BUILD === "true";
 
-const eePromise = ossBuild ? null : import("@/lib/ee/routes/stripe-webhook");
+const eePromise = ossBuild ? null : import("@/lib/ee/routes/lemonsqueezy-webhook");
 
 export async function POST(request: Request): Promise<NextResponse> {
     if (eePromise === null) {

@@ -6,8 +6,8 @@
  * types, schema re-exports, and pure use-case functions that tests
  * exercise with in-memory fakes.
  *
- * Anything that pulls Drizzle, Stripe SDK, or `server-only` lives in
- * `./server` so tests can import this barrel without booting a server.
+ * Anything that pulls Drizzle, the provider SDK, or `server-only` lives
+ * in `./server` so tests can import this barrel without booting a server.
  */
 
 export * from "./schema";
@@ -19,27 +19,26 @@ export type {
     BillingDeps,
     CheckoutSessionInput,
     CheckoutSessionResult,
-    InvoiceLineItem,
     NextBillEstimate,
     NextBillEstimateUseCaseInput,
+    PaymentProviderAdapter,
     PortalSessionInput,
     PortalSessionResult,
-    PushInvoiceInput,
-    PushInvoiceResult,
-    RefundAllInvoicesInput,
-    RefundAllInvoicesResult,
+    RefundAllOrdersInput,
+    RefundAllOrdersResult,
+    ReportUsageInput,
+    ReportUsageResult,
     RequestRefundStatus,
     RequestRefundUseCaseInput,
     RequestRefundUseCaseResult,
     RollupBillUseCaseInput,
     RollupBillUseCaseResult,
-    StripeAdapter,
-    StripeWebhookEvent,
-    StripeWebhookEventType,
     VerifyEventInput,
+    WebhookEvent,
+    WebhookEventType,
 } from "./types";
 
-export type { StripeWebhookEventStore } from "./stripe-webhook-event.store";
+export type { BillingWebhookEventStore } from "./billing-webhook-event.store";
 export type { MonthlySpendQuery, TrackedSpendRepository } from "./tracked-spend.repository";
 export type {
     EventBundleRollupRepository,
@@ -54,9 +53,9 @@ export {
     BillingNotEnabledError,
     getBillingPortalUrlUseCase,
 } from "./get-billing-portal-url.usecase";
-export { handleStripeWebhookUseCase } from "./handle-stripe-webhook.usecase";
+export { handleWebhookUseCase } from "./handle-webhook.usecase";
+export { LemonSqueezyApiAdapter } from "./lemonsqueezy.adapter";
 export { nextBillEstimateUseCase } from "./next-bill-estimate";
-export { pushStripeInvoiceUseCase } from "./push-stripe-invoice.usecase";
+export { reportUsageUseCase } from "./report-usage.usecase";
 export { requestRefundUseCase } from "./request-refund.usecase";
 export { rollupBillUseCase } from "./rollup-bill.usecase";
-export { StripeApiAdapter } from "./stripe.adapter";

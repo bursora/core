@@ -2,8 +2,9 @@
  * Monthly billing-rollup cron route.
  *
  * Scheduled for day 1 of every month at 00:00 UTC. Closes the previous
- * month for every active cloud workspace: computes the bill, pushes a
- * Stripe invoice, and persists `last_invoice_id` / `last_billed_month`.
+ * month for every active cloud workspace: computes the bill, posts a
+ * Lemon Squeezy usage record against the workspace's subscription, and
+ * persists `last_invoice_ref` (LS usage-record id) / `last_billed_month`.
  *
  * Callers must present the shared CRON_SECRET via
  * `Authorization: Bearer <secret>`.

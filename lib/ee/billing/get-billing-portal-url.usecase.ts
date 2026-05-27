@@ -1,11 +1,11 @@
-import type { StripeAdapter } from "./types";
+import type { PaymentProviderAdapter } from "./types";
 import type { WorkspaceBillingRepository } from "./workspace-billing.repository";
 
 export interface GetBillingPortalUrlInput {
     readonly workspaceId: string;
     readonly returnUrl: string;
     readonly workspaces: WorkspaceBillingRepository;
-    readonly stripe: StripeAdapter;
+    readonly provider: PaymentProviderAdapter;
 }
 
 export interface GetBillingPortalUrlResult {
@@ -14,12 +14,12 @@ export interface GetBillingPortalUrlResult {
 
 /**
  * Thrown when the workspace exists but has not yet completed a Checkout, so
- * there is no Stripe customer to open a portal for. The route maps this to
- * a 409 / shows a "Subscribe first" message.
+ * there is no billing-provider customer to open a portal for. The route
+ * maps this to a 409 / shows a "Subscribe first" message.
  */
 export class BillingNotEnabledError extends Error {
     constructor(workspaceId: string) {
-        super(`workspace ${workspaceId} has no Stripe customer`);
+        super(`workspace ${workspaceId} has no billing-provider customer`);
         this.name = "BillingNotEnabledError";
     }
 }
@@ -31,12 +31,12 @@ export async function getBillingPortalUrlUseCase(
     if (!record) {
         throw new Error(`workspace not found: ${input.workspaceId}`);
     }
-    if (!record.stripeCustomerId) {
+    if (!record.providerCustomerId) {
         throw new BillingNotEnabledError(input.workspaceId);
     }
 
-    const session = await input.stripe.createPortalSession({
-        customerId: record.stripeCustomerId,
+    const session = await input.provider.createPortalSession({
+        customerId: record.providerCustomerId,
         returnUrl: input.returnUrl,
     });
     return { url: session.url };

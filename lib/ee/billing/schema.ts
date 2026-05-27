@@ -1,8 +1,8 @@
 /**
  * Billing tables.
  *
- * Billing state lives on the `workspaces` row (`stripe_customer_id`,
- * `stripe_subscription_id`, `subscription_status`). The workspace row is
+ * Billing state lives on the `workspaces` row (`provider_customer_id`,
+ * `provider_subscription_id`, `subscription_status`). The workspace row is
  * shared with identity but those columns are billing-owned; the
  * `workspaces` table is re-exported here so consumers can reach the billing
  * columns through `@/lib/billing` without crossing into identity.

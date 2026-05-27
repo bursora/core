@@ -1,14 +1,12 @@
 /**
  * Billing panel for /settings.
  *
- * Workspaces without a Stripe subscription see "Subscribe to Bursora cloud"
- * which opens Stripe Checkout. Active subscribers see "Manage subscription"
- * which opens the Customer Portal. The `?billing=ok|cancel` flag set on the
- * redirect back from Stripe surfaces a small confirmation line.
- *
- * `subscriptionStatus` mirrors the Stripe status verbatim. Anything other
- * than `null`/`incomplete` means the user has been through Checkout at
- * least once, so the Portal CTA replaces the Checkout CTA.
+ * Workspaces with no provider customer on file see "Upgrade to Bursora cloud"
+ * which opens Lemon Squeezy checkout. Once a customer record exists (any
+ * status), a "Manage billing" button opens the LS customer portal where the
+ * user can update payment, view invoices, or cancel. Workspaces with a
+ * lapsed/cancelled subscription see both buttons. The `?billing=ok|cancel`
+ * flag set on the redirect back from LS surfaces a small confirmation line.
  *
  * The money-back guarantee panel renders only while
  * `refund_eligible_until` is set and in the future. It survives subscription
@@ -21,6 +19,7 @@ import { DashboardSection } from "@/components/ui/workspace/dashboard-section";
 import { createCheckoutAction, openPortalAction } from "../billing-actions";
 import { getWorkspaceBillingRecord } from "../billing/server";
 import { NextBillEstimate } from "./next-bill-estimate";
+import { PastDueBanner } from "./past-due-banner";
 import { RefundPanel } from "./refund-panel";
 
 interface BillingSectionProps {
@@ -33,11 +32,16 @@ const ACTIVE_STATUSES = new Set(["active", "trialing", "past_due", "unpaid"]);
 
 export async function BillingSection({ workspaceId, status, isOwner }: BillingSectionProps) {
     const record = await getWorkspaceBillingRecord(workspaceId);
-    const hasSubscription =
-        record?.stripeCustomerId !== null &&
-        record?.stripeCustomerId !== undefined &&
+    // Portal button: show whenever the workspace has a provider customer on
+    // file, even if the subscription is cancelled. Lemon Squeezy's portal lets
+    // the user see invoices and re-subscribe, so the entry point is useful
+    // beyond active status.
+    const hasProviderCustomer =
+        record?.providerCustomerId !== null && record?.providerCustomerId !== undefined;
+    const hasActiveSubscription =
+        hasProviderCustomer &&
         record?.subscriptionStatus !== null &&
-        ACTIVE_STATUSES.has(record.subscriptionStatus ?? "");
+        ACTIVE_STATUSES.has(record?.subscriptionStatus ?? "");
     // eslint-disable-next-line react-hooks/purity -- server-rendered once per request; current time is the eligibility cutoff
     const now = Date.now();
     const refundEligibleUntil =
@@ -45,13 +49,16 @@ export async function BillingSection({ workspaceId, status, isOwner }: BillingSe
             ? record.refundEligibleUntil
             : null;
 
+    const isPastDue = record?.subscriptionStatus === "past_due";
+
     return (
         <div className="space-y-6">
+            {isPastDue ? <PastDueBanner workspaceId={workspaceId} /> : null}
             <DashboardSection label="Billing">
                 <p className="text-sm text-muted-foreground">
-                    {hasSubscription
-                        ? "Your workspace is on Bursora cloud. Manage payment, invoices, or cancel from the Stripe portal."
-                        : "Subscribe to Bursora cloud for managed enforcement, alerts, and dashboards."}
+                    {hasActiveSubscription
+                        ? "Your workspace is on Bursora cloud. Manage payment, invoices, or cancel from the billing portal."
+                        : "Upgrade to Bursora cloud for managed enforcement, alerts, and dashboards."}
                 </p>
                 <div className="mt-4 space-y-3">
                     {status === "ok" ? (
@@ -61,19 +68,20 @@ export async function BillingSection({ workspaceId, status, isOwner }: BillingSe
                         <p className="text-sm text-muted-foreground">Checkout cancelled.</p>
                     ) : null}
 
-                    {hasSubscription ? (
+                    {hasProviderCustomer ? (
                         <form action={openPortalAction}>
                             <input type="hidden" name="workspaceId" value={workspaceId} />
                             <Button type="submit" variant="secondary">
-                                Manage subscription
+                                Manage billing
                             </Button>
                         </form>
-                    ) : (
+                    ) : null}
+                    {!hasActiveSubscription ? (
                         <form action={createCheckoutAction}>
                             <input type="hidden" name="workspaceId" value={workspaceId} />
-                            <Button type="submit">Subscribe to Bursora cloud</Button>
+                            <Button type="submit">Upgrade to Bursora cloud</Button>
                         </form>
-                    )}
+                    ) : null}
                 </div>
             </DashboardSection>
             {refundEligibleUntil ? (
@@ -83,7 +91,7 @@ export async function BillingSection({ workspaceId, status, isOwner }: BillingSe
                     canRequest={isOwner}
                 />
             ) : null}
-            {hasSubscription ? <NextBillEstimate workspaceId={workspaceId} /> : null}
+            {hasActiveSubscription ? <NextBillEstimate workspaceId={workspaceId} /> : null}
         </div>
     );
 }

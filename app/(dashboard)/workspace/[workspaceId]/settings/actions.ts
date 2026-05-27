@@ -235,46 +235,48 @@ export const deletePricingOverrideAction = withWorkspace(
     { getWorkspaceId: workspaceIdFromForm },
 );
 
-export const renameWorkspaceAction = withWorkspace(
+// One submit for the whole General tab. Persists name + environment, plus
+// spike-protection settings when the cloud-only section is present (detected
+// by the `thresholdMultiplier` field). All fields validate up front so the
+// client can surface every error at once.
+export const saveGeneralSettingsAction = withWorkspace(
     async (_ctx, _prev: ActionResult, formData: FormData): Promise<ActionResult> => {
         try {
             const workspaceId = workspaceIdFromForm(formData);
-            const rawName = formData.get("name");
-            const name = typeof rawName === "string" ? rawName.trim() : "";
-            if (name.length === 0) {
-                return actionFail("Name is required", { name: "Name is required" });
+            const name = (optionalField(formData, "name") ?? "").trim();
+            const environment = (optionalField(formData, "environment") ?? "").trim();
+
+            const fieldErrors: Record<string, string> = {};
+            if (name.length === 0) fieldErrors.name = "Name is required";
+            if (environment.length === 0) fieldErrors.environment = "Environment is required";
+
+            const rawMultiplier = optionalField(formData, "thresholdMultiplier");
+            const hasSpike = rawMultiplier !== null;
+            const spikeEnabled = formData.get("enabled") === "on";
+            const multiplier = hasSpike ? Number.parseFloat(rawMultiplier) : 0;
+            if (hasSpike && (!Number.isFinite(multiplier) || multiplier < 2 || multiplier > 20)) {
+                fieldErrors.thresholdMultiplier = "Must be between 2 and 20.";
+            }
+
+            if (Object.keys(fieldErrors).length > 0) {
+                return actionFail("Check the highlighted fields.", fieldErrors);
             }
 
             await renameWorkspace({ id: workspaceId, name });
-            revalidatePath(settingsHref(workspaceId));
-            return actionOk();
-        } catch (err: unknown) {
-            rethrowRedirect(err);
-            const message = err instanceof Error ? err.message : "Failed to rename workspace.";
-            return actionFail(message);
-        }
-    },
-    { getWorkspaceId: workspaceIdFromPrevForm },
-);
-
-export const setWorkspaceEnvironmentAction = withWorkspace(
-    async (_ctx, _prev: ActionResult, formData: FormData): Promise<ActionResult> => {
-        try {
-            const workspaceId = workspaceIdFromForm(formData);
-            const rawEnv = formData.get("environment");
-            const environment = typeof rawEnv === "string" ? rawEnv.trim() : "";
-            if (environment.length === 0) {
-                return actionFail("Environment is required", {
-                    environment: "Environment is required",
+            await setWorkspaceEnvironment({ id: workspaceId, environment });
+            if (hasSpike) {
+                await saveSpikeSettings({
+                    workspaceId,
+                    enabled: spikeEnabled,
+                    thresholdMultiplier: multiplier,
                 });
             }
 
-            await setWorkspaceEnvironment({ id: workspaceId, environment });
             revalidatePath(settingsHref(workspaceId));
             return actionOk();
         } catch (err: unknown) {
             rethrowRedirect(err);
-            const message = err instanceof Error ? err.message : "Failed to update environment.";
+            const message = err instanceof Error ? err.message : "Failed to save settings.";
             return actionFail(message);
         }
     },
@@ -293,36 +295,6 @@ export const deleteWorkspaceAction = withWorkspace(
         redirect("/" as Route);
     },
     { getWorkspaceId: workspaceIdFromForm },
-);
-
-export const saveSpikeProtectionAction = withWorkspace(
-    async (_ctx, _prev: ActionResult, formData: FormData): Promise<ActionResult> => {
-        try {
-            const workspaceId = workspaceIdFromForm(formData);
-            const enabled = formData.get("enabled") === "on";
-            const rawMultiplier = requireField(formData, "thresholdMultiplier");
-            const multiplier = Number.parseFloat(rawMultiplier);
-            if (!Number.isFinite(multiplier) || multiplier < 2 || multiplier > 20) {
-                return actionFail("Multiplier must be between 2 and 20.", {
-                    thresholdMultiplier: "Must be between 2 and 20.",
-                });
-            }
-
-            await saveSpikeSettings({
-                workspaceId,
-                enabled,
-                thresholdMultiplier: multiplier,
-            });
-            revalidatePath(settingsHref(workspaceId));
-            return actionOk();
-        } catch (err: unknown) {
-            rethrowRedirect(err);
-            const message =
-                err instanceof Error ? err.message : "Failed to save spike protection settings.";
-            return actionFail(message);
-        }
-    },
-    { getWorkspaceId: workspaceIdFromPrevForm },
 );
 
 export const saveEventBundleAction = withWorkspace(

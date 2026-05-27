@@ -1,6 +1,6 @@
-import type { StripeWebhookEventStore } from "@/lib/ee/billing";
+import type { BillingWebhookEventStore } from "@/lib/ee/billing";
 
-export class InMemoryStripeWebhookEventStore implements StripeWebhookEventStore {
+export class InMemoryBillingWebhookEventStore implements BillingWebhookEventStore {
     private readonly seen = new Set<string>();
 
     async recordIfNew(input: { eventId: string; eventType: string }): Promise<boolean> {

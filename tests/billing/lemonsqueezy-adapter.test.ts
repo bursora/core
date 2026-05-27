@@ -1,0 +1,1231 @@
+/**
+ * Unit tests for the Lemon Squeezy adapter — checkout creation + webhook
+ * verification. The adapter accepts an injected `fetch` so we can pin the
+ * exact request payload and stub responses without spinning a real HTTP
+ * server.
+ */
+
+import { LemonSqueezyApiAdapter } from "@/lib/ee/billing/lemonsqueezy.adapter";
+import { describe, expect, test } from "bun:test";
+import { createHmac } from "node:crypto";
+
+const WORKSPACE_ID = "11111111-2222-3333-4444-555555555555";
+const STORE_ID = "1";
+const VARIANT_ID = "variant_456";
+const API_KEY = "ls_test_api_key";
+const WEBHOOK_SECRET = "ls_test_webhook_secret";
+
+interface FetchCall {
+    readonly url: string;
+    readonly init: RequestInit;
+}
+
+type Fetcher = (input: URL | RequestInfo, init?: RequestInit) => Promise<Response>;
+
+const recordingFetch = (responses: readonly Response[]) => {
+    const calls: FetchCall[] = [];
+    let i = 0;
+    const fetcher: Fetcher = async (input, init) => {
+        const url = typeof input === "string" ? input : (input as URL).toString();
+        calls.push({ url, init: init ?? {} });
+        const response = responses[i++];
+        if (!response) throw new Error("recordingFetch: no more stub responses");
+        return response;
+    };
+    return { fetcher, calls };
+};
+
+const sign = (rawBody: string, secret: string): string =>
+    createHmac("sha256", secret).update(rawBody).digest("hex");
+
+describe("LemonSqueezyApiAdapter.createCheckoutSession", () => {
+    test("POSTs to /v1/checkouts with store, variant, custom workspace id, email, redirect", async () => {
+        const { fetcher, calls } = recordingFetch([
+            new Response(
+                JSON.stringify({
+                    data: {
+                        id: "ckt_1",
+                        attributes: { url: "https://app.lemonsqueezy.com/checkout/ckt_1" },
+                    },
+                }),
+                { status: 201, headers: { "content-type": "application/vnd.api+json" } },
+            ),
+        ]);
+
+        const adapter = new LemonSqueezyApiAdapter({
+            apiKey: API_KEY,
+            webhookSecret: WEBHOOK_SECRET,
+            storeId: STORE_ID,
+            fetch: fetcher,
+        });
+
+        const result = await adapter.createCheckoutSession({
+            workspaceId: WORKSPACE_ID,
+            userEmail: "founder@example.com",
+            variantId: VARIANT_ID,
+            successUrl: "https://app.test/ok",
+            cancelUrl: "https://app.test/cancel",
+        });
+
+        expect(result.url).toBe("https://app.lemonsqueezy.com/checkout/ckt_1");
+        expect(result.id).toBe("ckt_1");
+        expect(calls).toHaveLength(1);
+        const call = calls[0]!;
+        expect(call.url).toBe("https://api.lemonsqueezy.com/v1/checkouts");
+        expect(call.init.method).toBe("POST");
+        const headers = new Headers(call.init.headers);
+        expect(headers.get("Authorization")).toBe(`Bearer ${API_KEY}`);
+        expect(headers.get("Accept")).toBe("application/vnd.api+json");
+        expect(headers.get("Content-Type")).toBe("application/vnd.api+json");
+
+        const body = JSON.parse(call.init.body as string) as Record<string, unknown>;
+        const data = body.data as { type: string; attributes: Record<string, unknown>; relationships: Record<string, unknown> };
+        expect(data.type).toBe("checkouts");
+        const attrs = data.attributes as Record<string, unknown>;
+        const checkoutData = attrs.checkout_data as Record<string, unknown>;
+        expect(checkoutData.email).toBe("founder@example.com");
+        expect((checkoutData.custom as Record<string, string>).workspace_id).toBe(WORKSPACE_ID);
+        const productOptions = attrs.product_options as Record<string, string>;
+        expect(productOptions.redirect_url).toBe("https://app.test/ok");
+
+        const relationships = data.relationships as Record<string, { data: { id: string; type: string } }>;
+        expect(relationships.store?.data.id).toBe(STORE_ID);
+        expect(relationships.store?.data.type).toBe("stores");
+        expect(relationships.variant?.data.id).toBe(VARIANT_ID);
+        expect(relationships.variant?.data.type).toBe("variants");
+    });
+
+    test("throws when Lemon Squeezy returns a non-2xx status", async () => {
+        const { fetcher } = recordingFetch([
+            new Response(JSON.stringify({ errors: [{ detail: "Invalid variant" }] }), {
+                status: 422,
+                headers: { "content-type": "application/vnd.api+json" },
+            }),
+        ]);
+
+        const adapter = new LemonSqueezyApiAdapter({
+            apiKey: API_KEY,
+            webhookSecret: WEBHOOK_SECRET,
+            storeId: STORE_ID,
+            fetch: fetcher,
+        });
+
+        await expect(
+            adapter.createCheckoutSession({
+                workspaceId: WORKSPACE_ID,
+                userEmail: "founder@example.com",
+                variantId: VARIANT_ID,
+                successUrl: "https://app.test/ok",
+                cancelUrl: "https://app.test/cancel",
+            }),
+        ).rejects.toThrow();
+    });
+});
+
+describe("LemonSqueezyApiAdapter.createPortalSession", () => {
+    test("GETs /v1/customers/{id} and returns the signed customer_portal URL", async () => {
+        const { fetcher, calls } = recordingFetch([
+            new Response(
+                JSON.stringify({
+                    data: {
+                        id: "99",
+                        type: "customers",
+                        attributes: {
+                            urls: {
+                                customer_portal:
+                                    "https://app.lemonsqueezy.com/billing?expires=1&signature=abc",
+                            },
+                        },
+                    },
+                }),
+                { status: 200, headers: { "content-type": "application/vnd.api+json" } },
+            ),
+        ]);
+
+        const adapter = new LemonSqueezyApiAdapter({
+            apiKey: API_KEY,
+            webhookSecret: WEBHOOK_SECRET,
+            storeId: STORE_ID,
+            fetch: fetcher,
+        });
+
+        const result = await adapter.createPortalSession({
+            customerId: "99",
+            returnUrl: "https://app.test/workspace/W/settings",
+        });
+
+        expect(result.url).toBe(
+            "https://app.lemonsqueezy.com/billing?expires=1&signature=abc",
+        );
+        expect(calls).toHaveLength(1);
+        const call = calls[0]!;
+        expect(call.url).toBe("https://api.lemonsqueezy.com/v1/customers/99");
+        expect(call.init.method ?? "GET").toBe("GET");
+        const headers = new Headers(call.init.headers);
+        expect(headers.get("Authorization")).toBe(`Bearer ${API_KEY}`);
+        expect(headers.get("Accept")).toBe("application/vnd.api+json");
+    });
+
+    test("throws when Lemon Squeezy returns a non-2xx status", async () => {
+        const { fetcher } = recordingFetch([
+            new Response(JSON.stringify({ errors: [{ detail: "Not found" }] }), {
+                status: 404,
+                headers: { "content-type": "application/vnd.api+json" },
+            }),
+        ]);
+
+        const adapter = new LemonSqueezyApiAdapter({
+            apiKey: API_KEY,
+            webhookSecret: WEBHOOK_SECRET,
+            storeId: STORE_ID,
+            fetch: fetcher,
+        });
+
+        await expect(
+            adapter.createPortalSession({
+                customerId: "missing",
+                returnUrl: "https://app.test/workspace/W/settings",
+            }),
+        ).rejects.toThrow();
+    });
+
+    test("throws when the customer record has no customer_portal url", async () => {
+        const { fetcher } = recordingFetch([
+            new Response(
+                JSON.stringify({
+                    data: {
+                        id: "99",
+                        type: "customers",
+                        attributes: { urls: {} },
+                    },
+                }),
+                { status: 200, headers: { "content-type": "application/vnd.api+json" } },
+            ),
+        ]);
+
+        const adapter = new LemonSqueezyApiAdapter({
+            apiKey: API_KEY,
+            webhookSecret: WEBHOOK_SECRET,
+            storeId: STORE_ID,
+            fetch: fetcher,
+        });
+
+        await expect(
+            adapter.createPortalSession({
+                customerId: "99",
+                returnUrl: "https://app.test/workspace/W/settings",
+            }),
+        ).rejects.toThrow();
+    });
+});
+
+describe("LemonSqueezyApiAdapter.reportUsage", () => {
+    const SUBSCRIPTION_ID = "12345";
+    const SUBSCRIPTION_ITEM_ID = "67890";
+    const PERIOD_MONTH = "2025-01";
+    const TOTAL_CENTS = 2900;
+    // Adapter reports usage in $0.50 units: round(2900 / 50) = 58.
+    const EXPECTED_UNITS = 58;
+
+    const subscriptionGetBody = JSON.stringify({
+        data: {
+            id: SUBSCRIPTION_ID,
+            type: "subscriptions",
+            attributes: { status: "active" },
+            relationships: {
+                "subscription-items": {
+                    data: [{ type: "subscription-items", id: SUBSCRIPTION_ITEM_ID }],
+                },
+            },
+        },
+    });
+
+    test("looks up the subscription, then POSTs a usage record with quantity = totalCents / 50", async () => {
+        const { fetcher, calls } = recordingFetch([
+            new Response(subscriptionGetBody, {
+                status: 200,
+                headers: { "content-type": "application/vnd.api+json" },
+            }),
+            new Response(
+                JSON.stringify({
+                    data: {
+                        id: "usage_rec_1",
+                        type: "usage-records",
+                        attributes: { quantity: TOTAL_CENTS },
+                    },
+                }),
+                { status: 201, headers: { "content-type": "application/vnd.api+json" } },
+            ),
+        ]);
+
+        const adapter = new LemonSqueezyApiAdapter({
+            apiKey: API_KEY,
+            webhookSecret: WEBHOOK_SECRET,
+            storeId: STORE_ID,
+            fetch: fetcher,
+        });
+
+        const result = await adapter.reportUsage({
+            subscriptionId: SUBSCRIPTION_ID,
+            workspaceId: WORKSPACE_ID,
+            periodMonth: PERIOD_MONTH,
+            totalCents: TOTAL_CENTS,
+        });
+
+        expect(result.usageRecordId).toBe("usage_rec_1");
+        expect(calls).toHaveLength(2);
+
+        const getCall = calls[0]!;
+        expect(getCall.url).toBe(
+            `https://api.lemonsqueezy.com/v1/subscriptions/${SUBSCRIPTION_ID}`,
+        );
+        expect(getCall.init.method ?? "GET").toBe("GET");
+
+        const postCall = calls[1]!;
+        expect(postCall.url).toBe("https://api.lemonsqueezy.com/v1/usage-records");
+        expect(postCall.init.method).toBe("POST");
+        const headers = new Headers(postCall.init.headers);
+        expect(headers.get("Authorization")).toBe(`Bearer ${API_KEY}`);
+        expect(headers.get("Content-Type")).toBe("application/vnd.api+json");
+
+        const body = JSON.parse(postCall.init.body as string) as Record<string, unknown>;
+        const data = body.data as {
+            type: string;
+            attributes: Record<string, unknown>;
+            relationships: Record<string, { data: { type: string; id: string } }>;
+        };
+        expect(data.type).toBe("usage-records");
+        expect(data.attributes.quantity).toBe(EXPECTED_UNITS);
+        // LS attaches usage records to a subscription ITEM (not the subscription
+        // directly). The adapter must resolve the item id via the GET call.
+        expect(data.relationships["subscription-item"]?.data.id).toBe(SUBSCRIPTION_ITEM_ID);
+        expect(data.relationships["subscription-item"]?.data.type).toBe("subscription-items");
+    });
+
+    test("stamps an idempotency token derived from (subscriptionId, periodMonth)", async () => {
+        const { fetcher, calls } = recordingFetch([
+            new Response(subscriptionGetBody, {
+                status: 200,
+                headers: { "content-type": "application/vnd.api+json" },
+            }),
+            new Response(
+                JSON.stringify({
+                    data: {
+                        id: "usage_rec_2",
+                        type: "usage-records",
+                        attributes: { quantity: TOTAL_CENTS },
+                    },
+                }),
+                { status: 201, headers: { "content-type": "application/vnd.api+json" } },
+            ),
+        ]);
+
+        const adapter = new LemonSqueezyApiAdapter({
+            apiKey: API_KEY,
+            webhookSecret: WEBHOOK_SECRET,
+            storeId: STORE_ID,
+            fetch: fetcher,
+        });
+
+        await adapter.reportUsage({
+            subscriptionId: SUBSCRIPTION_ID,
+            workspaceId: WORKSPACE_ID,
+            periodMonth: PERIOD_MONTH,
+            totalCents: TOTAL_CENTS,
+        });
+
+        const postCall = calls[1]!;
+        const headers = new Headers(postCall.init.headers);
+        // The token must be stable across retries of the same (subscription,
+        // period) so LS can dedup duplicate POSTs.
+        const token = headers.get("Idempotency-Key");
+        expect(token).toBeTruthy();
+        expect(token).toContain(SUBSCRIPTION_ID);
+        expect(token).toContain(PERIOD_MONTH);
+    });
+
+    test("throws when the usage-records POST returns a 4xx", async () => {
+        const { fetcher } = recordingFetch([
+            new Response(subscriptionGetBody, {
+                status: 200,
+                headers: { "content-type": "application/vnd.api+json" },
+            }),
+            new Response(
+                JSON.stringify({ errors: [{ detail: "Invalid quantity" }] }),
+                { status: 422, headers: { "content-type": "application/vnd.api+json" } },
+            ),
+        ]);
+
+        const adapter = new LemonSqueezyApiAdapter({
+            apiKey: API_KEY,
+            webhookSecret: WEBHOOK_SECRET,
+            storeId: STORE_ID,
+            fetch: fetcher,
+        });
+
+        await expect(
+            adapter.reportUsage({
+                subscriptionId: SUBSCRIPTION_ID,
+                workspaceId: WORKSPACE_ID,
+                periodMonth: PERIOD_MONTH,
+                totalCents: TOTAL_CENTS,
+            }),
+        ).rejects.toThrow();
+    });
+
+    test("throws when the subscription GET returns a 4xx", async () => {
+        const { fetcher } = recordingFetch([
+            new Response(JSON.stringify({ errors: [{ detail: "Not found" }] }), {
+                status: 404,
+                headers: { "content-type": "application/vnd.api+json" },
+            }),
+        ]);
+
+        const adapter = new LemonSqueezyApiAdapter({
+            apiKey: API_KEY,
+            webhookSecret: WEBHOOK_SECRET,
+            storeId: STORE_ID,
+            fetch: fetcher,
+        });
+
+        await expect(
+            adapter.reportUsage({
+                subscriptionId: SUBSCRIPTION_ID,
+                workspaceId: WORKSPACE_ID,
+                periodMonth: PERIOD_MONTH,
+                totalCents: TOTAL_CENTS,
+            }),
+        ).rejects.toThrow();
+    });
+});
+
+describe("LemonSqueezyApiAdapter.verifyAndParseEvent", () => {
+    const adapter = new LemonSqueezyApiAdapter({
+        apiKey: API_KEY,
+        webhookSecret: WEBHOOK_SECRET,
+        storeId: STORE_ID,
+    });
+
+    const subscriptionCreatedBody = JSON.stringify({
+        meta: {
+            event_name: "subscription_created",
+            custom_data: { workspace_id: WORKSPACE_ID },
+        },
+        data: {
+            id: "12345",
+            type: "subscriptions",
+            attributes: {
+                store_id: 1,
+                customer_id: 99,
+                status: "active",
+            },
+        },
+    });
+
+    test("accepts a body signed with the configured secret", () => {
+        const signature = sign(subscriptionCreatedBody, WEBHOOK_SECRET);
+        const event = adapter.verifyAndParseEvent({
+            rawBody: subscriptionCreatedBody,
+            signatureHeader: signature,
+        });
+        expect(event.type).toBe("subscription.activated");
+        expect(event.workspaceId).toBe(WORKSPACE_ID);
+        expect(event.customerId).toBe("99");
+        expect(event.subscriptionId).toBe("12345");
+    });
+
+    test("rejects a tampered body", () => {
+        const tampered = subscriptionCreatedBody.replace(WORKSPACE_ID, "deadbeef");
+        const signature = sign(subscriptionCreatedBody, WEBHOOK_SECRET);
+        expect(() =>
+            adapter.verifyAndParseEvent({
+                rawBody: tampered,
+                signatureHeader: signature,
+            }),
+        ).toThrow();
+    });
+
+    test("rejects a bit-flipped signature of the same length", () => {
+        const good = sign(subscriptionCreatedBody, WEBHOOK_SECRET);
+        // Flip the last hex char so the byte-length matches but the bytes differ.
+        const lastChar = good.charAt(good.length - 1);
+        const flippedChar = lastChar === "0" ? "1" : "0";
+        const bad = good.slice(0, -1) + flippedChar;
+        expect(bad).toHaveLength(good.length);
+        expect(() =>
+            adapter.verifyAndParseEvent({
+                rawBody: subscriptionCreatedBody,
+                signatureHeader: bad,
+            }),
+        ).toThrow();
+    });
+
+    test("rejects a missing signature header", () => {
+        expect(() =>
+            adapter.verifyAndParseEvent({
+                rawBody: subscriptionCreatedBody,
+                signatureHeader: "",
+            }),
+        ).toThrow();
+    });
+
+    test("maps subscription_payment_success to payment.succeeded", () => {
+        // The payment-success delivery is the recurring-renewal signal. It
+        // means the customer paid; flipping past_due → active belongs in the
+        // payment.succeeded handler. subscription.activated is reserved for
+        // the first-checkout transition (subscription_created).
+        const body = JSON.stringify({
+            meta: {
+                event_name: "subscription_payment_success",
+                custom_data: { workspace_id: WORKSPACE_ID },
+            },
+            data: {
+                id: "in_1",
+                type: "subscription-invoices",
+                attributes: {
+                    store_id: 1,
+                    customer_id: 99,
+                    subscription_id: 12345,
+                    status: "paid",
+                },
+            },
+        });
+        const signature = sign(body, WEBHOOK_SECRET);
+        const event = adapter.verifyAndParseEvent({
+            rawBody: body,
+            signatureHeader: signature,
+        });
+        expect(event.type).toBe("payment.succeeded");
+        expect(event.workspaceId).toBe(WORKSPACE_ID);
+        expect(event.customerId).toBe("99");
+        expect(event.invoiceId).toBe("in_1");
+    });
+
+    test("maps subscription_cancelled to subscription.canceled", () => {
+        const body = JSON.stringify({
+            meta: { event_name: "subscription_cancelled" },
+            data: {
+                id: "12345",
+                type: "subscriptions",
+                attributes: {
+                    store_id: 1,
+                    customer_id: 99,
+                    status: "cancelled",
+                },
+            },
+        });
+        const signature = sign(body, WEBHOOK_SECRET);
+        const event = adapter.verifyAndParseEvent({
+            rawBody: body,
+            signatureHeader: signature,
+        });
+        expect(event.type).toBe("subscription.canceled");
+    });
+
+    test("maps subscription_updated to subscription.updated and forwards provider status", () => {
+        const body = JSON.stringify({
+            meta: {
+                event_name: "subscription_updated",
+                custom_data: { workspace_id: WORKSPACE_ID },
+            },
+            data: {
+                id: "12345",
+                type: "subscriptions",
+                attributes: {
+                    store_id: 1,
+                    customer_id: 99,
+                    status: "past_due",
+                },
+            },
+        });
+        const signature = sign(body, WEBHOOK_SECRET);
+        const event = adapter.verifyAndParseEvent({
+            rawBody: body,
+            signatureHeader: signature,
+        });
+        expect(event.type).toBe("subscription.updated");
+        expect(event.status).toBe("past_due");
+        expect(event.customerId).toBe("99");
+        expect(event.subscriptionId).toBe("12345");
+    });
+
+    test("distinct subscription_updated deliveries get distinct event ids via updated_at", () => {
+        const makeBody = (updatedAt: string, status: string) =>
+            JSON.stringify({
+                meta: { event_name: "subscription_updated" },
+                data: {
+                    id: "12345",
+                    type: "subscriptions",
+                    attributes: { store_id: 1, customer_id: 99, status, updated_at: updatedAt },
+                },
+            });
+
+        const first = makeBody("2026-01-01T00:00:00Z", "past_due");
+        const second = makeBody("2026-02-01T00:00:00Z", "active");
+        const firstEvent = adapter.verifyAndParseEvent({
+            rawBody: first,
+            signatureHeader: sign(first, WEBHOOK_SECRET),
+        });
+        const secondEvent = adapter.verifyAndParseEvent({
+            rawBody: second,
+            signatureHeader: sign(second, WEBHOOK_SECRET),
+        });
+        const retry = adapter.verifyAndParseEvent({
+            rawBody: first,
+            signatureHeader: sign(first, WEBHOOK_SECRET),
+        });
+
+        // Two genuinely different transitions on the same subscription must not
+        // collide, but a true retry of the same delivery must dedupe.
+        expect(firstEvent.id).not.toBe(secondEvent.id);
+        expect(retry.id).toBe(firstEvent.id);
+    });
+
+    test("maps subscription_expired to subscription.expired", () => {
+        const body = JSON.stringify({
+            meta: { event_name: "subscription_expired" },
+            data: {
+                id: "12345",
+                type: "subscriptions",
+                attributes: {
+                    store_id: 1,
+                    customer_id: 99,
+                    status: "expired",
+                },
+            },
+        });
+        const signature = sign(body, WEBHOOK_SECRET);
+        const event = adapter.verifyAndParseEvent({
+            rawBody: body,
+            signatureHeader: signature,
+        });
+        expect(event.type).toBe("subscription.expired");
+        expect(event.customerId).toBe("99");
+        expect(event.subscriptionId).toBe("12345");
+    });
+
+    test("maps order_refunded to order.refunded", () => {
+        const body = JSON.stringify({
+            meta: { event_name: "order_refunded" },
+            data: {
+                id: "ord_77",
+                type: "orders",
+                attributes: {
+                    store_id: 1,
+                    customer_id: 99,
+                    status: "refunded",
+                },
+            },
+        });
+        const signature = sign(body, WEBHOOK_SECRET);
+        const event = adapter.verifyAndParseEvent({
+            rawBody: body,
+            signatureHeader: signature,
+        });
+        expect(event.type).toBe("order.refunded");
+        expect(event.customerId).toBe("99");
+    });
+
+    test("maps subscription_payment_failed to payment.failed", () => {
+        const body = JSON.stringify({
+            meta: { event_name: "subscription_payment_failed" },
+            data: {
+                id: "in_2",
+                type: "subscription-invoices",
+                attributes: {
+                    store_id: 1,
+                    customer_id: 99,
+                    subscription_id: 12345,
+                    status: "failed",
+                },
+            },
+        });
+        const signature = sign(body, WEBHOOK_SECRET);
+        const event = adapter.verifyAndParseEvent({
+            rawBody: body,
+            signatureHeader: signature,
+        });
+        expect(event.type).toBe("payment.failed");
+    });
+
+    test("unrecognised events project to unknown", () => {
+        const body = JSON.stringify({
+            meta: { event_name: "license_key_created" },
+            data: { id: "lk_1", type: "license-keys", attributes: {} },
+        });
+        const signature = sign(body, WEBHOOK_SECRET);
+        const event = adapter.verifyAndParseEvent({
+            rawBody: body,
+            signatureHeader: signature,
+        });
+        expect(event.type).toBe("unknown");
+    });
+
+    test("events from a different store project to unknown so they cannot mutate state", () => {
+        // STORE_ID is "1". A valid signature on a body claiming store_id=4242
+        // must still be neutralised by the adapter; the event is for some
+        // other Bursora install (or an attacker who phished the webhook
+        // secret of a different LS account).
+        const body = JSON.stringify({
+            meta: {
+                event_name: "subscription_created",
+                custom_data: { workspace_id: WORKSPACE_ID },
+            },
+            data: {
+                id: "12345",
+                type: "subscriptions",
+                attributes: {
+                    store_id: 4242,
+                    customer_id: 99,
+                    status: "active",
+                },
+            },
+        });
+        const signature = sign(body, WEBHOOK_SECRET);
+        const event = adapter.verifyAndParseEvent({
+            rawBody: body,
+            signatureHeader: signature,
+        });
+        expect(event.type).toBe("unknown");
+    });
+});
+
+describe("LemonSqueezyApiAdapter.verifyAndParseEvent two-secret rotation", () => {
+    // Two-secret rotation: the adapter can be configured with an optional
+    // `webhookSecretNext`. During a rotation window LS may send signatures
+    // signed with either secret; the adapter must accept both. Outside that
+    // window (next not set) behaviour is unchanged.
+    const NEXT_SECRET = "ls_test_webhook_secret_next";
+
+    const body = JSON.stringify({
+        meta: {
+            event_name: "subscription_created",
+            custom_data: { workspace_id: WORKSPACE_ID },
+        },
+        data: {
+            id: "12345",
+            type: "subscriptions",
+            attributes: { store_id: 1, customer_id: 99, status: "active" },
+        },
+    });
+
+    test("accepts primary signature when only the primary secret is configured", () => {
+        const adapter = new LemonSqueezyApiAdapter({
+            apiKey: API_KEY,
+            webhookSecret: WEBHOOK_SECRET,
+            storeId: STORE_ID,
+        });
+        const event = adapter.verifyAndParseEvent({
+            rawBody: body,
+            signatureHeader: sign(body, WEBHOOK_SECRET),
+        });
+        expect(event.type).toBe("subscription.activated");
+    });
+
+    test("accepts a signature matching the secondary secret when both are configured", () => {
+        const adapter = new LemonSqueezyApiAdapter({
+            apiKey: API_KEY,
+            webhookSecret: WEBHOOK_SECRET,
+            webhookSecretNext: NEXT_SECRET,
+            storeId: STORE_ID,
+        });
+        const event = adapter.verifyAndParseEvent({
+            rawBody: body,
+            signatureHeader: sign(body, NEXT_SECRET),
+        });
+        expect(event.type).toBe("subscription.activated");
+    });
+
+    test("accepts the primary signature when both secrets are configured", () => {
+        const adapter = new LemonSqueezyApiAdapter({
+            apiKey: API_KEY,
+            webhookSecret: WEBHOOK_SECRET,
+            webhookSecretNext: NEXT_SECRET,
+            storeId: STORE_ID,
+        });
+        const event = adapter.verifyAndParseEvent({
+            rawBody: body,
+            signatureHeader: sign(body, WEBHOOK_SECRET),
+        });
+        expect(event.type).toBe("subscription.activated");
+    });
+
+    test("rejects a signature that matches neither secret", () => {
+        const adapter = new LemonSqueezyApiAdapter({
+            apiKey: API_KEY,
+            webhookSecret: WEBHOOK_SECRET,
+            webhookSecretNext: NEXT_SECRET,
+            storeId: STORE_ID,
+        });
+        const wrong = sign(body, "some_other_secret_entirely");
+        expect(() =>
+            adapter.verifyAndParseEvent({
+                rawBody: body,
+                signatureHeader: wrong,
+            }),
+        ).toThrow();
+    });
+
+    test("rejects a signature signed with the next secret when next is NOT configured", () => {
+        const adapter = new LemonSqueezyApiAdapter({
+            apiKey: API_KEY,
+            webhookSecret: WEBHOOK_SECRET,
+            storeId: STORE_ID,
+        });
+        // Before rotation starts (no _NEXT), a signature signed with the
+        // future secret must be rejected.
+        expect(() =>
+            adapter.verifyAndParseEvent({
+                rawBody: body,
+                signatureHeader: sign(body, NEXT_SECRET),
+            }),
+        ).toThrow();
+    });
+});
+
+describe("LemonSqueezyApiAdapter.refundAllOrders", () => {
+    const CUSTOMER_ID = "99";
+
+    test("lists paid orders by customer_id, refunds each, and sums totals", async () => {
+        const ordersBody = JSON.stringify({
+            data: [
+                {
+                    id: "ord_1",
+                    type: "orders",
+                    attributes: {
+                        status: "paid",
+                        total: 2900,
+                        customer_id: Number(CUSTOMER_ID),
+                    },
+                },
+                {
+                    id: "ord_2",
+                    type: "orders",
+                    attributes: {
+                        status: "paid",
+                        total: 2900,
+                        customer_id: Number(CUSTOMER_ID),
+                    },
+                },
+            ],
+            links: { next: null },
+        });
+
+        const refundOk = (orderId: string, total: number) =>
+            new Response(
+                JSON.stringify({
+                    data: {
+                        id: orderId,
+                        type: "orders",
+                        attributes: { status: "refunded", total },
+                    },
+                }),
+                { status: 200, headers: { "content-type": "application/vnd.api+json" } },
+            );
+
+        const { fetcher, calls } = recordingFetch([
+            new Response(ordersBody, {
+                status: 200,
+                headers: { "content-type": "application/vnd.api+json" },
+            }),
+            refundOk("ord_1", 2900),
+            refundOk("ord_2", 2900),
+        ]);
+
+        const adapter = new LemonSqueezyApiAdapter({
+            apiKey: API_KEY,
+            webhookSecret: WEBHOOK_SECRET,
+            storeId: STORE_ID,
+            fetch: fetcher,
+        });
+
+        const result = await adapter.refundAllOrders({ customerId: CUSTOMER_ID });
+
+        expect(result.refundedOrderIds).toEqual(["ord_1", "ord_2"]);
+        expect(result.totalCents).toBe(5800);
+        expect(calls).toHaveLength(3);
+
+        // The list call filters by store + customer_id.
+        expect(calls[0]!.url).toContain("/v1/orders");
+        expect(calls[0]!.url).toContain(`filter%5Bstore_id%5D=${STORE_ID}`);
+        expect(calls[0]!.url).toContain(`filter%5Bcustomer_id%5D=${CUSTOMER_ID}`);
+        expect(calls[1]!.url).toBe("https://api.lemonsqueezy.com/v1/orders/ord_1/refund");
+        expect(calls[1]!.init.method).toBe("POST");
+        expect(calls[2]!.url).toBe("https://api.lemonsqueezy.com/v1/orders/ord_2/refund");
+
+        const refundHeaders = new Headers(calls[1]!.init.headers);
+        expect(refundHeaders.get("Authorization")).toBe(`Bearer ${API_KEY}`);
+    });
+
+    test("skips orders whose status is already refunded", async () => {
+        const ordersBody = JSON.stringify({
+            data: [
+                {
+                    id: "ord_1",
+                    type: "orders",
+                    attributes: {
+                        status: "paid",
+                        total: 2900,
+                        customer_id: Number(CUSTOMER_ID),
+                    },
+                },
+                {
+                    id: "ord_2",
+                    type: "orders",
+                    attributes: {
+                        status: "refunded",
+                        total: 2900,
+                        customer_id: Number(CUSTOMER_ID),
+                    },
+                },
+            ],
+            links: { next: null },
+        });
+
+        const { fetcher, calls } = recordingFetch([
+            new Response(ordersBody, {
+                status: 200,
+                headers: { "content-type": "application/vnd.api+json" },
+            }),
+            new Response(
+                JSON.stringify({
+                    data: {
+                        id: "ord_1",
+                        type: "orders",
+                        attributes: { status: "refunded", total: 2900 },
+                    },
+                }),
+                { status: 200, headers: { "content-type": "application/vnd.api+json" } },
+            ),
+        ]);
+
+        const adapter = new LemonSqueezyApiAdapter({
+            apiKey: API_KEY,
+            webhookSecret: WEBHOOK_SECRET,
+            storeId: STORE_ID,
+            fetch: fetcher,
+        });
+
+        const result = await adapter.refundAllOrders({ customerId: CUSTOMER_ID });
+
+        expect(result.refundedOrderIds).toEqual(["ord_1"]);
+        expect(result.totalCents).toBe(2900);
+        // Only the paid order should have triggered a POST to /refund.
+        expect(calls).toHaveLength(2);
+        expect(calls[1]!.url).toBe("https://api.lemonsqueezy.com/v1/orders/ord_1/refund");
+    });
+
+    test("follows pagination via links.next to refund every page", async () => {
+        const page1 = JSON.stringify({
+            data: [
+                {
+                    id: "ord_1",
+                    type: "orders",
+                    attributes: {
+                        status: "paid",
+                        total: 1000,
+                        customer_id: Number(CUSTOMER_ID),
+                    },
+                },
+            ],
+            links: {
+                next: "https://api.lemonsqueezy.com/v1/orders?page%5Bcursor%5D=abc",
+            },
+        });
+        const page2 = JSON.stringify({
+            data: [
+                {
+                    id: "ord_2",
+                    type: "orders",
+                    attributes: {
+                        status: "paid",
+                        total: 2000,
+                        customer_id: Number(CUSTOMER_ID),
+                    },
+                },
+            ],
+            links: { next: null },
+        });
+
+        const refundOk = (orderId: string, total: number) =>
+            new Response(
+                JSON.stringify({
+                    data: {
+                        id: orderId,
+                        type: "orders",
+                        attributes: { status: "refunded", total },
+                    },
+                }),
+                { status: 200, headers: { "content-type": "application/vnd.api+json" } },
+            );
+
+        // The adapter lists every page before issuing refunds: page 1, page 2
+        // (via links.next), then refund each paid order in order.
+        const { fetcher, calls } = recordingFetch([
+            new Response(page1, {
+                status: 200,
+                headers: { "content-type": "application/vnd.api+json" },
+            }),
+            new Response(page2, {
+                status: 200,
+                headers: { "content-type": "application/vnd.api+json" },
+            }),
+            refundOk("ord_1", 1000),
+            refundOk("ord_2", 2000),
+        ]);
+
+        const adapter = new LemonSqueezyApiAdapter({
+            apiKey: API_KEY,
+            webhookSecret: WEBHOOK_SECRET,
+            storeId: STORE_ID,
+            fetch: fetcher,
+        });
+
+        const result = await adapter.refundAllOrders({ customerId: CUSTOMER_ID });
+
+        expect(result.refundedOrderIds).toEqual(["ord_1", "ord_2"]);
+        expect(result.totalCents).toBe(3000);
+        // page2 url comes from links.next verbatim
+        expect(calls[1]!.url).toBe("https://api.lemonsqueezy.com/v1/orders?page%5Bcursor%5D=abc");
+    });
+
+    test("throws when the orders list GET returns a non-2xx status", async () => {
+        const { fetcher } = recordingFetch([
+            new Response(JSON.stringify({ errors: [{ detail: "Not found" }] }), {
+                status: 404,
+                headers: { "content-type": "application/vnd.api+json" },
+            }),
+        ]);
+
+        const adapter = new LemonSqueezyApiAdapter({
+            apiKey: API_KEY,
+            webhookSecret: WEBHOOK_SECRET,
+            storeId: STORE_ID,
+            fetch: fetcher,
+        });
+
+        await expect(
+            adapter.refundAllOrders({ customerId: CUSTOMER_ID }),
+        ).rejects.toThrow();
+    });
+
+    test("throws on a non-numeric customerId instead of silently refunding nothing", async () => {
+        const { fetcher, calls } = recordingFetch([]);
+        const adapter = new LemonSqueezyApiAdapter({
+            apiKey: API_KEY,
+            webhookSecret: WEBHOOK_SECRET,
+            storeId: STORE_ID,
+            fetch: fetcher,
+        });
+
+        await expect(adapter.refundAllOrders({ customerId: "not-a-number" })).rejects.toThrow();
+        // Guard fires before any API call.
+        expect(calls).toHaveLength(0);
+    });
+
+    test("filters by customer_id and never refunds orders belonging to a different customer", async () => {
+        // LS API supports filter[customer_id]; the adapter must use it so that
+        // two LS customers sharing an email cannot bleed across workspaces.
+        // Belt-and-suspenders: even if the list returned a foreign order, the
+        // adapter must drop any row whose attributes.customer_id mismatches.
+        const ordersBody = JSON.stringify({
+            data: [
+                {
+                    id: "ord_ours",
+                    type: "orders",
+                    attributes: {
+                        status: "paid",
+                        total: 2900,
+                        customer_id: Number(CUSTOMER_ID),
+                    },
+                },
+                {
+                    id: "ord_theirs",
+                    type: "orders",
+                    attributes: {
+                        status: "paid",
+                        total: 9999,
+                        customer_id: 4242,
+                    },
+                },
+            ],
+            links: { next: null },
+        });
+
+        const { fetcher, calls } = recordingFetch([
+            new Response(ordersBody, {
+                status: 200,
+                headers: { "content-type": "application/vnd.api+json" },
+            }),
+            new Response(
+                JSON.stringify({
+                    data: {
+                        id: "ord_ours",
+                        type: "orders",
+                        attributes: { status: "refunded", total: 2900 },
+                    },
+                }),
+                { status: 200, headers: { "content-type": "application/vnd.api+json" } },
+            ),
+        ]);
+
+        const adapter = new LemonSqueezyApiAdapter({
+            apiKey: API_KEY,
+            webhookSecret: WEBHOOK_SECRET,
+            storeId: STORE_ID,
+            fetch: fetcher,
+        });
+
+        const result = await adapter.refundAllOrders({ customerId: CUSTOMER_ID });
+
+        expect(result.refundedOrderIds).toEqual(["ord_ours"]);
+        expect(result.totalCents).toBe(2900);
+        // First call must list by customer_id, NOT user_email.
+        expect(calls[0]!.url).toContain("/v1/orders");
+        expect(calls[0]!.url).toContain(`filter%5Bcustomer_id%5D=${CUSTOMER_ID}`);
+        expect(calls[0]!.url).not.toContain("filter%5Buser_email%5D");
+        // Only ord_ours should have been refunded; ord_theirs must be left alone.
+        expect(calls).toHaveLength(2);
+        expect(calls[1]!.url).toBe("https://api.lemonsqueezy.com/v1/orders/ord_ours/refund");
+    });
+
+    test("throws when a per-order refund returns a non-2xx status", async () => {
+        const ordersBody = JSON.stringify({
+            data: [
+                {
+                    id: "ord_1",
+                    type: "orders",
+                    attributes: {
+                        status: "paid",
+                        total: 2900,
+                        customer_id: Number(CUSTOMER_ID),
+                    },
+                },
+            ],
+            links: { next: null },
+        });
+
+        const { fetcher } = recordingFetch([
+            new Response(ordersBody, {
+                status: 200,
+                headers: { "content-type": "application/vnd.api+json" },
+            }),
+            new Response(JSON.stringify({ errors: [{ detail: "Refund failed" }] }), {
+                status: 422,
+                headers: { "content-type": "application/vnd.api+json" },
+            }),
+        ]);
+
+        const adapter = new LemonSqueezyApiAdapter({
+            apiKey: API_KEY,
+            webhookSecret: WEBHOOK_SECRET,
+            storeId: STORE_ID,
+            fetch: fetcher,
+        });
+
+        await expect(
+            adapter.refundAllOrders({ customerId: CUSTOMER_ID }),
+        ).rejects.toThrow();
+    });
+});
+
+describe("LemonSqueezyApiAdapter.cancelSubscription", () => {
+    const SUBSCRIPTION_ID = "12345";
+
+    test("sends DELETE /v1/subscriptions/{id} with auth", async () => {
+        const { fetcher, calls } = recordingFetch([
+            new Response(
+                JSON.stringify({
+                    data: {
+                        id: SUBSCRIPTION_ID,
+                        type: "subscriptions",
+                        attributes: { status: "cancelled" },
+                    },
+                }),
+                { status: 200, headers: { "content-type": "application/vnd.api+json" } },
+            ),
+        ]);
+
+        const adapter = new LemonSqueezyApiAdapter({
+            apiKey: API_KEY,
+            webhookSecret: WEBHOOK_SECRET,
+            storeId: STORE_ID,
+            fetch: fetcher,
+        });
+
+        await adapter.cancelSubscription({ subscriptionId: SUBSCRIPTION_ID });
+
+        expect(calls).toHaveLength(1);
+        expect(calls[0]!.url).toBe(
+            `https://api.lemonsqueezy.com/v1/subscriptions/${SUBSCRIPTION_ID}`,
+        );
+        expect(calls[0]!.init.method).toBe("DELETE");
+        const headers = new Headers(calls[0]!.init.headers);
+        expect(headers.get("Authorization")).toBe(`Bearer ${API_KEY}`);
+    });
+
+    test("absorbs 404 already-cancelled responses as a no-op", async () => {
+        const { fetcher } = recordingFetch([
+            new Response(JSON.stringify({ errors: [{ detail: "Not found" }] }), {
+                status: 404,
+                headers: { "content-type": "application/vnd.api+json" },
+            }),
+        ]);
+
+        const adapter = new LemonSqueezyApiAdapter({
+            apiKey: API_KEY,
+            webhookSecret: WEBHOOK_SECRET,
+            storeId: STORE_ID,
+            fetch: fetcher,
+        });
+
+        // Already-cancelled / missing subscription should not throw: a retry of
+        // requestRefundUseCase must be idempotent on this step.
+        await adapter.cancelSubscription({ subscriptionId: SUBSCRIPTION_ID });
+    });
+
+    test("absorbs 4xx responses whose body says the subscription is already cancelled", async () => {
+        const { fetcher } = recordingFetch([
+            new Response(
+                JSON.stringify({
+                    errors: [
+                        {
+                            detail: "Subscription is already cancelled",
+                            status: "422",
+                        },
+                    ],
+                }),
+                { status: 422, headers: { "content-type": "application/vnd.api+json" } },
+            ),
+        ]);
+
+        const adapter = new LemonSqueezyApiAdapter({
+            apiKey: API_KEY,
+            webhookSecret: WEBHOOK_SECRET,
+            storeId: STORE_ID,
+            fetch: fetcher,
+        });
+
+        await adapter.cancelSubscription({ subscriptionId: SUBSCRIPTION_ID });
+    });
+
+    test("throws on unexpected 5xx errors", async () => {
+        const { fetcher } = recordingFetch([
+            new Response(JSON.stringify({ errors: [{ detail: "Internal error" }] }), {
+                status: 500,
+                headers: { "content-type": "application/vnd.api+json" },
+            }),
+        ]);
+
+        const adapter = new LemonSqueezyApiAdapter({
+            apiKey: API_KEY,
+            webhookSecret: WEBHOOK_SECRET,
+            storeId: STORE_ID,
+            fetch: fetcher,
+        });
+
+        await expect(
+            adapter.cancelSubscription({ subscriptionId: SUBSCRIPTION_ID }),
+        ).rejects.toThrow();
+    });
+});

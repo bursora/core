@@ -23,31 +23,31 @@ export class DrizzleWorkspaceBillingRepository implements WorkspaceBillingReposi
         return row ? toRecord(row) : null;
     }
 
-    async findByStripeCustomerId(customerId: string): Promise<WorkspaceBillingRecord | null> {
+    async findByProviderCustomerId(customerId: string): Promise<WorkspaceBillingRecord | null> {
         const [row] = await this.db
             .select()
             .from(schema.workspaces)
-            .where(eq(schema.workspaces.stripeCustomerId, customerId))
+            .where(eq(schema.workspaces.providerCustomerId, customerId))
             .limit(1);
         return row ? toRecord(row) : null;
     }
 
-    async findByStripeInvoiceId(invoiceId: string): Promise<WorkspaceBillingRecord | null> {
+    async findByInvoiceRef(invoiceRef: string): Promise<WorkspaceBillingRecord | null> {
         const [row] = await this.db
             .select()
             .from(schema.workspaces)
-            .where(eq(schema.workspaces.lastInvoiceId, invoiceId))
+            .where(eq(schema.workspaces.lastInvoiceRef, invoiceRef))
             .limit(1);
         return row ? toRecord(row) : null;
     }
 
     async update(input: WorkspaceBillingUpdate): Promise<void> {
         const set: Partial<typeof schema.workspaces.$inferInsert> = {};
-        if (input.stripeCustomerId !== undefined) {
-            set.stripeCustomerId = input.stripeCustomerId;
+        if (input.providerCustomerId !== undefined) {
+            set.providerCustomerId = input.providerCustomerId;
         }
-        if (input.stripeSubscriptionId !== undefined) {
-            set.stripeSubscriptionId = input.stripeSubscriptionId;
+        if (input.providerSubscriptionId !== undefined) {
+            set.providerSubscriptionId = input.providerSubscriptionId;
         }
         if (input.subscriptionStatus !== undefined) {
             set.subscriptionStatus = input.subscriptionStatus;
@@ -58,8 +58,8 @@ export class DrizzleWorkspaceBillingRepository implements WorkspaceBillingReposi
         if (input.refundEligibleUntil !== undefined) {
             set.refundEligibleUntil = input.refundEligibleUntil;
         }
-        if (input.lastInvoiceId !== undefined) {
-            set.lastInvoiceId = input.lastInvoiceId;
+        if (input.lastInvoiceRef !== undefined) {
+            set.lastInvoiceRef = input.lastInvoiceRef;
         }
         if (input.lastBilledMonth !== undefined) {
             set.lastBilledMonth = input.lastBilledMonth;
@@ -75,12 +75,12 @@ export class DrizzleWorkspaceBillingRepository implements WorkspaceBillingReposi
 function toRecord(row: Row): WorkspaceBillingRecord {
     return {
         workspaceId: row.id,
-        stripeCustomerId: row.stripeCustomerId ?? null,
-        stripeSubscriptionId: row.stripeSubscriptionId ?? null,
+        providerCustomerId: row.providerCustomerId ?? null,
+        providerSubscriptionId: row.providerSubscriptionId ?? null,
         subscriptionStatus: row.subscriptionStatus ?? null,
         subscribedAt: row.subscribedAt ?? null,
         refundEligibleUntil: row.refundEligibleUntil ?? null,
-        lastInvoiceId: row.lastInvoiceId ?? null,
+        lastInvoiceRef: row.lastInvoiceRef ?? null,
         lastBilledMonth: row.lastBilledMonth ?? null,
     };
 }

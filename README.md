@@ -15,7 +15,7 @@ components/
   shell/         # dashboard chrome (app-shell, sidebar-nav, user-menu, command-palette, ...)
   landing/       # marketing components
 lib/
-  ee/            # source-available Enterprise module (Stripe billing). See lib/ee/LICENSE.
+  ee/            # source-available Enterprise module (billing). See lib/ee/LICENSE.
   db/            # drizzle schema + client
   docs/          # docs renderer (tree, markdown helpers)
   budgeting/, metering/, identity/, pricing/, notification/, rate-limit/, spike-protection/, event-bundle/, detection/, ...
@@ -47,7 +47,7 @@ public/
 
 ## Boundaries
 
-`bursora/lib/ee/` is source-available, not Apache 2.0. Only an allowlist of callers may import `@/lib/ee/*` (enforced by ESLint `no-restricted-imports`): the settings page, the Stripe webhook route, the billing-rollup cron route, EE-scoped tests, and code inside `lib/ee/`.
+`bursora/lib/ee/` is source-available, not Apache 2.0. Only an allowlist of callers may import `@/lib/ee/*` (enforced by ESLint `no-restricted-imports`): the settings page, the Lemon Squeezy webhook route, the billing-rollup cron route, EE-scoped tests, and code inside `lib/ee/`.
 
 ## Self-host
 

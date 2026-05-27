@@ -1,9 +1,9 @@
 /**
  * Pure bill calculation for cloud workspaces.
  *
- * Math only — no I/O, no Stripe, no Drizzle. Unit-testable in isolation.
- * The dollar inputs come from elsewhere (`tracked_spend` summed from
- * `usage_events`, event counts from `workspace_event_bundle_usage`).
+ * Math only — no I/O, no provider SDK, no Drizzle. Unit-testable in
+ * isolation. The dollar inputs come from elsewhere (`tracked_spend` summed
+ * from `usage_events`, event counts from `workspace_event_bundle_usage`).
  *
  * Formula:
  *   percentage = clamp(0.5% × tracked_spend, $29, $499)

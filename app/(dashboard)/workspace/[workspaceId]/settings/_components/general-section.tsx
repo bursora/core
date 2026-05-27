@@ -1,6 +1,6 @@
 /**
- * General workspace settings: rename, workspace id, danger zone.
- * Danger zone (delete) only renders for owners.
+ * General workspace settings: name, environment, spike protection (one form),
+ * plus read-only workspace details and the owner-only danger zone.
  */
 
 import { CopyButton } from "@/components/ui/copy-button";
@@ -8,11 +8,10 @@ import { DashboardSection } from "@/components/ui/workspace/dashboard-section";
 import { env } from "@/lib/env";
 import { formatDate } from "@/lib/format";
 import { getWorkspace } from "@/lib/identity/server";
+import { resolveSpikeSettings } from "@/lib/spike-protection/server";
 import { notFound } from "next/navigation";
 import { DeleteWorkspaceDialog } from "./delete-workspace-dialog";
-import { EnvironmentForm } from "./environment-form";
-import { RenameWorkspaceForm } from "./rename-workspace-form";
-import { SpikeProtectionSection } from "./spike-protection-section";
+import { GeneralSettingsForm } from "./general-settings-form";
 
 interface GeneralSectionProps {
     readonly workspaceId: string;
@@ -23,26 +22,21 @@ export async function GeneralSection({ workspaceId, isOwner }: GeneralSectionPro
     const workspace = await getWorkspace(workspaceId);
     if (!workspace) notFound();
 
+    const spike = env().IS_CLOUD
+        ? await resolveSpikeSettings(workspaceId).then((s) => ({
+              enabled: s.enabled,
+              multiplier: s.thresholdMultiplier,
+          }))
+        : null;
+
     return (
         <div className="space-y-6">
-            <DashboardSection
-                label="Workspace name"
-                sublabel="shown in switcher · on shared invites"
-            >
-                <RenameWorkspaceForm workspaceId={workspaceId} currentName={workspace.name} />
-            </DashboardSection>
-
-            <DashboardSection
-                label="Environment"
-                sublabel="prod · staging · dev label shown in sidebar"
-            >
-                <EnvironmentForm
-                    workspaceId={workspaceId}
-                    currentEnvironment={workspace.environment}
-                />
-            </DashboardSection>
-
-            {env().IS_CLOUD ? <SpikeProtectionSection workspaceId={workspaceId} /> : null}
+            <GeneralSettingsForm
+                workspaceId={workspaceId}
+                currentName={workspace.name}
+                currentEnvironment={workspace.environment}
+                spike={spike}
+            />
 
             <DashboardSection
                 label="Workspace details"

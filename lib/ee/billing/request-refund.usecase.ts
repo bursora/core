@@ -3,24 +3,28 @@
  *
  * Triggered by the refund button in workspace billing settings. Eligibility
  * is gated by `refund_eligible_until` (stamped on the workspace at first
- * checkout and never extended). Within the window the use case refunds every
- * paid invoice on file, cancels the Stripe subscription immediately, and
- * clears the eligibility timestamp so the action is single-use.
+ * checkout and never extended). Within the window the use case cancels the
+ * Lemon Squeezy subscription (end-of-period; LS has no immediate-cancel
+ * primitive), refunds every paid order on file, and clears the eligibility
+ * timestamp so the action is single-use. The DB-side `subscriptionStatus`
+ * flips to `canceled` immediately so the monthly rollup cron skips this
+ * workspace during the leftover days.
  *
  * Eligibility is keyed off signup, not subscription status: a customer who
  * cancels through the Customer Portal mid-window can still claim a refund
- * for the charges they already paid.
+ * for the orders they already paid.
  *
- * Failure semantics are atomic from the customer's perspective. If Stripe
- * refuses any step we throw and leave the workspace row untouched; the
- * caller can retry safely because refundAllInvoices is idempotent.
+ * Failure semantics are atomic from the customer's perspective. If the
+ * provider refuses any step we throw and leave the workspace row untouched;
+ * the caller can retry safely because both cancelSubscription and
+ * refundAllOrders are idempotent.
  */
 
 import type { RequestRefundUseCaseInput, RequestRefundUseCaseResult } from "./types";
 
 const emptyResult = (status: RequestRefundUseCaseResult["status"]): RequestRefundUseCaseResult => ({
     status,
-    refundedInvoiceIds: [],
+    refundedOrderIds: [],
     totalCents: 0,
 });
 
@@ -39,30 +43,45 @@ export async function requestRefundUseCase(
     ) {
         return emptyResult("not_eligible");
     }
-    if (!record.stripeCustomerId) {
+    if (!record.providerCustomerId) {
         return emptyResult("no_invoices");
     }
 
-    const refund = await input.stripe.refundAllInvoices({
-        customerId: record.stripeCustomerId,
-        ...(input.reason !== undefined ? { reason: input.reason } : {}),
+    if (record.providerSubscriptionId) {
+        // Cancel first: marks the subscription cancelled at LS so no further
+        // renewals fire. LS cancels at the end of the current period, but the
+        // rollup cron skips workspaces whose status is `canceled`, so no
+        // post-refund usage gets reported. Already-cancelled subscriptions are
+        // absorbed by the adapter so this is safe even if the customer
+        // cancelled through the portal earlier.
+        await input.provider.cancelSubscription({
+            subscriptionId: record.providerSubscriptionId,
+        });
+    }
+
+    const refund = await input.provider.refundAllOrders({
+        customerId: record.providerCustomerId,
     });
 
     if (refund.totalCents === 0) {
-        // Customer has no paid invoices to refund (subscribed but never billed,
-        // or all charges were already refunded out-of-band). Still clear the
-        // eligibility window so the panel disappears.
-        await input.workspaces.update({
+        // Customer has no paid orders to refund (subscribed but never billed,
+        // or all charges were already refunded out-of-band). The cancel call
+        // above already ran, so mirror that in the DB — leaving the row
+        // `active` would let the rollup cron keep reporting usage during the
+        // period LS lets the cancelled subscription run out.
+        const updates: {
+            workspaceId: string;
+            refundEligibleUntil: Date | null;
+            subscriptionStatus?: string | null;
+        } = {
             workspaceId: input.workspaceId,
             refundEligibleUntil: null,
-        });
+        };
+        if (record.providerSubscriptionId) {
+            updates.subscriptionStatus = "canceled";
+        }
+        await input.workspaces.update(updates);
         return emptyResult("no_invoices");
-    }
-
-    if (record.stripeSubscriptionId) {
-        // Already-canceled subscriptions are absorbed by the adapter so this
-        // is safe even if the customer canceled through the portal earlier.
-        await input.stripe.cancelSubscription({ subscriptionId: record.stripeSubscriptionId });
     }
 
     await input.workspaces.update({
@@ -73,7 +92,7 @@ export async function requestRefundUseCase(
 
     return {
         status: "refunded",
-        refundedInvoiceIds: refund.refundedInvoiceIds,
+        refundedOrderIds: refund.refundedOrderIds,
         totalCents: refund.totalCents,
     };
 }

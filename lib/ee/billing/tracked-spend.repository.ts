@@ -8,8 +8,8 @@
  * adjustment is needed.
  *
  * `listActiveCloudWorkspaceIds` enumerates workspaces eligible for an
- * invoice this cycle: those whose Stripe customer + subscription is set
- * and whose `subscription_status` is in the active set. The monthly
+ * invoice this cycle: those whose billing-provider customer + subscription
+ * is set and whose `subscription_status` is in the active set. The monthly
  * rollup cron iterates over this set.
  */
 
@@ -27,8 +27,8 @@ export interface TrackedSpendRepository {
     /** Override-adjusted sum of `usage_events.cost_usd` in cents. */
     sumMonthlySpendCents(query: MonthlySpendQuery): Promise<number>;
     /**
-     * Stripe-active workspaces. Active = `stripe_customer_id` set and
-     * `subscription_status` in {`active`, `trialing`, `past_due`}.
+     * Active billing-provider workspaces. Active = `provider_customer_id`
+     * set and `subscription_status` in {`active`, `trialing`, `past_due`}.
      */
     listActiveCloudWorkspaceIds(): Promise<readonly string[]>;
 }

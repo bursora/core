@@ -1,8 +1,8 @@
-import type { StripeWebhookEvent } from "@/lib/ee/billing";
-import { handleStripeWebhookUseCase } from "@/lib/ee/billing";
+import type { WebhookEvent } from "@/lib/ee/billing";
+import { handleWebhookUseCase } from "@/lib/ee/billing";
 import { describe, expect, test } from "bun:test";
-import { FakeStripeAdapter } from "./fakes/fake-stripe.adapter";
-import { InMemoryStripeWebhookEventStore } from "./fakes/in-memory-stripe-webhook-event.store";
+import { FakePaymentProviderAdapter } from "./fakes/fake-payment-provider.adapter";
+import { InMemoryBillingWebhookEventStore } from "./fakes/in-memory-billing-webhook-event.store";
 import { InMemoryWorkspaceBillingRepository } from "./fakes/in-memory-workspace-billing.repository";
 
 const WORKSPACE_ID = "11111111-2222-3333-4444-555555555555";
@@ -14,8 +14,8 @@ const seedUnsubscribed = (
 ) => {
     repo.seed({
         workspaceId: WORKSPACE_ID,
-        stripeCustomerId: customerId,
-        stripeSubscriptionId: subId,
+        providerCustomerId: customerId,
+        providerSubscriptionId: subId,
         subscriptionStatus: null,
     });
 };
@@ -27,54 +27,54 @@ const seedActive = (
 ) => {
     repo.seed({
         workspaceId: WORKSPACE_ID,
-        stripeCustomerId: customerId,
-        stripeSubscriptionId: subId,
+        providerCustomerId: customerId,
+        providerSubscriptionId: subId,
         subscriptionStatus: "active",
     });
 };
 
 const runWebhook = async (
-    event: StripeWebhookEvent,
+    event: WebhookEvent,
     workspaces: InMemoryWorkspaceBillingRepository,
-    webhookEvents: InMemoryStripeWebhookEventStore = new InMemoryStripeWebhookEventStore(),
+    webhookEvents: InMemoryBillingWebhookEventStore = new InMemoryBillingWebhookEventStore(),
 ) => {
-    const stripe = new FakeStripeAdapter();
-    stripe.nextEvent = event;
-    return handleStripeWebhookUseCase({
+    const provider = new FakePaymentProviderAdapter();
+    provider.nextEvent = event;
+    return handleWebhookUseCase({
         rawBody: "raw",
         signatureHeader: "sig",
-        stripe,
+        provider,
         workspaces,
         webhookEvents,
     });
 };
 
-describe("handleStripeWebhookUseCase", () => {
+describe("handleWebhookUseCase", () => {
     test("rejects forged events (signature mismatch) with verified=false", async () => {
-        const stripe = new FakeStripeAdapter();
-        stripe.verifyShouldThrow = true;
+        const provider = new FakePaymentProviderAdapter();
+        provider.verifyShouldThrow = true;
         const workspaces = new InMemoryWorkspaceBillingRepository();
         seedUnsubscribed(workspaces);
 
-        const result = await handleStripeWebhookUseCase({
+        const result = await handleWebhookUseCase({
             rawBody: "x",
             signatureHeader: "bad",
-            stripe,
+            provider,
             workspaces,
-            webhookEvents: new InMemoryStripeWebhookEventStore(),
+            webhookEvents: new InMemoryBillingWebhookEventStore(),
         });
 
         expect(result.verified).toBe(false);
     });
 
-    test("checkout.session.completed records active subscription and stores stripe ids", async () => {
+    test("subscription.activated records active subscription and stores provider ids", async () => {
         const workspaces = new InMemoryWorkspaceBillingRepository();
         seedUnsubscribed(workspaces);
 
         const result = await runWebhook(
             {
                 id: "evt_basic_checkout",
-                type: "checkout.session.completed",
+                type: "subscription.activated",
                 workspaceId: WORKSPACE_ID,
                 customerId: "cus_99",
                 subscriptionId: "sub_99",
@@ -85,18 +85,18 @@ describe("handleStripeWebhookUseCase", () => {
         expect(result.verified).toBe(true);
         const row = await workspaces.findById(WORKSPACE_ID);
         expect(row?.subscriptionStatus).toBe("active");
-        expect(row?.stripeCustomerId).toBe("cus_99");
-        expect(row?.stripeSubscriptionId).toBe("sub_99");
+        expect(row?.providerCustomerId).toBe("cus_99");
+        expect(row?.providerSubscriptionId).toBe("sub_99");
     });
 
-    test("customer.subscription.deleted records subscription_status='canceled'", async () => {
+    test("subscription.canceled records subscription_status='canceled'", async () => {
         const workspaces = new InMemoryWorkspaceBillingRepository();
         seedActive(workspaces, "cus_99", "sub_99");
 
         await runWebhook(
             {
                 id: "evt_deleted_basic",
-                type: "customer.subscription.deleted",
+                type: "subscription.canceled",
                 customerId: "cus_99",
                 subscriptionId: "sub_99",
                 status: "canceled",
@@ -108,14 +108,14 @@ describe("handleStripeWebhookUseCase", () => {
         expect(row?.subscriptionStatus).toBe("canceled");
     });
 
-    test("customer.subscription.updated writes the Stripe status verbatim", async () => {
+    test("subscription.updated writes the provider status verbatim", async () => {
         const workspaces = new InMemoryWorkspaceBillingRepository();
         seedActive(workspaces, "cus_99", "sub_99");
 
         await runWebhook(
             {
                 id: "evt_sub_past_due",
-                type: "customer.subscription.updated",
+                type: "subscription.updated",
                 customerId: "cus_99",
                 subscriptionId: "sub_99",
                 status: "past_due",
@@ -141,12 +141,12 @@ describe("handleStripeWebhookUseCase", () => {
     test("replayed event with the same id is a deduped no-op", async () => {
         const workspaces = new InMemoryWorkspaceBillingRepository();
         seedUnsubscribed(workspaces);
-        const webhookEvents = new InMemoryStripeWebhookEventStore();
+        const webhookEvents = new InMemoryBillingWebhookEventStore();
 
         await runWebhook(
             {
                 id: "evt_checkout_1",
-                type: "checkout.session.completed",
+                type: "subscription.activated",
                 workspaceId: WORKSPACE_ID,
                 customerId: "cus_99",
                 subscriptionId: "sub_99",
@@ -160,7 +160,7 @@ describe("handleStripeWebhookUseCase", () => {
         const replay = await runWebhook(
             {
                 id: "evt_checkout_1",
-                type: "checkout.session.completed",
+                type: "subscription.activated",
                 workspaceId: WORKSPACE_ID,
                 customerId: "cus_99",
                 subscriptionId: "sub_99",
@@ -180,7 +180,7 @@ describe("handleStripeWebhookUseCase", () => {
         const result = await runWebhook(
             {
                 id: "evt_unknown_customer",
-                type: "customer.subscription.deleted",
+                type: "subscription.canceled",
                 customerId: "cus_unknown",
                 subscriptionId: "sub_unknown",
                 status: "canceled",
@@ -193,13 +193,81 @@ describe("handleStripeWebhookUseCase", () => {
         expect(row?.subscriptionStatus).toBeNull();
     });
 
-    test("charge.refunded cancels subscription and clears refund eligibility", async () => {
+    test("payment.succeeded flips past_due to active using customerId when workspaceId is absent", async () => {
+        // LS `subscription_payment_success` deliveries do not always echo
+        // `custom_data.workspace_id`. The handler must fall back to looking
+        // up the workspace by `customerId` so a past_due workspace can
+        // recover after the customer fixes their card.
+        const workspaces = new InMemoryWorkspaceBillingRepository();
+        workspaces.seed({
+            workspaceId: WORKSPACE_ID,
+            providerCustomerId: "cus_99",
+            providerSubscriptionId: "sub_99",
+            subscriptionStatus: "past_due",
+        });
+
+        const result = await runWebhook(
+            {
+                id: "evt_payment_succeeded",
+                type: "payment.succeeded",
+                // workspaceId absent — exactly what LS sends on a renewal.
+                customerId: "cus_99",
+                subscriptionId: "sub_99",
+            },
+            workspaces,
+        );
+
+        expect(result.verified).toBe(true);
+        const row = await workspaces.findById(WORKSPACE_ID);
+        expect(row?.subscriptionStatus).toBe("active");
+    });
+
+    test("payment.failed marks the workspace past_due", async () => {
+        const workspaces = new InMemoryWorkspaceBillingRepository();
+        seedActive(workspaces, "cus_99", "sub_99");
+
+        const result = await runWebhook(
+            {
+                id: "evt_payment_failed",
+                type: "payment.failed",
+                customerId: "cus_99",
+                subscriptionId: "sub_99",
+            },
+            workspaces,
+        );
+
+        expect(result.verified).toBe(true);
+        const row = await workspaces.findById(WORKSPACE_ID);
+        expect(row?.subscriptionStatus).toBe("past_due");
+    });
+
+    test("subscription.expired marks the workspace canceled", async () => {
+        const workspaces = new InMemoryWorkspaceBillingRepository();
+        seedActive(workspaces, "cus_99", "sub_99");
+
+        const result = await runWebhook(
+            {
+                id: "evt_sub_expired",
+                type: "subscription.expired",
+                customerId: "cus_99",
+                subscriptionId: "sub_99",
+                status: "expired",
+            },
+            workspaces,
+        );
+
+        expect(result.verified).toBe(true);
+        const row = await workspaces.findById(WORKSPACE_ID);
+        expect(row?.subscriptionStatus).toBe("canceled");
+    });
+
+    test("order.refunded cancels subscription and clears refund eligibility", async () => {
         const workspaces = new InMemoryWorkspaceBillingRepository();
         const eligibleUntil = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
         workspaces.seed({
             workspaceId: WORKSPACE_ID,
-            stripeCustomerId: "cus_99",
-            stripeSubscriptionId: "sub_99",
+            providerCustomerId: "cus_99",
+            providerSubscriptionId: "sub_99",
             subscriptionStatus: "active",
             refundEligibleUntil: eligibleUntil,
         });
@@ -207,7 +275,7 @@ describe("handleStripeWebhookUseCase", () => {
         const result = await runWebhook(
             {
                 id: "evt_charge_refunded",
-                type: "charge.refunded",
+                type: "order.refunded",
                 customerId: "cus_99",
             },
             workspaces,

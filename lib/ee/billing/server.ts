@@ -2,7 +2,7 @@
  * Billing entry points.
  *
  * Routes and pages call these bound helpers instead of constructing the
- * Stripe adapter or repositories themselves. The helpers assemble the
+ * provider adapter or repositories themselves. The helpers assemble the
  * production wiring on demand.
  *
  * Tests inject fakes via `setBillingDepsForTesting`.
@@ -15,23 +15,23 @@ import { env } from "@/lib/env";
 import { buildWorkspacePath } from "@/lib/routes";
 import { createCheckoutSessionUseCase } from "./create-checkout-session.usecase";
 import { DrizzleEventBundleRollupRepository } from "./drizzle-event-bundle-rollup.repository";
-import { DrizzleStripeWebhookEventStore } from "./drizzle-stripe-webhook-event.store";
+import { DrizzleBillingWebhookEventStore } from "./drizzle-billing-webhook-event.store";
 import { DrizzleTrackedSpendRepository } from "./drizzle-tracked-spend.repository";
 import { DrizzleWorkspaceBillingRepository } from "./drizzle-workspace-billing.repository";
 import { getBillingPortalUrlUseCase } from "./get-billing-portal-url.usecase";
-import { handleStripeWebhookUseCase } from "./handle-stripe-webhook.usecase";
+import { handleWebhookUseCase } from "./handle-webhook.usecase";
+import { LemonSqueezyApiAdapter } from "./lemonsqueezy.adapter";
 import { nextBillEstimateUseCase } from "./next-bill-estimate";
 import { requestRefundUseCase } from "./request-refund.usecase";
 import { rollupBillUseCase } from "./rollup-bill.usecase";
-import type { StripeWebhookEventStore } from "./stripe-webhook-event.store";
-import { StripeApiAdapter } from "./stripe.adapter";
+import type { BillingWebhookEventStore } from "./billing-webhook-event.store";
 import type { TrackedSpendRepository } from "./tracked-spend.repository";
 import type {
     BillingDeps,
     NextBillEstimate,
+    PaymentProviderAdapter,
     RequestRefundUseCaseResult,
     RollupBillUseCaseResult,
-    StripeAdapter,
 } from "./types";
 import type {
     EventBundleRollupRepository,
@@ -41,22 +41,29 @@ import type {
 
 function buildDeps(): BillingDeps {
     const e = env();
-    const secret = e.STRIPE_SECRET_KEY;
-    const webhook = e.STRIPE_WEBHOOK_SECRET;
-    const priceId = e.STRIPE_PRICE_ID_TEAM;
-    if (!secret || !webhook || !priceId) {
+    const apiKey = e.LEMONSQUEEZY_API_KEY;
+    const webhookSecret = e.LEMONSQUEEZY_WEBHOOK_SECRET;
+    const webhookSecretNext = e.LEMONSQUEEZY_WEBHOOK_SECRET_NEXT;
+    const storeId = e.LEMONSQUEEZY_STORE_ID;
+    const variantId = e.LEMONSQUEEZY_VARIANT_ID;
+    if (!apiKey || !webhookSecret || !storeId || !variantId) {
         throw new Error(
-            "billing is not configured: STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, and STRIPE_PRICE_ID_TEAM must be set",
+            "billing is not configured: LEMONSQUEEZY_API_KEY, LEMONSQUEEZY_WEBHOOK_SECRET, LEMONSQUEEZY_STORE_ID, and LEMONSQUEEZY_VARIANT_ID must be set",
         );
     }
     const database = db();
     return {
-        stripe: new StripeApiAdapter({ secretKey: secret, webhookSecret: webhook }),
+        provider: new LemonSqueezyApiAdapter({
+            apiKey,
+            webhookSecret,
+            ...(webhookSecretNext.length > 0 ? { webhookSecretNext } : {}),
+            storeId,
+        }),
         workspaces: new DrizzleWorkspaceBillingRepository(database),
-        webhookEvents: new DrizzleStripeWebhookEventStore(database),
+        webhookEvents: new DrizzleBillingWebhookEventStore(database),
         trackedSpend: new DrizzleTrackedSpendRepository(database),
         eventBundleRollup: new DrizzleEventBundleRollupRepository(database),
-        priceIdTeam: priceId,
+        variantIdTeam: variantId,
         appUrl: e.NEXT_PUBLIC_APP_URL,
     };
 }
@@ -65,9 +72,14 @@ let testOverride: BillingDeps | null = null;
 
 /**
  * Inject test-only deps. Pass `null` to clear and revert to production wiring.
- * Only intended for use from `tests/`.
+ * Only intended for use from `tests/`. Throws at runtime if anything outside
+ * the test environment tries to call this — production traffic must never
+ * see an injected override.
  */
 export function setBillingDepsForTesting(deps: BillingDeps | null): void {
+    if (process.env.NODE_ENV !== "test") {
+        throw new Error("setBillingDepsForTesting only available in test");
+    }
     testOverride = deps;
 }
 
@@ -86,10 +98,10 @@ export async function createCheckoutSession(input: {
     return createCheckoutSessionUseCase({
         workspaceId: input.workspaceId,
         userEmail: input.userEmail,
-        priceId: deps.priceIdTeam,
+        variantId: deps.variantIdTeam,
         successUrl: settingsUrl(input.workspaceId, "ok"),
         cancelUrl: settingsUrl(input.workspaceId, "cancel"),
-        stripe: deps.stripe,
+        provider: deps.provider,
     });
 }
 
@@ -101,19 +113,19 @@ export async function getBillingPortalUrl(input: {
         workspaceId: input.workspaceId,
         returnUrl: `${deps.appUrl}${buildWorkspacePath(input.workspaceId, "settings")}`,
         workspaces: deps.workspaces,
-        stripe: deps.stripe,
+        provider: deps.provider,
     });
 }
 
-export async function handleStripeWebhook(input: {
+export async function handleWebhook(input: {
     rawBody: string;
     signatureHeader: string;
 }): Promise<{ verified: boolean; deduped?: boolean }> {
     const deps = billingDeps();
-    return handleStripeWebhookUseCase({
+    return handleWebhookUseCase({
         rawBody: input.rawBody,
         signatureHeader: input.signatureHeader,
-        stripe: deps.stripe,
+        provider: deps.provider,
         workspaces: deps.workspaces,
         webhookEvents: deps.webhookEvents,
     });
@@ -134,7 +146,7 @@ export async function runBillingRollup(now: Date): Promise<RollupBillUseCaseResu
     const deps = billingDeps();
     return rollupBillUseCase({
         now,
-        stripe: deps.stripe,
+        provider: deps.provider,
         workspaces: deps.workspaces,
         trackedSpend: deps.trackedSpend,
         eventBundleRollup: deps.eventBundleRollup,
@@ -156,28 +168,27 @@ export async function getNextBillEstimate(input: {
 }
 
 /**
- * Execute the money-back guarantee. Refunds every paid Stripe invoice,
- * cancels the subscription immediately, and clears the eligibility window
- * so the action is single-use.
+ * Execute the money-back guarantee. Refunds every paid order on file,
+ * cancels the subscription at end-of-period, marks the workspace canceled
+ * in the DB (so the rollup cron stops reporting usage), and clears the
+ * eligibility window so the action is single-use.
  */
 export async function requestRefund(input: {
     workspaceId: string;
-    reason?: string;
 }): Promise<RequestRefundUseCaseResult> {
     const deps = billingDeps();
     return requestRefundUseCase({
         workspaceId: input.workspaceId,
-        ...(input.reason !== undefined ? { reason: input.reason } : {}),
-        stripe: deps.stripe,
+        provider: deps.provider,
         workspaces: deps.workspaces,
     });
 }
 
 export type {
     BillingDeps,
+    BillingWebhookEventStore,
     EventBundleRollupRepository,
-    StripeAdapter,
-    StripeWebhookEventStore,
+    PaymentProviderAdapter,
     TrackedSpendRepository,
     WorkspaceBillingRecord,
     WorkspaceBillingRepository,

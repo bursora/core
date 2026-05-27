@@ -1,12 +1,12 @@
-import type { StripeAdapter } from "./types";
+import type { PaymentProviderAdapter } from "./types";
 
 export interface CreateCheckoutSessionInput {
     readonly workspaceId: string;
     readonly userEmail: string;
-    readonly priceId: string;
+    readonly variantId: string;
     readonly successUrl: string;
     readonly cancelUrl: string;
-    readonly stripe: StripeAdapter;
+    readonly provider: PaymentProviderAdapter;
 }
 
 export interface CreateCheckoutSessionResult {
@@ -17,10 +17,10 @@ export interface CreateCheckoutSessionResult {
 export async function createCheckoutSessionUseCase(
     input: CreateCheckoutSessionInput,
 ): Promise<CreateCheckoutSessionResult> {
-    const session = await input.stripe.createCheckoutSession({
+    const session = await input.provider.createCheckoutSession({
         workspaceId: input.workspaceId,
         userEmail: input.userEmail,
-        priceId: input.priceId,
+        variantId: input.variantId,
         successUrl: input.successUrl,
         cancelUrl: input.cancelUrl,
     });

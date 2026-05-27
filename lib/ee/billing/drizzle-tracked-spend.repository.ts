@@ -7,10 +7,10 @@
  * time, so the SUM here IS the override-adjusted total — the bill
  * calculator can multiply by 0.5% without any further accounting.
  *
- * Active workspaces are those with `stripe_customer_id IS NOT NULL` and
+ * Active workspaces are those with `provider_customer_id IS NOT NULL` and
  * `subscription_status IN ('active', 'trialing', 'past_due')`. `unpaid`
- * is excluded — Stripe already retried and gave up. The rollup cron does
- * not push a second invoice on top of an unpaid one.
+ * is excluded — the billing provider already retried and gave up. The
+ * rollup cron does not push a second invoice on top of an unpaid one.
  */
 
 import "server-only";
@@ -51,7 +51,7 @@ export class DrizzleTrackedSpendRepository implements TrackedSpendRepository {
             .from(schema.workspaces)
             .where(
                 and(
-                    isNotNull(schema.workspaces.stripeCustomerId),
+                    isNotNull(schema.workspaces.providerCustomerId),
                     inArray(schema.workspaces.subscriptionStatus, [...ACTIVE_STATUSES]),
                 ),
             )

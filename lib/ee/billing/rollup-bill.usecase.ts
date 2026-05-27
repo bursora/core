@@ -6,14 +6,15 @@
  *   - Read tracked LLM spend over [periodStart, periodEnd)
  *   - Read event count from the cold-store rollup (`workspace_event_bundle_usage`)
  *   - Compute bill, pro-rating floor/cap if this is the first month after signup
- *   - Push a Stripe invoice (skipped when bill is impossibly $0 — floor guarantees >0)
- *   - Persist `last_invoice_id` and `last_billed_month` so a retried cron skips
- *     workspaces it already invoiced this cycle
+ *   - Hand off to `reportUsageUseCase` which posts a Lemon Squeezy usage
+ *     record and persists `last_invoice_ref` + `last_billed_month`
  *
  * Workspaces are processed sequentially. Each workspace is wrapped in
- * `try / catch` so one Stripe failure doesn't kill the whole batch; the
- * summary counts failures and the cron logs them. Stripe retries are owned
- * by the next-day re-run of the cron after a fix-forward.
+ * `try / catch` so one provider failure doesn't kill the whole batch; the
+ * summary counts failures and the cron logs them. Retries are owned by
+ * the next-day re-run of the cron after a fix-forward — the usage-record
+ * idempotency token derived from `(subscription, periodMonth)` lets LS
+ * dedup duplicate posts on the same period.
  *
  * The "reference now" is whatever the caller passed in (the cron route
  * passes `new Date()`). The use case derives the billing month as the
@@ -23,7 +24,7 @@
 import { overageCentsAt } from "@/lib/event-bundle/counter";
 import { CAP_CENTS, FLOOR_CENTS, clampPercentage, rawPercentageCents } from "./calculate-bill";
 import { daysActiveInclusive, daysInUtcMonth, prorateFraction } from "./prorate";
-import { pushStripeInvoiceUseCase } from "./push-stripe-invoice.usecase";
+import { reportUsageUseCase } from "./report-usage.usecase";
 import {
     type BillCalculationResult,
     type RollupBillUseCaseInput,
@@ -51,7 +52,18 @@ export async function rollupBillUseCase(
                 summary.skipped += 1;
                 continue;
             }
-            if (record.stripeCustomerId === null) {
+            if (record.providerCustomerId === null) {
+                summary.skipped += 1;
+                continue;
+            }
+            if (
+                record.subscriptionStatus === "canceled" ||
+                record.subscriptionStatus === "expired"
+            ) {
+                // LS cancels at end-of-period; we flip subscriptionStatus to
+                // `canceled` in the in-app refund path (and on the matching
+                // webhook). Reporting more usage past that point would charge
+                // for service the customer already got refunded.
                 summary.skipped += 1;
                 continue;
             }
@@ -82,7 +94,7 @@ async function billOneWorkspace(args: {
     record: WorkspaceBillingRecord;
 }): Promise<void> {
     const { input, period, record } = args;
-    if (record.stripeCustomerId === null) return;
+    if (record.providerCustomerId === null) return;
 
     const [trackedSpendCents, eventsCount] = await Promise.all([
         input.trackedSpend.sumMonthlySpendCents({
@@ -104,18 +116,12 @@ async function billOneWorkspace(args: {
     });
     if (bill.totalCents <= 0) return;
 
-    const { invoiceId } = await pushStripeInvoiceUseCase({
-        stripe: input.stripe,
-        customerId: record.stripeCustomerId,
+    await reportUsageUseCase({
+        provider: input.provider,
+        workspaces: input.workspaces,
         workspaceId: record.workspaceId,
         periodMonth: period.month,
         bill,
-    });
-
-    await input.workspaces.update({
-        workspaceId: record.workspaceId,
-        lastInvoiceId: invoiceId,
-        lastBilledMonth: period.month,
     });
 }
 

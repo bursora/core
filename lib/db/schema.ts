@@ -78,19 +78,19 @@ export const verification = pgTable("verification", {
 });
 
 // --- workspaces ---------------------------------------------------------------
-// `stripe_customer_id`, `stripe_subscription_id`, `subscription_status`,
-// `subscribed_at`, `refund_eligible_until`, `last_invoice_id`, and
+// `provider_customer_id`, `provider_subscription_id`, `subscription_status`,
+// `subscribed_at`, `refund_eligible_until`, `last_invoice_ref`, and
 // `last_billed_month` are billing-owned columns that live on the workspace
 // row to keep the webhook handler's write a single UPDATE. All are
 // nullable: cloud workspaces that have never opened Checkout and every
 // self-host workspace leave them empty. `subscription_status` mirrors the
-// Stripe subscription state verbatim (e.g. `active`, `past_due`,
+// upstream provider's subscription state verbatim (e.g. `active`, `past_due`,
 // `canceled`).
 //
 // `subscribed_at` is set the first time Checkout completes; the rollup
 // cron uses it to pro-rate the first invoice. `refund_eligible_until` is
 // signup + 30 days — used by the UI to surface the money-back window.
-// `last_invoice_id` carries the most recent invoice the rollup pushed
+// `last_invoice_ref` carries the most recent invoice the rollup pushed
 // (deep-link target). `last_billed_month` (YYYY-MM) lets the cron skip
 // months it already invoiced after a retry.
 export const workspaces = pgTable(
@@ -99,18 +99,18 @@ export const workspaces = pgTable(
         id: uuid("id").primaryKey().defaultRandom(),
         name: text("name").notNull(),
         environment: text("environment").notNull().default("prod"),
-        stripeCustomerId: text("stripe_customer_id"),
-        stripeSubscriptionId: text("stripe_subscription_id"),
+        providerCustomerId: text("provider_customer_id"),
+        providerSubscriptionId: text("provider_subscription_id"),
         subscriptionStatus: text("subscription_status"),
         subscribedAt: timestamp("subscribed_at", { withTimezone: true }),
         refundEligibleUntil: timestamp("refund_eligible_until", { withTimezone: true }),
-        lastInvoiceId: text("last_invoice_id"),
+        lastInvoiceRef: text("last_invoice_ref"),
         lastBilledMonth: text("last_billed_month"),
         createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     },
     (t) => [
-        uniqueIndex("workspaces_stripe_customer_idx").on(t.stripeCustomerId),
-        uniqueIndex("workspaces_last_invoice_idx").on(t.lastInvoiceId),
+        uniqueIndex("workspaces_provider_customer_idx").on(t.providerCustomerId),
+        uniqueIndex("workspaces_last_invoice_ref_idx").on(t.lastInvoiceRef),
     ],
 );
 
@@ -419,11 +419,11 @@ export const notificationDeliveries = pgTable(
     ],
 );
 
-// --- stripe_webhook_events ---------------------------------------------------
-// Idempotency log for Stripe webhook deliveries. The handler inserts the
-// Stripe event id (`evt_...`) before applying side effects; the primary key
-// + ON CONFLICT DO NOTHING turns retried deliveries into atomic no-ops.
-export const stripeWebhookEvents = pgTable("stripe_webhook_events", {
+// --- billing_webhook_events --------------------------------------------------
+// Idempotency log for billing-provider webhook deliveries. The handler inserts
+// the upstream event id (`evt_...`) before applying side effects; the primary
+// key + ON CONFLICT DO NOTHING turns retried deliveries into atomic no-ops.
+export const billingWebhookEvents = pgTable("billing_webhook_events", {
     eventId: text("event_id").primaryKey(),
     eventType: text("event_type").notNull(),
     processedAt: timestamp("processed_at", { withTimezone: true }).notNull().defaultNow(),

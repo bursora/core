@@ -15,9 +15,10 @@ const BASE = {
 const FULL_CLOUD = {
     ...BASE,
     IS_CLOUD: "true",
-    STRIPE_SECRET_KEY: "sk_test_x",
-    STRIPE_WEBHOOK_SECRET: "whsec_x",
-    STRIPE_PRICE_ID_TEAM: "price_x",
+    LEMONSQUEEZY_API_KEY: "ls_test_x",
+    LEMONSQUEEZY_WEBHOOK_SECRET: "ls_whsec_x",
+    LEMONSQUEEZY_STORE_ID: "store_x",
+    LEMONSQUEEZY_VARIANT_ID: "variant_x",
     REDIS_URL: "redis://localhost:6379",
 };
 
@@ -28,16 +29,20 @@ describe("loadEnv", () => {
         expect(env.DATABASE_URL).toBe("postgres://x");
         expect(env.SMTP_PORT).toBe(1025);
         expect(env.IS_CLOUD).toBe(true);
-        expect(env.STRIPE_SECRET_KEY).toBe("sk_test_x");
+        expect(env.LEMONSQUEEZY_API_KEY).toBe("ls_test_x");
+        expect(env.LEMONSQUEEZY_WEBHOOK_SECRET).toBe("ls_whsec_x");
+        expect(env.LEMONSQUEEZY_STORE_ID).toBe("store_x");
+        expect(env.LEMONSQUEEZY_VARIANT_ID).toBe("variant_x");
     });
 
-    test("OSS mode does not require Stripe vars and exposes empty strings", () => {
+    test("OSS mode does not require Lemon Squeezy vars and exposes empty strings", () => {
         const env = loadEnv(BASE);
 
         expect(env.IS_CLOUD).toBe(false);
-        expect(env.STRIPE_SECRET_KEY).toBe("");
-        expect(env.STRIPE_WEBHOOK_SECRET).toBe("");
-        expect(env.STRIPE_PRICE_ID_TEAM).toBe("");
+        expect(env.LEMONSQUEEZY_API_KEY).toBe("");
+        expect(env.LEMONSQUEEZY_WEBHOOK_SECRET).toBe("");
+        expect(env.LEMONSQUEEZY_STORE_ID).toBe("");
+        expect(env.LEMONSQUEEZY_VARIANT_ID).toBe("");
     });
 
     test("throws when a required var is missing", () => {
@@ -51,18 +56,48 @@ describe("loadEnv", () => {
         expect(() => loadEnv({ ...FULL_CLOUD, SMTP_PORT: "not-a-port" })).toThrow(/SMTP_PORT/);
     });
 
-    test("throws when STRIPE_SECRET_KEY is missing in cloud mode", () => {
+    test("throws when LEMONSQUEEZY_API_KEY is missing in cloud mode", () => {
         const partial = { ...FULL_CLOUD };
-        delete (partial as Record<string, string | undefined>).STRIPE_SECRET_KEY;
+        delete (partial as Record<string, string | undefined>).LEMONSQUEEZY_API_KEY;
 
-        expect(() => loadEnv(partial)).toThrow(/STRIPE_SECRET_KEY/);
+        expect(() => loadEnv(partial)).toThrow(/LEMONSQUEEZY_API_KEY/);
     });
 
-    test("throws when STRIPE_WEBHOOK_SECRET is missing in cloud mode", () => {
+    test("throws when LEMONSQUEEZY_WEBHOOK_SECRET is missing in cloud mode", () => {
         const partial = { ...FULL_CLOUD };
-        delete (partial as Record<string, string | undefined>).STRIPE_WEBHOOK_SECRET;
+        delete (partial as Record<string, string | undefined>).LEMONSQUEEZY_WEBHOOK_SECRET;
 
-        expect(() => loadEnv(partial)).toThrow(/STRIPE_WEBHOOK_SECRET/);
+        expect(() => loadEnv(partial)).toThrow(/LEMONSQUEEZY_WEBHOOK_SECRET/);
+    });
+
+    test("throws when LEMONSQUEEZY_STORE_ID is missing in cloud mode", () => {
+        const partial = { ...FULL_CLOUD };
+        delete (partial as Record<string, string | undefined>).LEMONSQUEEZY_STORE_ID;
+
+        expect(() => loadEnv(partial)).toThrow(/LEMONSQUEEZY_STORE_ID/);
+    });
+
+    test("throws when LEMONSQUEEZY_VARIANT_ID is missing in cloud mode", () => {
+        const partial = { ...FULL_CLOUD };
+        delete (partial as Record<string, string | undefined>).LEMONSQUEEZY_VARIANT_ID;
+
+        expect(() => loadEnv(partial)).toThrow(/LEMONSQUEEZY_VARIANT_ID/);
+    });
+
+    test("LEMONSQUEEZY_WEBHOOK_SECRET_NEXT is optional in cloud mode and exposed when set", () => {
+        const withoutNext = loadEnv(FULL_CLOUD);
+        expect(withoutNext.LEMONSQUEEZY_WEBHOOK_SECRET_NEXT).toBe("");
+
+        const withNext = loadEnv({
+            ...FULL_CLOUD,
+            LEMONSQUEEZY_WEBHOOK_SECRET_NEXT: "ls_whsec_next",
+        });
+        expect(withNext.LEMONSQUEEZY_WEBHOOK_SECRET_NEXT).toBe("ls_whsec_next");
+    });
+
+    test("LEMONSQUEEZY_WEBHOOK_SECRET_NEXT is empty in OSS mode even if set in env", () => {
+        const e = loadEnv({ ...BASE, LEMONSQUEEZY_WEBHOOK_SECRET_NEXT: "ignored" });
+        expect(e.LEMONSQUEEZY_WEBHOOK_SECRET_NEXT).toBe("");
     });
 
     test("defaults rate-limit and spike-protection to cloud value", () => {

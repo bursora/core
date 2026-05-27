@@ -29,13 +29,7 @@ const mailer = defaultSmtpMailer();
 export const auth = betterAuth({
     baseURL: env().BETTER_AUTH_URL,
     secret: env().BETTER_AUTH_SECRET,
-    trustedOrigins: [
-        "http://localhost:3000",
-        "http://localhost:3001",
-        "http://127.0.0.1:3000",
-        "https://app-bursora.ngrok.app",
-        "https://bursora.ngrok.app",
-    ],
+    trustedOrigins: [...env().BETTER_AUTH_TRUSTED_ORIGINS],
     database: drizzleAdapter(db(), { provider: "pg", schema }),
     advanced: { database: { generateId: "uuid" } },
     user: { modelName: "users" },

@@ -4,7 +4,7 @@
  * production deps use this so filter semantics stay consistent.
  */
 
-import { usageEvents } from "@/lib/db";
+import { usageEvents } from "@/lib/db/schema";
 import { inArray, type SQL } from "drizzle-orm";
 import type { PgColumn } from "drizzle-orm/pg-core";
 import type { MeteringFilters } from "./metering-read.repository";

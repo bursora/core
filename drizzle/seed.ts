@@ -14,7 +14,11 @@
 
 import { litellmPricingSource } from "@/lib/metering/pricing/litellm-pricing-source.adapter";
 import type { NewPricingRow } from "@/lib/metering/pricing/pricing-row";
-import { syncPricing, type SyncPricingRepo } from "@/lib/metering/pricing/sync-pricing.usecase";
+import {
+    PricingSyncPartialFailure,
+    syncPricing,
+    type SyncPricingRepo,
+} from "@/lib/metering/pricing/sync-pricing.usecase";
 import { and, desc, eq, isNull } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
@@ -61,13 +65,19 @@ const repo: SyncPricingRepo = {
 
 // Backdate effective_from so dev/playground events with backdated ts (e.g.
 // the anomaly baseline) still find a pricing row. Production cron uses now().
-const { inserted, unchanged, failedProviders } = await syncPricing(
-    [litellmPricingSource],
-    repo,
-    new Date("2000-01-01T00:00:00Z"),
-);
-
-const failed = failedProviders.length > 0 ? `, failed: ${failedProviders.join(", ")}` : "";
-console.log(`Pricing sync: ${inserted} inserted, ${unchanged} unchanged${failed}`);
+try {
+    const { inserted, unchanged } = await syncPricing(
+        [litellmPricingSource],
+        repo,
+        new Date("2000-01-01T00:00:00Z"),
+    );
+    console.log(`Pricing sync: ${inserted} inserted, ${unchanged} unchanged`);
+} catch (error: unknown) {
+    if (error instanceof PricingSyncPartialFailure) {
+        console.log(`Pricing sync failed for providers: ${error.failedProviders.join(", ")}`);
+    } else {
+        throw error;
+    }
+}
 
 await sql.end();

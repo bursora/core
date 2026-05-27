@@ -23,7 +23,7 @@
 import "server-only";
 
 import type { Db } from "@/lib/db";
-import { usageEvents, workspaces } from "@/lib/db";
+import { usageEvents, workspaces } from "@/lib/db/schema";
 import { and, asc, eq, gt, gte, sql, sum } from "drizzle-orm";
 import type { SpendPoint } from "./detect-anomaly";
 import type { ScopedSpendSeries, ScopeKey, SpendSeriesSource } from "./spend-series-source";

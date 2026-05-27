@@ -7,8 +7,17 @@
  * server actions.
  */
 
-export * from "./decide";
-export * from "./evaluate";
+export { decideBudgetUseCase, type DecideBudgetInput } from "./decide-budget.usecase";
+export type { BudgetingDeps } from "./server";
+export type { SpendAggregator, SpendAggregatorQuery } from "./spend-aggregator";
+
+export { evaluateBudget } from "./evaluate-budget";
+export type { BudgetTrigger, EvaluateBudgetOptions, EvaluateOutcome } from "./evaluate-budget";
+export { periodWindow } from "./period";
+export type { PeriodWindow } from "./period";
+export { spendKey } from "./spend-snapshot";
+export type { Spend } from "./spend-snapshot";
+
 export * from "./queries";
 
 export {
@@ -21,7 +30,6 @@ export {
     validateScopeType,
     type CreateBudgetUseCaseInput,
 } from "./create-budget.usecase";
-export { deleteBudgetUseCase, type DeleteBudgetUseCaseInput } from "./delete-budget.usecase";
 export {
     updateBudgetUseCase,
     type UpdateBudgetPatch,

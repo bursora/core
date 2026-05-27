@@ -1,6 +1,7 @@
 import "server-only";
 
-import { db, usageEvents } from "@/lib/db";
+import { db } from "@/lib/db";
+import { usageEvents } from "@/lib/db/schema";
 import { and, count, desc, eq, gte, sql } from "drizzle-orm";
 import type { AnomalyAlert } from "../detection";
 import { drizzleAlertRepository } from "../detection";
@@ -77,7 +78,7 @@ export function activityDeps(): ActivityDeps {
             return rows.filter((r): r is AnomalyAlert => r.kind === "anomaly");
         },
         fetchKeyEvents: async (workspaceId) => {
-            const rows = await apiKeys.listByWorkspace(workspaceId);
+            const rows = await apiKeys.listByWorkspace(workspaceId, { includeRevoked: true });
             return rows.map((r) => ({
                 id: r.id,
                 createdAt: r.createdAt,

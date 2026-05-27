@@ -6,7 +6,7 @@
  * repo + spend aggregator; deeper coverage lives in `tests/budgeting/`.
  *
  * Locks the feature folder's public contract: schema re-exports, evaluator,
- * decideBudget use case, create/list/update/delete use cases, and the
+ * decideBudget use case, create/list/update use cases, and the
  * empty-budgets early-return optimization.
  */
 
@@ -14,7 +14,6 @@ import type { SpendAggregator } from "@/lib/budgeting";
 import {
     createBudgetUseCase,
     decideBudgetUseCase,
-    deleteBudgetUseCase,
     evaluateBudget,
     listBudgetsUseCase,
     updateBudgetUseCase,
@@ -24,7 +23,7 @@ import {
     type RawBudget,
     type ScopeType,
 } from "@/lib/budgeting";
-import { budgets as budgetsTable } from "@/lib/db";
+import { budgets as budgetsTable } from "@/lib/db/schema";
 import { InMemoryBudgetRepository } from "@/tests/budgeting/fakes/in-memory-budget.repository";
 import { describe, expect, test } from "bun:test";
 
@@ -112,11 +111,7 @@ describe("@/features/budgeting public API", () => {
         });
         expect(decision.allow).toBe(true);
 
-        const removed = await deleteBudgetUseCase({
-            id: created.id,
-            workspaceId: WORKSPACE,
-            budgets: repo,
-        });
+        const removed = await repo.delete(created.id, WORKSPACE);
         expect(removed).toBe(true);
     });
 

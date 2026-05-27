@@ -43,13 +43,17 @@ export function bannerLevel(input: BannerInput): EventBundleBannerLevel {
 
 /**
  * Cents of overage accrued at the given event count. Events at or below the
- * bundle accrue zero. Past the bundle, every event is 0.03 cents; we ceil to
- * avoid undercharging due to integer arithmetic.
+ * bundle accrue zero. Past the bundle, every event is 0.03 cents.
+ *
+ * Rounded to the nearest cent (Math.round): the per-event ±0.5 cent bias is
+ * symmetric, so over many workspaces and many months the residual averages
+ * to zero. The previous Math.ceil over-billed every workspace whose overage
+ * was not an exact multiple of 1,000 events.
  */
 export function overageCentsAt(eventsCount: number): number {
     const overageEvents = Math.max(0, eventsCount - BUNDLE_EVENTS_PER_MONTH);
     if (overageEvents === 0) return 0;
-    return Math.ceil((overageEvents * OVERAGE_CENTS_PER_1000) / 1000);
+    return Math.round((overageEvents * OVERAGE_CENTS_PER_1000) / 1000);
 }
 
 /**
@@ -70,11 +74,38 @@ export function wouldExceedHardCap(input: {
 }
 
 /**
- * Format YYYY-MM for the given Date in UTC. Calendar months are timezone-
- * agnostic in this context.
+ * Branded `YYYY-MM` string. Construct via `monthKey(date)` for an in-process
+ * Date, or `parseMonthKey(input)` for untrusted external strings (DB rows,
+ * query params, JSON payloads). Direct string literals do not satisfy the
+ * brand; that's the whole point.
  */
-export function monthKey(at: Date): string {
+export type MonthKey = string & { readonly __monthKey: unique symbol };
+
+const MONTH_KEY_PATTERN = /^\d{4}-(0[1-9]|1[0-2])$/;
+
+/**
+ * Format YYYY-MM for the given Date in UTC. Calendar months are timezone-
+ * agnostic in this context. Throws on invalid Date; defensive only, since a
+ * well-formed Date can never produce a bad key.
+ */
+export function monthKey(at: Date): MonthKey {
     const y = at.getUTCFullYear();
     const m = (at.getUTCMonth() + 1).toString().padStart(2, "0");
-    return `${y}-${m}`;
+    const key = `${y}-${m}`;
+    if (!MONTH_KEY_PATTERN.test(key)) {
+        throw new Error(`monthKey: produced invalid key "${key}" from Date input`);
+    }
+    return key as MonthKey;
+}
+
+/**
+ * Parse an untrusted external string into a `MonthKey`. Use at boundaries:
+ * route params, JSON payloads, DB rows from older schemas. Throws on any
+ * deviation from `YYYY-MM` with a real calendar month (01–12).
+ */
+export function parseMonthKey(input: string): MonthKey {
+    if (!MONTH_KEY_PATTERN.test(input)) {
+        throw new Error(`parseMonthKey: invalid month key "${input}" (expected YYYY-MM)`);
+    }
+    return input as MonthKey;
 }

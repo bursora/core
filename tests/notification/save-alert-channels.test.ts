@@ -139,6 +139,17 @@ describe("saveAlertChannels", () => {
         ).rejects.toThrow();
     });
 
+    test("rejects non-HTTPS discord URL", async () => {
+        const { repo } = makeRepo();
+        await expect(
+            saveAlertChannels({
+                channels: repo,
+                workspaceId: "ws-1",
+                input: { discord: { url: "http://discord.com/api/webhooks/123/abc" } },
+            }),
+        ).rejects.toThrow();
+    });
+
     test("rejects empty slack URL string", async () => {
         const { repo } = makeRepo();
         await expect(

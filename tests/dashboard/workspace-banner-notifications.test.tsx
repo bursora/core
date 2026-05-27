@@ -150,7 +150,6 @@ describe("WorkspaceBannerNotifications", () => {
         }
         setSetupErrorsDepsForTesting({
             repo: setupRepo,
-            workspaceExists: async () => true,
             now: () => new Date("2026-05-19T11:00:00.000Z"),
             notifications: new InMemoryNotificationsRepository(),
             listMemberUserIds: async () => [],

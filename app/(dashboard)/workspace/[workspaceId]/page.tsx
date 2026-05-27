@@ -8,7 +8,6 @@ import { requireSessionUI } from "@/lib/auth";
 import { parseWindowKey, resolveWindow, type DashboardWindow } from "@/lib/dashboard-window";
 import { buildWorkspacePath } from "@/lib/routes";
 import { FACETS, type Facet } from "@/lib/spend-types";
-import { oneOf } from "@/lib/type-guards";
 import { Suspense } from "react";
 import { BurnRateTile } from "./_components/burn-rate-tile";
 import { CapacityRow } from "./_components/capacity-row";
@@ -28,15 +27,16 @@ interface DashboardPageProps {
     searchParams: Promise<{ window?: string | string[]; facet?: string }>;
 }
 
-const isFacet = oneOf(FACETS);
-
 export default async function DashboardPage({ params, searchParams }: DashboardPageProps) {
     const session = await requireSessionUI();
     const { workspaceId } = await params;
     const { window: rawWindow, facet: rawFacet } = await searchParams;
     const windowKey = parseWindowKey(rawWindow);
     const dashboardWindow = resolveWindow(windowKey, new Date());
-    const facet: Facet = isFacet(rawFacet) ? rawFacet : "tenant";
+    const facet: Facet =
+        rawFacet !== undefined && (FACETS as readonly string[]).includes(rawFacet)
+            ? (rawFacet as Facet)
+            : "tenant";
 
     return (
         <section className="flex flex-col gap-6">

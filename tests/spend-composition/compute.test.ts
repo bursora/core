@@ -1,4 +1,4 @@
-import { composeSpend, type RawCompositionRow } from "@/lib/spend-composition";
+import { composeSpend, type RawCompositionRow } from "@/lib/spend-composition/compute";
 import { describe, expect, test } from "bun:test";
 
 describe("composeSpend", () => {

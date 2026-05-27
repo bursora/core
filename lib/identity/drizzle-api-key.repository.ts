@@ -37,11 +37,20 @@ export class DrizzleApiKeyRepository implements ApiKeyRepository {
         return row ? toApiKey(row) : null;
     }
 
-    async listByWorkspace(workspaceId: string): Promise<readonly ApiKey[]> {
+    async listByWorkspace(
+        workspaceId: string,
+        opts?: { readonly includeRevoked?: boolean },
+    ): Promise<readonly ApiKey[]> {
+        const where = opts?.includeRevoked
+            ? eq(schema.apiKeys.workspaceId, workspaceId)
+            : and(
+                  eq(schema.apiKeys.workspaceId, workspaceId),
+                  isNull(schema.apiKeys.revokedAt),
+              );
         const rows = await this.db
             .select()
             .from(schema.apiKeys)
-            .where(eq(schema.apiKeys.workspaceId, workspaceId))
+            .where(where)
             .orderBy(desc(schema.apiKeys.createdAt));
         return rows.map(toApiKey);
     }

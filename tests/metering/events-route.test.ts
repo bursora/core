@@ -22,7 +22,7 @@ import { setMeteringDepsForTesting } from "@/lib/metering/server";
 import { setSetupErrorsDepsForTesting } from "@/lib/setup-errors/server";
 import { InMemoryNotificationsRepository } from "@/tests/notifications/fakes/in-memory-notifications.repository";
 import { InMemorySetupErrorRepository } from "@/tests/setup-errors/fakes/in-memory-setup-error.repository";
-import { afterEach, beforeAll, describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeAll, describe, expect, mock, spyOn, test } from "bun:test";
 import { InMemoryUsageEventRepository } from "./fakes/in-memory-usage-event.repository";
 import { StubPricingRepository } from "./fakes/stub-pricing.repository";
 
@@ -113,7 +113,6 @@ const setupHarness = (opts: { knownKey?: boolean } = {}): Harness => {
 
     setSetupErrorsDepsForTesting({
         repo: new InMemorySetupErrorRepository(),
-        workspaceExists: async () => false,
         now: () => new Date(),
         notifications: new InMemoryNotificationsRepository(),
         listMemberUserIds: async () => [],
@@ -199,6 +198,131 @@ describe("POST /api/v1/events", () => {
 
         expect(res.status).toBe(400);
         expect(harness.events.rows.length).toBe(0);
+    });
+
+    test("400 when region exceeds 50 chars", async () => {
+        const harness = setupHarness();
+        const body = JSON.stringify(validEventBody({ region: "a".repeat(51) }));
+
+        const res = await POST(makeRequest(body, { "x-bursora-key": PLAINTEXT }));
+
+        expect(res.status).toBe(400);
+        expect(harness.events.rows.length).toBe(0);
+    });
+
+    test("400 when region contains disallowed characters", async () => {
+        const harness = setupHarness();
+        const body = JSON.stringify(validEventBody({ region: "has space" }));
+
+        const res = await POST(makeRequest(body, { "x-bursora-key": PLAINTEXT }));
+
+        expect(res.status).toBe(400);
+        expect(harness.events.rows.length).toBe(0);
+    });
+
+    test("400 when provider exceeds 64 chars", async () => {
+        const harness = setupHarness();
+        const body = JSON.stringify(validEventBody({ provider: "p".repeat(65) }));
+
+        const res = await POST(makeRequest(body, { "x-bursora-key": PLAINTEXT }));
+
+        expect(res.status).toBe(400);
+        expect(harness.events.rows.length).toBe(0);
+    });
+
+    test("400 when model exceeds 128 chars", async () => {
+        const harness = setupHarness();
+        const body = JSON.stringify(validEventBody({ model: "m".repeat(129) }));
+
+        const res = await POST(makeRequest(body, { "x-bursora-key": PLAINTEXT }));
+
+        expect(res.status).toBe(400);
+        expect(harness.events.rows.length).toBe(0);
+    });
+
+    test("400 when tenantId exceeds 128 chars", async () => {
+        const harness = setupHarness();
+        const body = JSON.stringify(validEventBody({ tenantId: "t".repeat(129) }));
+
+        const res = await POST(makeRequest(body, { "x-bursora-key": PLAINTEXT }));
+
+        expect(res.status).toBe(400);
+        expect(harness.events.rows.length).toBe(0);
+    });
+
+    test("400 when agentId exceeds 128 chars", async () => {
+        const harness = setupHarness();
+        const body = JSON.stringify(validEventBody({ agentId: "a".repeat(129) }));
+
+        const res = await POST(makeRequest(body, { "x-bursora-key": PLAINTEXT }));
+
+        expect(res.status).toBe(400);
+        expect(harness.events.rows.length).toBe(0);
+    });
+
+    test("400 when workflowId exceeds 128 chars", async () => {
+        const harness = setupHarness();
+        const body = JSON.stringify(validEventBody({ workflowId: "w".repeat(129) }));
+
+        const res = await POST(makeRequest(body, { "x-bursora-key": PLAINTEXT }));
+
+        expect(res.status).toBe(400);
+        expect(harness.events.rows.length).toBe(0);
+    });
+
+    test("400 when requestId exceeds 128 chars", async () => {
+        const harness = setupHarness();
+        const body = JSON.stringify(validEventBody({ requestId: "r".repeat(129) }));
+
+        const res = await POST(makeRequest(body, { "x-bursora-key": PLAINTEXT }));
+
+        expect(res.status).toBe(400);
+        expect(harness.events.rows.length).toBe(0);
+    });
+
+    test("400 invalid_body logs sanitized Zod issues with workspace + apiKey id, no raw payload", async () => {
+        setupHarness();
+        const warn = spyOn(console, "warn").mockImplementation(() => {});
+        // Bad payload: provider too long (>64) so the SDK author can see which
+        // field violated which constraint without us echoing the raw bytes.
+        const rawPayload = "p".repeat(70);
+        const body = JSON.stringify({
+            events: [
+                {
+                    provider: rawPayload,
+                    model: "gpt-4o",
+                    region: "global",
+                    promptTokens: 1,
+                    completionTokens: 1,
+                    cacheTokens: 0,
+                    ts: "2025-05-10T12:00:00.000Z",
+                },
+            ],
+        });
+
+        const res = await POST(makeRequest(body, { "x-bursora-key": PLAINTEXT }));
+        const json = await res.json();
+
+        expect(res.status).toBe(400);
+        expect(json).toEqual({ error: "invalid_body" });
+
+        const invalidBodyCall = warn.mock.calls.find((c) => c[0] === "v1.invalid_body");
+        expect(invalidBodyCall).toBeDefined();
+        const payload = invalidBodyCall?.[1] as Record<string, unknown>;
+        expect(payload.route).toBe("/api/v1/events");
+        expect(payload.workspaceId).toBe(WORKSPACE);
+        expect(payload.apiKeyId).toBe(API_KEY_ID);
+        const issues = payload.issues as Array<{ path: string; code: string; message: string }>;
+        expect(Array.isArray(issues)).toBe(true);
+        expect(issues.length).toBeGreaterThan(0);
+        expect(issues[0]?.path).toBe("events.0.provider");
+        expect(typeof issues[0]?.code).toBe("string");
+        expect(typeof issues[0]?.message).toBe("string");
+        // Raw user payload must never appear in the log entry.
+        const serialized = JSON.stringify(payload);
+        expect(serialized.includes(rawPayload)).toBe(false);
+
+        warn.mockRestore();
     });
 
     test("unknown model → 202 with cost_usd = 0", async () => {

@@ -14,9 +14,9 @@
  * sends events for a model the daily pricing cron has not yet scraped.
  */
 
-import type { PricingRepository } from "./pricing";
-import { lookup as lookupPricingRow } from "./pricing";
 import { calculateCost } from "./pricing/calculate-cost";
+import { lookup as lookupPricingRow } from "./pricing/lookup";
+import type { PricingRepository } from "./pricing/pricing-row";
 import type { UsageEventInput, UsageEventRow } from "./usage-event";
 import type { UsageEventRepository } from "./usage-event.repository";
 

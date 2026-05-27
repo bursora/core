@@ -9,7 +9,6 @@
 
 export type { BudgetStats } from "./server";
 
-export { getBudgetUseCase, type GetBudgetUseCaseInput } from "./get-budget.usecase";
 export { listBudgetsUseCase, type ListBudgetsInput } from "./list-budgets.usecase";
 
 export type {

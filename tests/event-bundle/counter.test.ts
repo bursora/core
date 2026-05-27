@@ -4,6 +4,7 @@
  *   - overage cents computation
  *   - hard-cap projection
  *   - monthKey formatting
+ *   - parseMonthKey validation
  */
 
 import {
@@ -12,6 +13,7 @@ import {
     bannerLevel,
     monthKey,
     overageCentsAt,
+    parseMonthKey,
     wouldExceedHardCap,
 } from "@/lib/event-bundle/counter";
 import { describe, expect, test } from "bun:test";
@@ -79,9 +81,43 @@ describe("overageCentsAt", () => {
         expect(overageCentsAt(BUNDLE_EVENTS_PER_MONTH + 10_000)).toBe(10 * OVERAGE_CENTS_PER_1000);
     });
 
-    test("partial 1000 ceils up", () => {
-        expect(overageCentsAt(BUNDLE_EVENTS_PER_MONTH + 1)).toBe(1);
+    test("partial 1000 rounds to nearest cent", () => {
+        // 1 event past bundle = 0.03c → rounds to 0
+        expect(overageCentsAt(BUNDLE_EVENTS_PER_MONTH + 1)).toBe(0);
+        // 17 events = 0.51c → rounds to 1
+        expect(overageCentsAt(BUNDLE_EVENTS_PER_MONTH + 17)).toBe(1);
+        // 500 events = 15c exactly
         expect(overageCentsAt(BUNDLE_EVENTS_PER_MONTH + 500)).toBe(15);
+        // 1500 events = 45c exactly
+        expect(overageCentsAt(BUNDLE_EVENTS_PER_MONTH + 1_500)).toBe(45);
+    });
+
+    test("each input is within 0.5 cents of the exact cost", () => {
+        // Property: for any overage count, the rounded cent value never
+        // deviates from the true fractional cost by more than half a cent.
+        for (let overage = 0; overage <= 10_000; overage += 7) {
+            const rounded = overageCentsAt(BUNDLE_EVENTS_PER_MONTH + overage);
+            const exact = (overage * OVERAGE_CENTS_PER_1000) / 1000;
+            expect(Math.abs(rounded - exact)).toBeLessThanOrEqual(0.5);
+        }
+    });
+
+    test("sum over uniform overage counts is not biased upward", () => {
+        // Property: across a contiguous range of overage counts the total of
+        // rounded cents should track the exact total closely (sub-cent per
+        // input on average), proving there is no systematic upward bias.
+        // The previous Math.ceil over-billed by roughly half a cent per
+        // input — ~500 cents over this 1000-input range.
+        let roundedTotal = 0;
+        let exactTotal = 0;
+        const inputs = 1_000;
+        for (let overage = 1; overage <= inputs; overage += 1) {
+            roundedTotal += overageCentsAt(BUNDLE_EVENTS_PER_MONTH + overage);
+            exactTotal += (overage * OVERAGE_CENTS_PER_1000) / 1000;
+        }
+        // Average residual per input is well under one cent.
+        const averageResidual = Math.abs(roundedTotal - exactTotal) / inputs;
+        expect(averageResidual).toBeLessThan(0.05);
     });
 });
 
@@ -129,11 +165,39 @@ describe("wouldExceedHardCap", () => {
 
 describe("monthKey", () => {
     test("formats UTC date as YYYY-MM", () => {
-        expect(monthKey(new Date("2025-01-15T12:00:00Z"))).toBe("2025-01");
-        expect(monthKey(new Date("2025-12-31T23:59:59Z"))).toBe("2025-12");
+        expect<string>(monthKey(new Date("2025-01-15T12:00:00Z"))).toBe("2025-01");
+        expect<string>(monthKey(new Date("2025-12-31T23:59:59Z"))).toBe("2025-12");
     });
 
     test("pads single-digit months", () => {
-        expect(monthKey(new Date("2025-03-01T00:00:00Z"))).toBe("2025-03");
+        expect<string>(monthKey(new Date("2025-03-01T00:00:00Z"))).toBe("2025-03");
+    });
+});
+
+describe("parseMonthKey", () => {
+    test("accepts a valid YYYY-MM string and round-trips through monthKey", () => {
+        const at = new Date("2025-07-04T00:00:00Z");
+        const key = monthKey(at);
+        expect(parseMonthKey(key)).toBe(key);
+        expect(parseMonthKey("2025-07")).toBe(key);
+    });
+
+    test("rejects out-of-range months", () => {
+        expect(() => parseMonthKey("2024-13")).toThrow();
+        expect(() => parseMonthKey("2024-00")).toThrow();
+    });
+
+    test("rejects non-numeric segments", () => {
+        expect(() => parseMonthKey("abcd-12")).toThrow();
+    });
+
+    test("rejects unpadded months", () => {
+        expect(() => parseMonthKey("2024-1")).toThrow();
+    });
+
+    test("rejects extra characters", () => {
+        expect(() => parseMonthKey("2024-01-01")).toThrow();
+        expect(() => parseMonthKey(" 2024-01")).toThrow();
+        expect(() => parseMonthKey("2024-01 ")).toThrow();
     });
 });

@@ -18,6 +18,7 @@
 
 import { checkEventBundleHardCap, recordEventBundleUsage } from "@/lib/event-bundle/middleware";
 import { recordAuthFailure, withBursoraKey } from "@/lib/identity/with-bursora-key";
+import { logInvalidBody } from "@/lib/log-invalid-body";
 import { ingestEvents } from "@/lib/metering/server";
 import { applyRateLimit } from "@/lib/rate-limit/middleware";
 import { recordSetupError } from "@/lib/setup-errors/server";
@@ -28,18 +29,22 @@ import { z } from "zod";
 export const dynamic = "force-dynamic";
 
 const eventSchema = z.object({
-    provider: z.string().min(1),
-    model: z.string().min(1),
-    region: z.string().min(1).default("global"),
+    provider: z.string().min(1).max(64),
+    model: z.string().min(1).max(128),
+    region: z
+        .string()
+        .max(50)
+        .regex(/^[a-z0-9-]+$/i)
+        .default("global"),
     promptTokens: z.number().int().nonnegative(),
     completionTokens: z.number().int().nonnegative(),
     cacheTokens: z.number().int().nonnegative().default(0),
     ts: z.iso.datetime(),
-    tenantId: z.string().nullable().optional(),
-    agentId: z.string().nullable().optional(),
-    workflowId: z.string().nullable().optional(),
+    tenantId: z.string().max(128).nullable().optional(),
+    agentId: z.string().max(128).nullable().optional(),
+    workflowId: z.string().max(128).nullable().optional(),
     latencyMs: z.number().int().nonnegative().nullable().optional(),
-    requestId: z.string().nullable().optional(),
+    requestId: z.string().max(128).nullable().optional(),
 });
 
 const bodySchema = z.object({
@@ -56,6 +61,14 @@ export async function POST(request: Request): Promise<NextResponse> {
     const rawBody = await request.text();
     const parsed = parseBody(rawBody);
     if (!parsed.ok) {
+        if (parsed.reason === "invalid_body") {
+            logInvalidBody({
+                route: "/api/v1/events",
+                workspaceId: auth.apiKey.workspaceId,
+                apiKeyId: auth.apiKey.id,
+                issues: parsed.issues,
+            });
+        }
         void recordSetupError({
             kind: "ingest_invalid_body",
             workspaceId: auth.apiKey.workspaceId,
@@ -101,7 +114,10 @@ export async function POST(request: Request): Promise<NextResponse> {
     return NextResponse.json({ status: "accepted" }, { status: 202 });
 }
 
-type ParseResult = { ok: true; value: z.infer<typeof bodySchema> } | { ok: false; reason: string };
+type ParseResult =
+    | { ok: true; value: z.infer<typeof bodySchema> }
+    | { ok: false; reason: "invalid_json" }
+    | { ok: false; reason: "invalid_body"; issues: readonly z.core.$ZodIssue[] };
 
 function parseBody(rawBody: string): ParseResult {
     let json: unknown;
@@ -112,7 +128,7 @@ function parseBody(rawBody: string): ParseResult {
     }
     const result = bodySchema.safeParse(json);
     if (!result.success) {
-        return { ok: false, reason: "invalid_body" };
+        return { ok: false, reason: "invalid_body", issues: result.error.issues };
     }
     return { ok: true, value: result.data };
 }

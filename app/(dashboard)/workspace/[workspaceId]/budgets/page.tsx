@@ -4,12 +4,9 @@ import { MODES, type BudgetListFilter, type BudgetMode } from "@/lib/budgeting";
 import { getBudgetStats, listBudgets } from "@/lib/budgeting/server";
 import { listDistinctMeteringValuesBulk } from "@/lib/metering/server";
 import { readParamList } from "@/lib/search-params";
-import { oneOf } from "@/lib/type-guards";
 import { BudgetCreateButton } from "./_components/budget-create-button";
 import { BudgetsList } from "./_components/budgets-list";
 import { createBudgetAction, deleteBudgetAction, updateBudgetAction } from "./actions";
-
-const isMode = oneOf(MODES);
 
 interface BudgetsPageProps {
     params: Promise<{ workspaceId: string }>;
@@ -29,7 +26,7 @@ export default async function BudgetsPage({ params, searchParams }: BudgetsPageP
     const tenantId = readParamList(search.tenant_id);
     const agentId = readParamList(search.agent_id);
     const workflowId = readParamList(search.workflow_id);
-    const activeMode: BudgetMode | null = isMode(search.mode ?? "")
+    const activeMode: BudgetMode | null = (MODES as readonly string[]).includes(search.mode ?? "")
         ? (search.mode as BudgetMode)
         : null;
 

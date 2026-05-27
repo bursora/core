@@ -6,7 +6,7 @@
  * flows; lower-level tests in `tests/metering/` cover the deep paths.
  */
 
-import { usageEvents } from "@/lib/db";
+import { usageEvents } from "@/lib/db/schema";
 import {
     countEventsForWorkspaceUseCase,
     getSpendSeriesUseCase,

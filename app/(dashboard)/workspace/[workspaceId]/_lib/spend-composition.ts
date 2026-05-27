@@ -3,7 +3,7 @@ import {
     composeSpend,
     type CustomerComposition,
     type RawCompositionRow,
-} from "@/lib/spend-composition";
+} from "@/lib/spend-composition/compute";
 import { and, eq, gte, isNotNull, lt, sum } from "drizzle-orm";
 import "server-only";
 import { withRequestMemo } from "./per-request-cache";

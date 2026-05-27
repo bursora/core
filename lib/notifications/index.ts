@@ -4,10 +4,15 @@ export type {
     NotificationDeliveryStatus,
 } from "./channel-health";
 export {
+    DEFAULT_NOTIFICATIONS_PAGE_LIMIT,
     getChannelHealth,
     listNotifications,
+    listNotificationsPage,
     markNotificationsRead,
+    MAX_NOTIFICATIONS_PAGE_LIMIT,
     type ListNotificationsInput,
+    type ListNotificationsPageInput,
+    type NotificationsPage,
 } from "./server";
 export type {
     NotificationDisplay,

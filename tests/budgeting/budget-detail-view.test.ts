@@ -9,14 +9,13 @@
  *
  * Two contracts:
  *   1. A budget id from another workspace MUST resolve to null so the page
- *      404s. Workspace isolation is enforced by `getBudgetUseCase`.
+ *      404s. Workspace isolation is enforced by the repository's WHERE clause.
  *   2. A found budget + stats + cumulative series MUST produce the strings,
  *      ratios, and links the page reads at render time (cap, spend, percent,
  *      "view in spend" href, header title/subtitle).
  */
 
 import { buildBudgetDetailView } from "@/lib/budgeting/budget-detail-view";
-import { getBudgetUseCase } from "@/lib/budgeting/get-budget.usecase";
 import { describe, expect, test } from "bun:test";
 import { InMemoryBudgetRepository } from "./fakes/in-memory-budget.repository";
 
@@ -35,11 +34,7 @@ describe("budget detail data path", () => {
             mode: "block",
         });
 
-        const found = await getBudgetUseCase({
-            id: seeded.id,
-            workspaceId: WORKSPACE_A,
-            budgets: repo,
-        });
+        const found = await repo.findById(seeded.id, WORKSPACE_A);
 
         expect(found).toBeNull();
     });
@@ -55,11 +50,7 @@ describe("budget detail data path", () => {
             mode: "block",
         });
 
-        const found = await getBudgetUseCase({
-            id: budget.id,
-            workspaceId: WORKSPACE_A,
-            budgets: repo,
-        });
+        const found = await repo.findById(budget.id, WORKSPACE_A);
         expect(found).not.toBeNull();
         if (found === null) throw new Error("unreachable");
 
@@ -106,11 +97,7 @@ describe("budget detail data path", () => {
             mode: "notify",
         });
 
-        const found = await getBudgetUseCase({
-            id: budget.id,
-            workspaceId: WORKSPACE_A,
-            budgets: repo,
-        });
+        const found = await repo.findById(budget.id, WORKSPACE_A);
         if (found === null) throw new Error("unreachable");
 
         const view = buildBudgetDetailView({

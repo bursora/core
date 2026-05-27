@@ -6,8 +6,10 @@
  *   2. Differing rate → close previous (effective_to = now) + insert new (effective_from = now)
  *   3. New (provider, model) row with no existing → insert directly
  *   4. Workspace-scoped override rows are NOT touched by global sync
- *   5. One source throws → other sources still process; failed surfaced in summary
- *   6. Run summary includes: inserted count, unchanged count, failed providers list
+ *   5. One source throws → other sources still process, then the use case
+ *      throws PricingSyncPartialFailure carrying the failed providers
+ *   6. All sources succeed → heartbeat recorder is invoked with `now`
+ *   7. Any source fails → heartbeat recorder is NOT invoked
  *
  * Tests use an in-memory mock repo and stub sources. They exercise the public
  * `syncPricing(sources, repo, now)` interface only — no DB, no HTTP.
@@ -19,7 +21,10 @@ import type {
     PricingRow,
 } from "@/lib/metering/pricing/pricing-row";
 import type { PricingSource, ScrapedRate } from "@/lib/metering/pricing/pricing-source";
-import { syncPricing } from "@/lib/metering/pricing/sync-pricing.usecase";
+import {
+    PricingSyncPartialFailure,
+    syncPricing,
+} from "@/lib/metering/pricing/sync-pricing.usecase";
 import { describe, expect, test } from "bun:test";
 
 // -- Fixtures ----------------------------------------------------------------
@@ -166,7 +171,6 @@ describe("syncPricing", () => {
         expect(calls.closed.length).toBe(0);
         expect(summary.inserted).toBe(0);
         expect(summary.unchanged).toBe(1);
-        expect(summary.failedProviders).toEqual([]);
     });
 
     test("differing rate → close previous and insert new", async () => {
@@ -248,7 +252,7 @@ describe("syncPricing", () => {
         expect(summary.unchanged).toBe(1);
     });
 
-    test("one source throws → other sources still process; failed surfaced in summary", async () => {
+    test("one source throws → other sources still process, then throws PricingSyncPartialFailure", async () => {
         const { repo, calls } = makeRepo([]);
         const failing = makeFailingSource("anthropic", "network down");
         const ok = makeSource("openai", [scrapedRate({ provider: "openai", model: "gpt-5" })]);
@@ -256,23 +260,68 @@ describe("syncPricing", () => {
             scrapedRate({ provider: "google", model: "gemini-pro" }),
         ]);
 
-        const summary = await syncPricing([failing, ok, okSecond], repo, NOW);
+        let caught: unknown = null;
+        try {
+            await syncPricing([failing, ok, okSecond], repo, NOW);
+        } catch (error) {
+            caught = error;
+        }
 
-        expect(summary.failedProviders).toEqual(["anthropic"]);
-        expect(summary.inserted).toBe(2);
-        expect(summary.unchanged).toBe(0);
+        expect(caught).toBeInstanceOf(PricingSyncPartialFailure);
+        expect((caught as PricingSyncPartialFailure).failedProviders).toEqual(["anthropic"]);
+        // Other sources still processed before the throw.
         expect(calls.inserted.length).toBe(2);
     });
 
-    test("multiple sources fail → both reported", async () => {
+    test("multiple sources fail → thrown error lists every failed provider", async () => {
         const { repo } = makeRepo([]);
         const failingA = makeFailingSource("anthropic", "boom");
         const failingB = makeFailingSource("google", "timeout");
 
-        const summary = await syncPricing([failingA, failingB], repo, NOW);
+        let caught: unknown = null;
+        try {
+            await syncPricing([failingA, failingB], repo, NOW);
+        } catch (error) {
+            caught = error;
+        }
 
-        expect(summary.failedProviders).toEqual(["anthropic", "google"]);
-        expect(summary.inserted).toBe(0);
-        expect(summary.unchanged).toBe(0);
+        expect(caught).toBeInstanceOf(PricingSyncPartialFailure);
+        expect((caught as PricingSyncPartialFailure).failedProviders).toEqual([
+            "anthropic",
+            "google",
+        ]);
+    });
+
+    test("all sources succeed → heartbeat recorder is invoked with `now`", async () => {
+        const { repo } = makeRepo([]);
+        const source = makeSource("openai", [scrapedRate({ model: "gpt-5" })]);
+
+        const recordedAt: Date[] = [];
+        const recordHeartbeat = async (at: Date): Promise<void> => {
+            recordedAt.push(at);
+        };
+
+        await syncPricing([source], repo, NOW, { recordHeartbeat });
+
+        expect(recordedAt).toEqual([NOW]);
+    });
+
+    test("any source fails → heartbeat recorder is NOT invoked", async () => {
+        const { repo } = makeRepo([]);
+        const failing = makeFailingSource("anthropic", "network down");
+        const ok = makeSource("openai", [scrapedRate({ model: "gpt-5" })]);
+
+        let called = false;
+        const recordHeartbeat = async (): Promise<void> => {
+            called = true;
+        };
+
+        try {
+            await syncPricing([failing, ok], repo, NOW, { recordHeartbeat });
+        } catch {
+            // Expected.
+        }
+
+        expect(called).toBe(false);
     });
 });

@@ -1,5 +1,6 @@
 import { API_KEY_PREFIX, issueApiKeyUseCase } from "@/lib/identity";
 import { describe, expect, test } from "bun:test";
+import { InMemoryApiKeyAuditLogRepository } from "./fakes/in-memory-api-key-audit-log.repository";
 import { InMemoryApiKeyRepository } from "./fakes/in-memory-api-key.repository";
 
 const PEPPER = "test-pepper-do-not-use-in-prod";
@@ -14,6 +15,7 @@ describe("issueApiKeyUseCase", () => {
             name: "test",
             pepper: PEPPER,
             keys: repo,
+            audit: new InMemoryApiKeyAuditLogRepository(),
         });
 
         expect(issued.workspaceId).toBe(workspaceId);
@@ -35,12 +37,14 @@ describe("issueApiKeyUseCase", () => {
             name: "test",
             pepper: PEPPER,
             keys: repo,
+            audit: new InMemoryApiKeyAuditLogRepository(),
         });
         const b = await issueApiKeyUseCase({
             workspaceId,
             name: "test",
             pepper: PEPPER,
             keys: repo,
+            audit: new InMemoryApiKeyAuditLogRepository(),
         });
 
         expect(a.plaintext).not.toBe(b.plaintext);

@@ -9,7 +9,6 @@
 
 import { resolveBudgetDetailTab } from "@/app/(dashboard)/workspace/[workspaceId]/budgets/[budgetId]/tabs";
 import { buildBudgetDetailView } from "@/lib/budgeting/budget-detail-view";
-import { getBudgetUseCase } from "@/lib/budgeting/get-budget.usecase";
 import type { UsageEventRow } from "@/lib/metering";
 import { InMemoryMeteringReadRepository } from "@/tests/metering/fakes/in-memory-metering-read.repository";
 import { describe, expect, test } from "bun:test";
@@ -55,11 +54,7 @@ describe("budget detail tabs data path", () => {
             mode: "block",
         });
 
-        const found = await getBudgetUseCase({
-            id: budget.id,
-            workspaceId: WORKSPACE_A,
-            budgets,
-        });
+        const found = await budgets.findById(budget.id, WORKSPACE_A);
         if (found === null) throw new Error("unreachable");
 
         const periodFrom = new Date("2025-05-01T00:00:00Z");

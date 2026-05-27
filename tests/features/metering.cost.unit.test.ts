@@ -6,7 +6,7 @@
  */
 
 import { calculateCost } from "@/lib/metering";
-import type { PricingRow } from "@/lib/metering/pricing";
+import type { PricingRow } from "@/lib/metering/pricing/pricing-row";
 import { describe, expect, test } from "bun:test";
 
 const row = (overrides: Partial<PricingRow> = {}): PricingRow => ({

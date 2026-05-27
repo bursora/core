@@ -9,7 +9,7 @@
 import "server-only";
 
 import type { Db } from "@/lib/db";
-import { pricing } from "@/lib/db";
+import { pricing } from "@/lib/db/schema";
 import { and, desc, eq, isNull, or } from "drizzle-orm";
 import type { NewPricingRow, PricingRepository, PricingRow } from "./pricing-row";
 

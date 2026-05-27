@@ -1,31 +1,60 @@
+import { AppShell } from "@/components/shell/app-shell";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { UserAvatar } from "@/components/ui/user-avatar";
 import { requireSessionUI } from "@/lib/auth";
+import { Check } from "lucide-react";
 import { AccountMetaCard } from "./_components/account-meta-card";
-import { IdentityCard } from "./_components/identity-card";
-import { VerificationBadge } from "./_components/verification-badge";
+import { ProfileForm } from "./_components/profile-form";
 
 export default async function ProfilePage() {
     const session = await requireSessionUI();
     const user = session.user;
 
     return (
-        <div className="mx-auto max-w-2xl space-y-6">
-            <header className="flex items-center gap-4">
-                <UserAvatar size="xl" userId={user.id} name={user.name} email={user.email} />
-                <div className="min-w-0 space-y-1">
-                    <h1 className="truncate text-2xl font-semibold tracking-tight">{user.name}</h1>
-                    <div className="flex flex-wrap items-center gap-2">
-                        <span className="truncate text-sm text-muted-foreground">{user.email}</span>
-                        <VerificationBadge verified={user.emailVerified} />
+        <AppShell>
+            <div className="mx-auto max-w-2xl space-y-6">
+                <header className="flex items-center gap-4">
+                    <UserAvatar size="xl" userId={user.id} name={user.name} email={user.email} />
+                    <div className="min-w-0 space-y-1">
+                        <h1 className="truncate text-2xl font-semibold tracking-tight">
+                            {user.name}
+                        </h1>
+                        <div className="flex flex-wrap items-center gap-2">
+                            <span className="truncate text-sm text-muted-foreground">
+                                {user.email}
+                            </span>
+                            <Badge
+                                variant="secondary"
+                                className={
+                                    user.emailVerified
+                                        ? "bg-emerald-100 text-emerald-900 dark:bg-emerald-900/40 dark:text-emerald-100"
+                                        : "bg-amber-100 text-amber-900 dark:bg-amber-900/40 dark:text-amber-100"
+                                }
+                            >
+                                {user.emailVerified ? <Check /> : null}
+                                {user.emailVerified ? "Verified" : "Unverified"}
+                            </Badge>
+                        </div>
                     </div>
-                </div>
-            </header>
+                </header>
 
-            <IdentityCard currentName={user.name} />
-            <AccountMetaCard
-                createdAt={user.createdAt}
-                sessionCreatedAt={session.session.createdAt}
-            />
-        </div>
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Display name</CardTitle>
+                        <CardDescription>
+                            Shown next to your avatar across Bursora.
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <ProfileForm currentName={user.name} />
+                    </CardContent>
+                </Card>
+                <AccountMetaCard
+                    createdAt={user.createdAt}
+                    sessionCreatedAt={session.session.createdAt}
+                />
+            </div>
+        </AppShell>
     );
 }

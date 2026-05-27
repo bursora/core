@@ -12,6 +12,7 @@
  */
 
 import { recordAuthFailure, withBursoraKey } from "@/lib/identity/with-bursora-key";
+import { logInvalidBody } from "@/lib/log-invalid-body";
 import { recordSetupError } from "@/lib/setup-errors/server";
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -29,6 +30,14 @@ export async function POST(request: Request): Promise<NextResponse> {
     const rawBody = await request.text();
     const parsed = parseBody(rawBody);
     if (!parsed.ok) {
+        if (parsed.reason === "invalid_body") {
+            logInvalidBody({
+                route: "/api/v1/setup-error",
+                workspaceId: auth.apiKey.workspaceId,
+                apiKeyId: auth.apiKey.id,
+                issues: parsed.issues,
+            });
+        }
         return NextResponse.json({ error: parsed.reason }, { status: 400 });
     }
 
@@ -40,7 +49,10 @@ export async function POST(request: Request): Promise<NextResponse> {
     return NextResponse.json({ status: "accepted" }, { status: 202 });
 }
 
-type ParseResult = { ok: true; value: z.infer<typeof bodySchema> } | { ok: false; reason: string };
+type ParseResult =
+    | { ok: true; value: z.infer<typeof bodySchema> }
+    | { ok: false; reason: "invalid_json" }
+    | { ok: false; reason: "invalid_body"; issues: readonly z.core.$ZodIssue[] };
 
 function parseBody(rawBody: string): ParseResult {
     let json: unknown;
@@ -51,7 +63,7 @@ function parseBody(rawBody: string): ParseResult {
     }
     const result = bodySchema.safeParse(json);
     if (!result.success) {
-        return { ok: false, reason: "invalid_body" };
+        return { ok: false, reason: "invalid_body", issues: result.error.issues };
     }
     return { ok: true, value: result.data };
 }

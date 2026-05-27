@@ -7,6 +7,8 @@ import { channelHealthFromSources } from "./channel-health-query";
 import { drizzleNotificationDeliveriesRepository } from "./notification-deliveries.repository";
 import {
     drizzleNotificationsRepository,
+    encodeNotificationsCursor,
+    parseNotificationsCursor,
     type NotificationsRepository,
 } from "./notifications.repository";
 import type { NotificationDisplay, NotificationItem, NotificationSource } from "./types";
@@ -32,16 +34,10 @@ export interface ListNotificationsInput {
     readonly display?: NotificationDisplay;
 }
 
-export async function listNotifications(
-    input: ListNotificationsInput,
-): Promise<readonly NotificationItem[]> {
-    const rows = await repo().listForUser({
-        userId: input.userId,
-        ...(input.workspaceId !== undefined ? { workspaceId: input.workspaceId } : {}),
-        ...(input.sources !== undefined ? { sources: input.sources } : {}),
-        ...(input.display !== undefined ? { display: input.display } : {}),
-    });
-    return rows.map((row) => ({
+function toNotificationItem(
+    row: Awaited<ReturnType<NotificationsRepository["listForUser"]>>[number],
+): NotificationItem {
+    return {
         id: row.id,
         workspaceName: row.workspaceName,
         source: row.source,
@@ -53,7 +49,62 @@ export async function listNotifications(
         href: row.href,
         read: row.readAt !== null,
         display: row.display,
-    }));
+    };
+}
+
+export async function listNotifications(
+    input: ListNotificationsInput,
+): Promise<readonly NotificationItem[]> {
+    const rows = await repo().listForUser({
+        userId: input.userId,
+        ...(input.workspaceId !== undefined ? { workspaceId: input.workspaceId } : {}),
+        ...(input.sources !== undefined ? { sources: input.sources } : {}),
+        ...(input.display !== undefined ? { display: input.display } : {}),
+    });
+    return rows.map(toNotificationItem);
+}
+
+export const DEFAULT_NOTIFICATIONS_PAGE_LIMIT = 50;
+export const MAX_NOTIFICATIONS_PAGE_LIMIT = 100;
+
+export interface ListNotificationsPageInput {
+    readonly userId: string;
+    readonly limit?: number;
+    readonly cursor?: string | null;
+}
+
+export interface NotificationsPage {
+    readonly items: readonly NotificationItem[];
+    readonly nextCursor: string | null;
+}
+
+/**
+ * Paginated cross-workspace feed for the bell. Caps the result set so a
+ * user belonging to many workspaces can't blow the response. The cursor
+ * encodes `(createdAt, id)` so rows sharing a timestamp page cleanly.
+ */
+export async function listNotificationsPage(
+    input: ListNotificationsPageInput,
+): Promise<NotificationsPage> {
+    const limit = Math.min(
+        input.limit ?? DEFAULT_NOTIFICATIONS_PAGE_LIMIT,
+        MAX_NOTIFICATIONS_PAGE_LIMIT,
+    );
+    const cursor = parseNotificationsCursor(input.cursor);
+    // Fetch limit+1 to detect "has more" without a second round-trip.
+    const rows = await repo().listForUser({
+        userId: input.userId,
+        limit: limit + 1,
+        ...(cursor !== null ? { cursor } : {}),
+    });
+    const hasMore = rows.length > limit;
+    const page = hasMore ? rows.slice(0, limit) : rows;
+    const last = page[page.length - 1];
+    const nextCursor =
+        hasMore && last !== undefined
+            ? encodeNotificationsCursor({ createdAtMs: last.createdAt.getTime(), id: last.id })
+            : null;
+    return { items: page.map(toNotificationItem), nextCursor };
 }
 
 export async function markNotificationsRead(input: {

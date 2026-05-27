@@ -1,4 +1,9 @@
-import { generateApiKeyPlaintext, hashApiKey, parseApiKeyPlaintext } from "@/lib/identity";
+import {
+    API_KEY_RANDOM_LENGTH,
+    generateApiKeyPlaintext,
+    hashApiKey,
+    parseApiKeyPlaintext,
+} from "@/lib/identity";
 import { describe, expect, test } from "bun:test";
 
 describe("hashApiKey", () => {
@@ -49,5 +54,17 @@ describe("parseApiKeyPlaintext", () => {
 
     test("returns null on wrong-length random segment", () => {
         expect(parseApiKeyPlaintext("bsk_w_abc")).toBeNull();
+    });
+
+    test("returns null when secret is one char short of API_KEY_RANDOM_LENGTH", () => {
+        const wid = "11111111-2222-3333-4444-555555555555";
+        const short = "a".repeat(API_KEY_RANDOM_LENGTH - 1);
+        expect(parseApiKeyPlaintext(`bsk_${wid}_${short}`)).toBeNull();
+    });
+
+    test("returns null when secret is one char longer than API_KEY_RANDOM_LENGTH", () => {
+        const wid = "11111111-2222-3333-4444-555555555555";
+        const long = "a".repeat(API_KEY_RANDOM_LENGTH + 1);
+        expect(parseApiKeyPlaintext(`bsk_${wid}_${long}`)).toBeNull();
     });
 });

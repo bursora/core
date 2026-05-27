@@ -53,6 +53,9 @@ export class InMemoryMemberRepository implements MemberRepository {
 export class InMemoryInviteRepository implements InviteRepository {
     private readonly rows = new Map<string, Invite>();
 
+    /** Test-only: artificial delay inside `findByToken` to widen the TOCTOU window. */
+    findByTokenDelayMs = 0;
+
     async create(input: {
         token: string;
         workspaceId: string;
@@ -76,13 +79,18 @@ export class InMemoryInviteRepository implements InviteRepository {
     }
 
     async findByToken(token: string): Promise<Invite | null> {
+        if (this.findByTokenDelayMs > 0) {
+            await new Promise((resolve) => setTimeout(resolve, this.findByTokenDelayMs));
+        }
         return this.rows.get(token) ?? null;
     }
 
-    async markAccepted(token: string, acceptedAt: Date): Promise<void> {
+    async claim(token: string, acceptedAt: Date): Promise<Invite | null> {
         const existing = this.rows.get(token);
-        if (!existing) return;
-        this.rows.set(token, { ...existing, acceptedAt });
+        if (!existing || existing.acceptedAt !== null) return null;
+        const claimed: Invite = { ...existing, acceptedAt };
+        this.rows.set(token, claimed);
+        return claimed;
     }
 
     async deletePending(input: { workspaceId: string; email: string }): Promise<number> {
@@ -104,5 +112,13 @@ export class InMemoryInviteRepository implements InviteRepository {
         return [...this.rows.values()]
             .filter((r) => r.workspaceId === workspaceId && r.acceptedAt === null)
             .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+    }
+
+    async countPendingByWorkspace(workspaceId: string): Promise<number> {
+        let n = 0;
+        for (const row of this.rows.values()) {
+            if (row.workspaceId === workspaceId && row.acceptedAt === null) n += 1;
+        }
+        return n;
     }
 }

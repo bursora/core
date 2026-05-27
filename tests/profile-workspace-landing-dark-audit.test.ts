@@ -21,10 +21,9 @@ import { join } from "node:path";
 const REPO_ROOT = join(import.meta.dir, "..");
 
 const SCOPED_FILES = [
+    "app/(dashboard)/profile/page.tsx",
     "app/(dashboard)/profile/_components/profile-form.tsx",
-    "app/(dashboard)/profile/_components/identity-card.tsx",
     "app/(dashboard)/profile/_components/account-meta-card.tsx",
-    "app/(dashboard)/profile/_components/verification-badge.tsx",
     "app/(dashboard)/workspace/page.tsx",
     "app/(dashboard)/workspace/new/page.tsx",
     "app/(dashboard)/workspace/new/new-workspace-form.tsx",

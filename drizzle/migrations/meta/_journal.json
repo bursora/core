@@ -225,6 +225,27 @@
             "when": 1700000033000,
             "tag": "0033_billing_provider_neutral_rename",
             "breakpoints": true
+        },
+        {
+            "idx": 34,
+            "version": "7",
+            "when": 1700000034000,
+            "tag": "0034_pricing_sync_state",
+            "breakpoints": true
+        },
+        {
+            "idx": 35,
+            "version": "7",
+            "when": 1700000035000,
+            "tag": "0035_alerts_dedup_nulls_not_distinct",
+            "breakpoints": true
+        },
+        {
+            "idx": 36,
+            "version": "7",
+            "when": 1700000036000,
+            "tag": "0036_api_key_audit_log",
+            "breakpoints": true
         }
     ]
 }

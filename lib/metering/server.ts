@@ -11,7 +11,6 @@ import "server-only";
 import { countEventsForWorkspaceUseCase } from "./count-events-for-workspace.usecase";
 import { drizzleMeteringReadRepository } from "./drizzle-metering-read.repository";
 import { DrizzleUsageEventRepository } from "./drizzle-usage-event.repository";
-import { getLastUsageEventAtUseCase } from "./get-last-usage-event-at.usecase";
 import { getSpendSeriesUseCase } from "./get-spend-series.usecase";
 import { getTopSpendersUseCase } from "./get-top-spenders.usecase";
 import { ingestEventsUseCase } from "./ingest-events.usecase";
@@ -133,7 +132,7 @@ export async function countEventsForWorkspace(input: CountEventsInput): Promise<
 
 export async function getLastUsageEventAt(input: { workspaceId: string }): Promise<Date | null> {
     const deps = meteringReadDeps();
-    return getLastUsageEventAtUseCase({ workspaceId: input.workspaceId, repo: deps.readRepo });
+    return deps.readRepo.getLastUsageEventAt({ workspaceId: input.workspaceId });
 }
 
 interface BlockedEventsForBudgetInput {

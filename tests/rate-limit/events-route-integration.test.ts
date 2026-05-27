@@ -101,7 +101,6 @@ const setupHarness = (rateLimit: number) => {
     setMeteringDepsForTesting({ eventsRepo: events, pricingRepo: pricing });
     setSetupErrorsDepsForTesting({
         repo: new InMemorySetupErrorRepository(),
-        workspaceExists: async () => false,
         now: () => new Date(),
         notifications: new InMemoryNotificationsRepository(),
         listMemberUserIds: async () => [],
@@ -111,6 +110,7 @@ const setupHarness = (rateLimit: number) => {
     setRateLimitDepsForTesting({
         limiter: new InMemoryRateLimiter(),
         enabled: true,
+        isCloud: false,
         config: { limit: rateLimit, windowMs: 1_000 },
         burstConfig: { limit: 1_000, windowMs: 10_000 },
         now: () => {
@@ -122,6 +122,7 @@ const setupHarness = (rateLimit: number) => {
 
     setSpikeProtectionDepsForTesting({
         enabled: false,
+        isCloud: false,
         state: new InMemorySpikeStateStore(),
         baseline: {
             async fetch7DayMinuteSeries() {

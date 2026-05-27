@@ -22,10 +22,8 @@ import type { BudgetMode, Decision, ScopeType } from "./budget";
 import type { BudgetListFilter, BudgetRepository, RawBudget } from "./budget.repository";
 import { createBudgetUseCase } from "./create-budget.usecase";
 import { decideBudgetUseCase, type RecordBlockedCall } from "./decide-budget.usecase";
-import { deleteBudgetUseCase } from "./delete-budget.usecase";
 import { DrizzleBudgetRepository } from "./drizzle-budget.repository";
 import { DrizzleSpendAggregator } from "./drizzle-spend.aggregator";
-import { getBudgetUseCase } from "./get-budget.usecase";
 import { listBudgetsUseCase } from "./list-budgets.usecase";
 import { periodWindow, type Period } from "./period";
 import { recordBlockedWithRetry, type BlockedRowPayload } from "./record-blocked-with-retry";
@@ -164,7 +162,7 @@ export async function listBudgets(
 }
 
 export async function getBudget(workspaceId: string, id: string): Promise<RawBudget | null> {
-    return getBudgetUseCase({ workspaceId, id, budgets: dashboardRepo() });
+    return dashboardRepo().findById(id, workspaceId);
 }
 
 export interface BudgetStats {
@@ -472,9 +470,5 @@ export async function updateBudget(input: {
 }
 
 export async function deleteBudget(input: { id: string; workspaceId: string }): Promise<boolean> {
-    return deleteBudgetUseCase({
-        id: input.id,
-        workspaceId: input.workspaceId,
-        budgets: dashboardRepo(),
-    });
+    return dashboardRepo().delete(input.id, input.workspaceId);
 }

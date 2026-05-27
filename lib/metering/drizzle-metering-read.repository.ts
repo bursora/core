@@ -5,7 +5,7 @@
 import "server-only";
 
 import type { Db } from "@/lib/db";
-import { usageEvents } from "@/lib/db";
+import { usageEvents } from "@/lib/db/schema";
 import { and, count, desc, eq, gte, isNotNull, lt, max, or, sql, sum } from "drizzle-orm";
 import {
     decodeBlockedEventsCursor,

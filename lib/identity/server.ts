@@ -11,7 +11,7 @@ import { env } from "../env";
 import { defaultSmtpMailer } from "../notification";
 import { acceptInviteUseCase } from "./accept-invite.usecase";
 import { createWorkspaceUseCase } from "./create-workspace.usecase";
-import { deleteWorkspaceUseCase } from "./delete-workspace.usecase";
+import { DrizzleApiKeyAuditLogRepository } from "./drizzle-api-key-audit-log.repository";
 import { DrizzleApiKeyRepository } from "./drizzle-api-key.repository";
 import { DrizzleInviteRepository, DrizzleMemberRepository } from "./drizzle-member.repository";
 import { DrizzleWorkspaceRepository } from "./drizzle-workspace.repository";
@@ -30,6 +30,7 @@ const workspaces = () => new DrizzleWorkspaceRepository(db());
 const members = () => new DrizzleMemberRepository(db());
 const invites = () => new DrizzleInviteRepository(db());
 const apiKeys = () => new DrizzleApiKeyRepository(db());
+const apiKeyAudit = () => new DrizzleApiKeyAuditLogRepository(db());
 const mailer = () => defaultSmtpMailer();
 
 const inviteAcceptUrl = (token: string) => `${env().BETTER_AUTH_URL}/invite/${token}`;
@@ -69,7 +70,7 @@ export async function setWorkspaceEnvironment(input: { id: string; environment: 
 }
 
 export async function deleteWorkspace(id: string) {
-    return deleteWorkspaceUseCase({ id, workspaces: workspaces() });
+    await workspaces().delete(id);
 }
 
 export async function inviteMember(input: {
@@ -110,12 +111,20 @@ export async function acceptInvite(input: { token: string; userId: string }) {
     });
 }
 
-export async function issueApiKey(input: { workspaceId: string; name: string }) {
+export async function issueApiKey(input: {
+    workspaceId: string;
+    name: string;
+    userId?: string | null;
+    ip?: string | null;
+}) {
     return issueApiKeyUseCase({
         workspaceId: input.workspaceId,
         name: input.name,
         pepper: env().BURSORA_API_KEY_PEPPER,
         keys: apiKeys(),
+        audit: apiKeyAudit(),
+        userId: input.userId ?? null,
+        ip: input.ip ?? null,
     });
 }
 
@@ -123,20 +132,37 @@ export async function listApiKeys(workspaceId: string) {
     return listApiKeysUseCase({ workspaceId, keys: apiKeys() });
 }
 
-export async function revokeApiKey(input: { id: string; workspaceId: string }) {
+export async function revokeApiKey(input: {
+    id: string;
+    workspaceId: string;
+    userId?: string | null;
+    ip?: string | null;
+}) {
     return revokeApiKeyUseCase({
         id: input.id,
         workspaceId: input.workspaceId,
         keys: apiKeys(),
+        audit: apiKeyAudit(),
+        userId: input.userId ?? null,
+        ip: input.ip ?? null,
     });
 }
 
-export async function renameApiKey(input: { id: string; workspaceId: string; name: string }) {
+export async function renameApiKey(input: {
+    id: string;
+    workspaceId: string;
+    name: string;
+    userId?: string | null;
+    ip?: string | null;
+}) {
     return renameApiKeyUseCase({
         id: input.id,
         workspaceId: input.workspaceId,
         name: input.name,
         keys: apiKeys(),
+        audit: apiKeyAudit(),
+        userId: input.userId ?? null,
+        ip: input.ip ?? null,
     });
 }
 

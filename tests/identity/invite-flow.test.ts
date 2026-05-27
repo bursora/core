@@ -1,4 +1,9 @@
-import { acceptInviteUseCase, inviteMemberUseCase } from "@/lib/identity";
+import {
+    acceptInviteUseCase,
+    InviteCapExceededError,
+    inviteMemberUseCase,
+    MAX_PENDING_INVITES_PER_WORKSPACE,
+} from "@/lib/identity";
 import { describe, expect, test } from "bun:test";
 import { CapturingMailer } from "./fakes/capturing-mailer";
 import {
@@ -134,5 +139,111 @@ describe("invite + accept flow", () => {
                 members,
             }),
         ).rejects.toThrow();
+    });
+
+    test("acceptInvite is single-use under concurrent calls (no TOCTOU race)", async () => {
+        const invites = new InMemoryInviteRepository();
+        const members = new InMemoryMemberRepository();
+
+        await invites.create({
+            token: "race-token",
+            workspaceId: WORKSPACE,
+            email: "teammate@acme.test",
+            invitedBy: OWNER,
+            role: "member",
+            expiresAt: new Date(Date.now() + 60_000),
+        });
+
+        // Widen the TOCTOU window so a non-atomic check-then-set would race.
+        invites.findByTokenDelayMs = 20;
+
+        const results = await Promise.allSettled([
+            acceptInviteUseCase({
+                token: "race-token",
+                userId: "user-a",
+                invites,
+                members,
+            }),
+            acceptInviteUseCase({
+                token: "race-token",
+                userId: "user-b",
+                invites,
+                members,
+            }),
+        ]);
+
+        const fulfilled = results.filter((r) => r.status === "fulfilled");
+        const rejected = results.filter((r) => r.status === "rejected");
+
+        expect(fulfilled).toHaveLength(1);
+        expect(rejected).toHaveLength(1);
+        expect((rejected[0] as PromiseRejectedResult).reason).toMatchObject({
+            message: "invite already accepted",
+        });
+    });
+
+    test("inviteMember rejects when the workspace is at the pending-invite cap", async () => {
+        const invites = new InMemoryInviteRepository();
+        const mailer = new CapturingMailer();
+
+        const expiresAt = new Date(Date.now() + 60_000);
+        for (let i = 0; i < MAX_PENDING_INVITES_PER_WORKSPACE; i += 1) {
+            await invites.create({
+                token: `seed-token-${i}`,
+                workspaceId: WORKSPACE,
+                email: `seed-${i}@acme.test`,
+                invitedBy: OWNER,
+                role: "member",
+                expiresAt,
+            });
+        }
+
+        await expect(
+            inviteMemberUseCase({
+                workspaceId: WORKSPACE,
+                email: "overflow@acme.test",
+                invitedBy: OWNER,
+                role: "member",
+                invites,
+                mailer,
+                acceptUrl: (t) => `/invite/${t}`,
+            }),
+        ).rejects.toBeInstanceOf(InviteCapExceededError);
+
+        // existing invites still valid; overflow attempt didn't write a row
+        const pending = await invites.listPendingByWorkspace(WORKSPACE);
+        expect(pending).toHaveLength(MAX_PENDING_INVITES_PER_WORKSPACE);
+        expect(mailer.messages).toHaveLength(0);
+    });
+
+    test("inviteMember ignores accepted invites when applying the cap", async () => {
+        const invites = new InMemoryInviteRepository();
+        const mailer = new CapturingMailer();
+
+        const expiresAt = new Date(Date.now() + 60_000);
+        for (let i = 0; i < MAX_PENDING_INVITES_PER_WORKSPACE; i += 1) {
+            await invites.create({
+                token: `accepted-token-${i}`,
+                workspaceId: WORKSPACE,
+                email: `accepted-${i}@acme.test`,
+                invitedBy: OWNER,
+                role: "member",
+                expiresAt,
+            });
+            await invites.claim(`accepted-token-${i}`, new Date());
+        }
+
+        const invite = await inviteMemberUseCase({
+            workspaceId: WORKSPACE,
+            email: "fresh@acme.test",
+            invitedBy: OWNER,
+            role: "member",
+            invites,
+            mailer,
+            acceptUrl: (t) => `/invite/${t}`,
+        });
+
+        expect(invite.email).toBe("fresh@acme.test");
+        expect(invite.acceptedAt).toBeNull();
     });
 });

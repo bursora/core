@@ -5,8 +5,6 @@
  * `./server` — import them from `./identity/server`.
  */
 
-export * from "./auth-schema";
-
 export {
     acceptInviteUseCase,
     type AcceptInviteInput,
@@ -24,7 +22,7 @@ export {
     type CreateWorkspaceInput,
     type CreateWorkspaceResult,
 } from "./create-workspace.usecase";
-export { deleteWorkspaceUseCase, type DeleteWorkspaceInput } from "./delete-workspace.usecase";
+export { InviteCapExceededError, MAX_PENDING_INVITES_PER_WORKSPACE } from "./invite-cap";
 export { inviteMemberUseCase, type InviteMemberInput } from "./invite-member.usecase";
 export { issueApiKeyUseCase, type IssueApiKeyInput } from "./issue-api-key.usecase";
 export {
@@ -43,6 +41,12 @@ export {
 } from "./set-workspace-environment.usecase";
 
 export type { ApiKeyRepository } from "./api-key.repository";
+export type {
+    ApiKeyAuditAction,
+    ApiKeyAuditLogEntry,
+    ApiKeyAuditLogRepository,
+    RecordApiKeyAuditLogInput,
+} from "./api-key-audit-log.repository";
 
 export { generateApiKeyPlaintext, hashApiKey, parseApiKeyPlaintext } from "./api-key.crypto";
 

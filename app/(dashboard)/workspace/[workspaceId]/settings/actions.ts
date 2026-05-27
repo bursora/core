@@ -23,6 +23,7 @@ import {
     workspaceIdFromForm,
     workspaceIdFromPrevForm,
 } from "@/lib/actions/form-fields";
+import { requestSourceIp } from "@/lib/actions/request-ip";
 import { withWorkspace } from "@/lib/actions/with-workspace";
 import {
     createPricingOverrideForWorkspace,
@@ -62,14 +63,19 @@ export async function dismissIssuedKeyAction(): Promise<void> {
 }
 
 export const issueApiKeyAction = withWorkspace(
-    async (_ctx, formData: FormData): Promise<void> => {
+    async (ctx, formData: FormData): Promise<void> => {
         const workspaceId = workspaceIdFromForm(formData);
         const name = normalizeKeyName(formData.get("name"));
         if (name.length === 0) {
             throw new Error("missing required field: name");
         }
 
-        const issued = await issueApiKey({ workspaceId, name });
+        const issued = await issueApiKey({
+            workspaceId,
+            name,
+            userId: ctx.session.user.id,
+            ip: await requestSourceIp(),
+        });
         const jar = await cookies();
         jar.set(ISSUED_KEY_COOKIE, issued.plaintext, {
             httpOnly: true,
@@ -85,7 +91,7 @@ export const issueApiKeyAction = withWorkspace(
 );
 
 export const renameApiKeyAction = withWorkspace(
-    async (_ctx, _prev: ActionResult, formData: FormData): Promise<ActionResult> => {
+    async (ctx, _prev: ActionResult, formData: FormData): Promise<ActionResult> => {
         try {
             const workspaceId = workspaceIdFromForm(formData);
             const id = requireField(formData, "keyId");
@@ -94,7 +100,13 @@ export const renameApiKeyAction = withWorkspace(
                 return actionFail("Name is required", { name: "Name is required" });
             }
 
-            await renameApiKey({ id, workspaceId, name });
+            await renameApiKey({
+                id,
+                workspaceId,
+                name,
+                userId: ctx.session.user.id,
+                ip: await requestSourceIp(),
+            });
             revalidatePath(settingsHref(workspaceId));
             revalidatePath(buildWorkspacePath(workspaceId, "keys"));
             return actionOk();
@@ -108,12 +120,17 @@ export const renameApiKeyAction = withWorkspace(
 );
 
 export const revokeApiKeyAction = withWorkspace(
-    async (_ctx, _prev: ActionResult, formData: FormData): Promise<ActionResult> => {
+    async (ctx, _prev: ActionResult, formData: FormData): Promise<ActionResult> => {
         try {
             const workspaceId = workspaceIdFromForm(formData);
             const id = requireField(formData, "keyId");
 
-            await revokeApiKey({ id, workspaceId });
+            await revokeApiKey({
+                id,
+                workspaceId,
+                userId: ctx.session.user.id,
+                ip: await requestSourceIp(),
+            });
             revalidatePath(settingsHref(workspaceId));
             revalidatePath(buildWorkspacePath(workspaceId, "keys"));
             return actionOk();

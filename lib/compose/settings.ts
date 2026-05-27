@@ -20,7 +20,6 @@ import {
     listEffectivePricing,
     type EffectivePricingEntry,
 } from "../metering/pricing/list-effective-pricing.usecase";
-import { listPricingOverrides } from "../metering/pricing/list-pricing-overrides.usecase";
 import { updatePricingOverride } from "../metering/pricing/update-pricing-override.usecase";
 import { drizzleAlertChannelRepository } from "../notification/drizzle-alert-channel.repository";
 import {
@@ -52,7 +51,7 @@ export async function createPricingOverrideForWorkspace(args: CreatePricingOverr
 }
 
 export async function listPricingOverridesForWorkspace(workspaceId: string) {
-    return listPricingOverrides({ pricing: pricing(), workspaceId });
+    return pricing().listOverridesByWorkspace(workspaceId);
 }
 
 export async function listEffectivePricingForWorkspace(

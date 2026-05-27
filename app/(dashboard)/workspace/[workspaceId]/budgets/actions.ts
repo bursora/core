@@ -3,17 +3,20 @@
 import { type ActionResult, actionFail, actionOk } from "@/lib/action-result";
 import { workspaceIdFromForm } from "@/lib/actions/form-fields";
 import { withWorkspace } from "@/lib/actions/with-workspace";
-import { MODES, PERIODS, SCOPE_TYPES, ValidationError } from "@/lib/budgeting";
+import {
+    MODES,
+    PERIODS,
+    SCOPE_TYPES,
+    ValidationError,
+    type BudgetMode,
+    type Period,
+    type ScopeType,
+} from "@/lib/budgeting";
 import { createBudget, deleteBudget, updateBudget } from "@/lib/budgeting/server";
 import { buildWorkspacePath } from "@/lib/routes";
-import { oneOf } from "@/lib/type-guards";
 import { revalidatePath } from "next/cache";
 
 const budgetsPath = (workspaceId: string) => buildWorkspacePath(workspaceId, "budgets");
-
-const isScopeType = oneOf(SCOPE_TYPES);
-const isPeriod = oneOf(PERIODS);
-const isMode = oneOf(MODES);
 
 const stringField = (form: FormData, name: string): string => String(form.get(name) ?? "");
 
@@ -30,24 +33,24 @@ export const createBudgetAction = withWorkspace(
         const periodRaw = stringField(formData, "period");
         const modeRaw = stringField(formData, "mode");
 
-        if (!isScopeType(scopeTypeRaw)) {
+        if (!(SCOPE_TYPES as readonly string[]).includes(scopeTypeRaw)) {
             return actionFail("Invalid scope type", { scopeType: "Invalid scope type" });
         }
-        if (!isPeriod(periodRaw)) {
+        if (!(PERIODS as readonly string[]).includes(periodRaw)) {
             return actionFail("Invalid period", { period: "Invalid period" });
         }
-        if (!isMode(modeRaw)) {
+        if (!(MODES as readonly string[]).includes(modeRaw)) {
             return actionFail("Invalid mode", { mode: "Invalid mode" });
         }
 
         try {
             await createBudget({
                 workspaceId,
-                scopeType: scopeTypeRaw,
+                scopeType: scopeTypeRaw as ScopeType,
                 scopeId: optionalScopeId(formData),
-                period: periodRaw,
+                period: periodRaw as Period,
                 amountUsd: stringField(formData, "amountUsd"),
-                mode: modeRaw,
+                mode: modeRaw as BudgetMode,
             });
         } catch (err) {
             if (err instanceof ValidationError) {
@@ -71,13 +74,13 @@ export const updateBudgetAction = withWorkspace(
         const periodRaw = stringField(formData, "period");
         const modeRaw = stringField(formData, "mode");
 
-        if (!isScopeType(scopeTypeRaw)) {
+        if (!(SCOPE_TYPES as readonly string[]).includes(scopeTypeRaw)) {
             return actionFail("Invalid scope type", { scopeType: "Invalid scope type" });
         }
-        if (!isPeriod(periodRaw)) {
+        if (!(PERIODS as readonly string[]).includes(periodRaw)) {
             return actionFail("Invalid period", { period: "Invalid period" });
         }
-        if (!isMode(modeRaw)) {
+        if (!(MODES as readonly string[]).includes(modeRaw)) {
             return actionFail("Invalid mode", { mode: "Invalid mode" });
         }
 
@@ -86,11 +89,11 @@ export const updateBudgetAction = withWorkspace(
                 id,
                 workspaceId,
                 patch: {
-                    scopeType: scopeTypeRaw,
+                    scopeType: scopeTypeRaw as ScopeType,
                     scopeId: optionalScopeId(formData),
-                    period: periodRaw,
+                    period: periodRaw as Period,
                     amountUsd: stringField(formData, "amountUsd"),
-                    mode: modeRaw,
+                    mode: modeRaw as BudgetMode,
                 },
             });
         } catch (err) {

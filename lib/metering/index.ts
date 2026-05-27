@@ -14,10 +14,6 @@ export {
     countEventsForWorkspaceUseCase,
     type CountEventsForWorkspaceInput,
 } from "./count-events-for-workspace.usecase";
-export {
-    getLastUsageEventAtUseCase,
-    type GetLastUsageEventAtInput,
-} from "./get-last-usage-event-at.usecase";
 export { getSpendSeriesUseCase, type GetSpendSeriesInput } from "./get-spend-series.usecase";
 export { getTopSpendersUseCase, type GetTopSpendersInput } from "./get-top-spenders.usecase";
 export {

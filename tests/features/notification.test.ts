@@ -8,7 +8,7 @@
  * alert dispatch is covered through `renderWebhookPayload`.
  */
 
-import { alertRules as alertRulesTable } from "@/lib/db";
+import { alertRules as alertRulesTable } from "@/lib/db/schema";
 import {
     InMemoryMailer,
     renderWebhookPayload,

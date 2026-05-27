@@ -28,7 +28,6 @@ import { resolveModelProviders } from "@/lib/models-server";
 import { buildWorkspacePath } from "@/lib/routes";
 import { readMeteringFilters, readMeteringStatus, readParam } from "@/lib/search-params";
 import { FACETS, FACET_LABEL, type Facet } from "@/lib/spend-types";
-import { oneOf } from "@/lib/type-guards";
 import { AlertTriangle } from "lucide-react";
 import Link from "next/link";
 import { EmptyOnboarding } from "./_components/empty-onboarding";
@@ -54,14 +53,15 @@ interface SpendPageProps {
 
 const TOP_LIMIT = 10;
 
-const isFacet = oneOf(FACETS);
-
 export default async function SpendPage({ params, searchParams }: SpendPageProps) {
     const { workspaceId } = await params;
     const search = await searchParams;
     await requireSessionUI();
 
-    const facet: Facet = isFacet(search.facet) ? search.facet : "tenant";
+    const facet: Facet =
+        search.facet !== undefined && (FACETS as readonly string[]).includes(search.facet)
+            ? (search.facet as Facet)
+            : "tenant";
     const { from, to } = resolveSpendWindow({
         from: search.from,
         to: search.to,

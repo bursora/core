@@ -11,4 +11,4 @@
  * the multi-feature migration. The cleanup slice physically relocates the
  * declarations here.
  */
-export { workspaces } from "@/lib/db";
+export { workspaces } from "@/lib/db/schema";

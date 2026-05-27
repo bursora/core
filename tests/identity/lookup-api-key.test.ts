@@ -1,5 +1,11 @@
-import { issueApiKeyUseCase, lookupApiKeyUseCase, revokeApiKeyUseCase } from "@/lib/identity";
-import { describe, expect, test } from "bun:test";
+import {
+    API_KEY_RANDOM_LENGTH,
+    issueApiKeyUseCase,
+    lookupApiKeyUseCase,
+    revokeApiKeyUseCase,
+} from "@/lib/identity";
+import { describe, expect, spyOn, test } from "bun:test";
+import { InMemoryApiKeyAuditLogRepository } from "./fakes/in-memory-api-key-audit-log.repository";
 import { InMemoryApiKeyRepository } from "./fakes/in-memory-api-key.repository";
 
 const PEPPER = "test-pepper";
@@ -13,6 +19,7 @@ describe("lookupApiKeyUseCase", () => {
             name: "test",
             pepper: PEPPER,
             keys: repo,
+            audit: new InMemoryApiKeyAuditLogRepository(),
             scopes: ["events:write"],
         });
 
@@ -42,17 +49,20 @@ describe("lookupApiKeyUseCase", () => {
 
     test("returns null for a revoked key", async () => {
         const repo = new InMemoryApiKeyRepository();
+        const audit = new InMemoryApiKeyAuditLogRepository();
         const issued = await issueApiKeyUseCase({
             workspaceId: WORKSPACE,
             name: "test",
             pepper: PEPPER,
             keys: repo,
+            audit,
         });
 
         await revokeApiKeyUseCase({
             id: issued.id,
             workspaceId: WORKSPACE,
             keys: repo,
+            audit,
         });
 
         const lookup = await lookupApiKeyUseCase({
@@ -74,5 +84,20 @@ describe("lookupApiKeyUseCase", () => {
         });
 
         expect(lookup).toBeNull();
+    });
+
+    test("rejects length-variant keys before hashing (no repo lookup)", async () => {
+        const repo = new InMemoryApiKeyRepository();
+        const findByHash = spyOn(repo, "findByHash");
+        const shortSecret = "a".repeat(API_KEY_RANDOM_LENGTH - 1);
+
+        const lookup = await lookupApiKeyUseCase({
+            plaintext: `bsk_${WORKSPACE}_${shortSecret}`,
+            pepper: PEPPER,
+            keys: repo,
+        });
+
+        expect(lookup).toBeNull();
+        expect(findByHash).not.toHaveBeenCalled();
     });
 });

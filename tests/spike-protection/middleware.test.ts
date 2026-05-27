@@ -17,7 +17,13 @@ import {
     setSpikeProtectionDepsForTesting,
     type SpikeProtectionDeps,
 } from "@/lib/spike-protection/server";
-import type { BaselineSource, SpikeSettings } from "@/lib/spike-protection/types";
+import type {
+    BaselineSource,
+    CooldownState,
+    SpikeBucketIncrement,
+    SpikeSettings,
+    SpikeStateStore,
+} from "@/lib/spike-protection/types";
 import { afterEach, describe, expect, test } from "bun:test";
 
 const WORKSPACE = "11111111-2222-3333-4444-555555555555";
@@ -42,6 +48,7 @@ const fakeSettings = (row: SpikeSettings | null) => ({
 
 const baseDeps = (overrides: Partial<SpikeProtectionDeps> = {}): SpikeProtectionDeps => ({
     enabled: true,
+    isCloud: false,
     state: new InMemorySpikeStateStore(),
     baseline: fakeBaseline(10),
     settings: fakeSettings(null),
@@ -50,6 +57,18 @@ const baseDeps = (overrides: Partial<SpikeProtectionDeps> = {}): SpikeProtection
     now: () => new Date("2025-06-01T00:00:00.000Z"),
     ...overrides,
 });
+
+class ThrowingSpikeStateStore implements SpikeStateStore {
+    async incrementMinute(): Promise<SpikeBucketIncrement> {
+        throw new Error("redis_unavailable");
+    }
+    async setCooldown(): Promise<void> {
+        throw new Error("redis_unavailable");
+    }
+    async getCooldown(): Promise<CooldownState> {
+        throw new Error("redis_unavailable");
+    }
+}
 
 describe("applySpikeProtection", () => {
     afterEach(() => {
@@ -163,5 +182,31 @@ describe("applySpikeProtection", () => {
             eventCount: 25,
         });
         expect(result.response?.status).toBe(429);
+    });
+
+    test("cloud: Redis error returns 503 with Retry-After (fail-closed)", async () => {
+        setSpikeProtectionDepsForTesting(
+            baseDeps({ isCloud: true, state: new ThrowingSpikeStateStore() }),
+        );
+        const result = await applySpikeProtection({
+            workspaceId: WORKSPACE,
+            eventCount: 1,
+        });
+        expect(result.response).not.toBeNull();
+        expect(result.response?.status).toBe(503);
+        expect(result.response?.headers.get("Retry-After")).toBe("5");
+        const body = await result.response?.json();
+        expect(body.error).toBe("spike_protection_unavailable");
+    });
+
+    test("self-host: Redis error returns null (fail-open)", async () => {
+        setSpikeProtectionDepsForTesting(
+            baseDeps({ isCloud: false, state: new ThrowingSpikeStateStore() }),
+        );
+        const result = await applySpikeProtection({
+            workspaceId: WORKSPACE,
+            eventCount: 1,
+        });
+        expect(result.response).toBeNull();
     });
 });

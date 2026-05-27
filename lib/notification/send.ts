@@ -114,7 +114,14 @@ export function defaultSmtpMailer(opts?: {
     // don't need SMTP_HOST / SMTP_PORT set.
     const host = opts?.host ?? env().SMTP_HOST;
     const port = opts?.port ?? env().SMTP_PORT;
-    const mailer = new SmtpMailer({ host, port, from: opts?.from ?? DEFAULT_FROM });
+    const user = env().SMTP_USER;
+    const pass = env().SMTP_PASS;
+    const mailer = new SmtpMailer({
+        host,
+        port,
+        from: opts?.from ?? DEFAULT_FROM,
+        ...(user.length > 0 && pass.length > 0 ? { user, pass } : {}),
+    });
 
     if (opts === undefined) cachedDefaultMailer = mailer;
     return mailer;

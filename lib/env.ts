@@ -45,6 +45,10 @@ export interface Env {
     readonly BETTER_AUTH_URL: string;
     readonly SMTP_HOST: string;
     readonly SMTP_PORT: number;
+    /** Empty when SMTP relay is unauthenticated (Mailhog in dev). */
+    readonly SMTP_USER: string;
+    /** Empty when SMTP relay is unauthenticated. */
+    readonly SMTP_PASS: string;
     readonly CRON_SECRET: string;
     readonly NEXT_PUBLIC_APP_URL: string;
     readonly IS_CLOUD: boolean;
@@ -104,6 +108,12 @@ export function loadEnv(source: Record<string, string | undefined>): Env {
         throw new Error(`SMTP_PORT must be a positive integer, got: ${source.SMTP_PORT}`);
     }
 
+    const smtpUser = source.SMTP_USER ?? "";
+    const smtpPass = source.SMTP_PASS ?? "";
+    if (smtpUser.length > 0 !== smtpPass.length > 0) {
+        throw new Error("SMTP_USER and SMTP_PASS must be both set or both empty");
+    }
+
     const getAlways = (k: AlwaysKey): string => {
         const v = source[k];
         if (v === undefined) throw new Error(`Missing env: ${k}`); // unreachable after check above
@@ -124,6 +134,8 @@ export function loadEnv(source: Record<string, string | undefined>): Env {
         BETTER_AUTH_URL: getAlways("BETTER_AUTH_URL"),
         SMTP_HOST: getAlways("SMTP_HOST"),
         SMTP_PORT: port,
+        SMTP_USER: smtpUser,
+        SMTP_PASS: smtpPass,
         CRON_SECRET: getAlways("CRON_SECRET"),
         NEXT_PUBLIC_APP_URL: getAlways("NEXT_PUBLIC_APP_URL"),
         IS_CLOUD: isCloud,

@@ -10,6 +10,8 @@ const BASE = {
     SMTP_PORT: "1025",
     CRON_SECRET: "cron-secret",
     NEXT_PUBLIC_APP_URL: "http://localhost:3000",
+    GOOGLE_CLIENT_ID: "google-client-id",
+    GOOGLE_CLIENT_SECRET: "google-client-secret",
 };
 
 const FULL_CLOUD = {
@@ -82,6 +84,26 @@ describe("loadEnv", () => {
         delete (partial as Record<string, string | undefined>).LEMONSQUEEZY_VARIANT_ID;
 
         expect(() => loadEnv(partial)).toThrow(/LEMONSQUEEZY_VARIANT_ID/);
+    });
+
+    test("exposes Google OAuth credentials", () => {
+        const env = loadEnv(BASE);
+        expect(env.GOOGLE_CLIENT_ID).toBe("google-client-id");
+        expect(env.GOOGLE_CLIENT_SECRET).toBe("google-client-secret");
+    });
+
+    test("throws when GOOGLE_CLIENT_ID is missing", () => {
+        const partial = { ...BASE };
+        delete (partial as Record<string, string | undefined>).GOOGLE_CLIENT_ID;
+
+        expect(() => loadEnv(partial)).toThrow(/GOOGLE_CLIENT_ID/);
+    });
+
+    test("throws when GOOGLE_CLIENT_SECRET is missing", () => {
+        const partial = { ...BASE };
+        delete (partial as Record<string, string | undefined>).GOOGLE_CLIENT_SECRET;
+
+        expect(() => loadEnv(partial)).toThrow(/GOOGLE_CLIENT_SECRET/);
     });
 
     test("LEMONSQUEEZY_WEBHOOK_SECRET_NEXT is optional in cloud mode and exposed when set", () => {

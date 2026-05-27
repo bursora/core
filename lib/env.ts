@@ -27,6 +27,8 @@ const ALWAYS_REQUIRED = [
     "SMTP_PORT",
     "CRON_SECRET",
     "NEXT_PUBLIC_APP_URL",
+    "GOOGLE_CLIENT_ID",
+    "GOOGLE_CLIENT_SECRET",
 ] as const;
 
 const CLOUD_REQUIRED = [
@@ -52,6 +54,8 @@ export interface Env {
     readonly SMTP_PASS: string;
     readonly CRON_SECRET: string;
     readonly NEXT_PUBLIC_APP_URL: string;
+    readonly GOOGLE_CLIENT_ID: string;
+    readonly GOOGLE_CLIENT_SECRET: string;
     readonly IS_CLOUD: boolean;
     /** Empty string when `IS_CLOUD=false`. */
     readonly LEMONSQUEEZY_API_KEY: string;
@@ -162,6 +166,8 @@ export function loadEnv(source: Record<string, string | undefined>): Env {
         SMTP_PASS: smtpPass,
         CRON_SECRET: getAlways("CRON_SECRET"),
         NEXT_PUBLIC_APP_URL: getAlways("NEXT_PUBLIC_APP_URL"),
+        GOOGLE_CLIENT_ID: getAlways("GOOGLE_CLIENT_ID"),
+        GOOGLE_CLIENT_SECRET: getAlways("GOOGLE_CLIENT_SECRET"),
         IS_CLOUD: isCloud,
         LEMONSQUEEZY_API_KEY: getCloud("LEMONSQUEEZY_API_KEY"),
         LEMONSQUEEZY_WEBHOOK_SECRET: getCloud("LEMONSQUEEZY_WEBHOOK_SECRET"),

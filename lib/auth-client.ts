@@ -1,6 +1,6 @@
 /**
  * Better-auth browser client. Pages and components import this; the server
- * never does. Magic-link signin is the only flow.
+ * never does. Supports two sign-in flows: magic link and Google OAuth.
  */
 
 import { magicLinkClient } from "better-auth/client/plugins";

@@ -1,9 +1,10 @@
 /**
  * Better-auth instance.
  *
- * Email + magic link only. No password, no OAuth. Magic-link tokens are
+ * Two sign-in flows: magic link and Google OAuth. Magic-link tokens are
  * mailed via the same SMTP-backed `Mailer` we use for invites; in dev that's
- * Mailhog at `localhost:1025`.
+ * Mailhog at `localhost:1025`. Google OAuth lands the user on `/workspace`
+ * after consent. No password.
  *
  * Better-auth owns `users`, `session`, `account`, and `verification`. The
  * `users` table (renamed from better-auth's default `user` via `modelName`)
@@ -40,6 +41,12 @@ export const auth = betterAuth({
     advanced: { database: { generateId: "uuid" } },
     user: { modelName: "users" },
     emailAndPassword: { enabled: false },
+    socialProviders: {
+        google: {
+            clientId: env().GOOGLE_CLIENT_ID,
+            clientSecret: env().GOOGLE_CLIENT_SECRET,
+        },
+    },
     plugins: [
         magicLink({
             sendMagicLink: async ({ email, url }) => {

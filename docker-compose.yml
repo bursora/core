@@ -1,16 +1,18 @@
-# Bursora self-host compose. One command: `docker compose up -d`.
+# Self-host only. Bursora Cloud uses a shared host-level bun container.
+#
+# Bursora self-host compose. Run from the umbrella repo root (which holds
+# core/ and sdk/) so the build context resolves the sibling SDK package:
+#
+#   cp core/.env.example core/.env
+#   # edit core/.env: set BURSORA_API_KEY_PEPPER, BETTER_AUTH_SECRET, CRON_SECRET
+#   docker compose -f core/docker-compose.yml up -d
 #
 # Brings up the Next.js app, Postgres, and Redis. Migrations run once on
-# startup via the `migrate` service before the app boots. The user is
-# expected to put a reverse proxy (Caddy, nginx, Traefik) in front for TLS.
-#
-# Usage:
-#   cp .env.example .env
-#   # edit .env: set BURSORA_API_KEY_PEPPER, BETTER_AUTH_SECRET, CRON_SECRET
-#   docker compose up -d
+# startup via the `migrate` service before the app boots. Put a reverse
+# proxy (Caddy, nginx, Traefik) in front for TLS.
 #
 # Dev workflow (mounts source, runs `bun run dev`) lives behind a profile:
-#   docker compose --profile dev up
+#   docker compose -f core/docker-compose.yml --profile dev up
 # That target attaches to the host's external `develop` network and reuses
 # its postgres/mailhog instead of the bundled services here.
 
@@ -18,7 +20,7 @@ services:
     bursora:
         build:
             context: ..
-            dockerfile: bursora/Dockerfile
+            dockerfile: core/Dockerfile
         image: bursora:latest
         restart: unless-stopped
         env_file: .env
@@ -41,7 +43,7 @@ services:
     migrate:
         build:
             context: ..
-            dockerfile: bursora/Dockerfile
+            dockerfile: core/Dockerfile
         image: bursora:latest
         restart: "no"
         env_file: .env

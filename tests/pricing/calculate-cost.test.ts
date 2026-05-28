@@ -8,20 +8,24 @@
  *
  * Inputs:
  *   - Usage = { promptTokens, completionTokens, cacheTokens? }
- *   - PricingRow | null
+ *   - PricingRow (non-null; a null row throws `UnknownPricingError`)
  *
  * Output:
  *   - Money (USD as a fixed-precision decimal string with up to 8 fractional
  *     digits — matches the `numeric(14,8)` column).
  *
  * Documented policy:
- *   - When pricingRow is null (missing rate), return Money("0"). No throw.
+ *   - When pricingRow is null (missing rate), throw `UnknownPricingError`. The
+ *     ingest path catches it per event and reports the unpriced (provider,
+ *     model) pair so unknown models surface to the customer instead of
+ *     silently billing 0; priced events in the same batch still persist.
  *   - When token counts are zero on a side, that side contributes zero.
  *   - When cacheTokens is set but cachePer1mUsd is null, cache contributes zero.
  */
 
-import { calculateCost } from "@/lib/metering/pricing/calculate-cost";
+import { calculateCost, UnknownPricingError } from "@/lib/metering/pricing/calculate-cost";
 import type { PricingRow } from "@/lib/metering/pricing/pricing-row";
+import Big from "big.js";
 import { describe, expect, test } from "bun:test";
 
 const baseRow = (overrides: Partial<PricingRow> = {}): PricingRow => ({
@@ -45,7 +49,7 @@ interface Case {
         readonly completionTokens: number;
         readonly cacheTokens?: number;
     };
-    readonly row: PricingRow | null;
+    readonly row: PricingRow;
     readonly expected: string;
 }
 
@@ -82,12 +86,6 @@ const cases: readonly Case[] = [
         name: "zero tokens across the board → 0",
         usage: { promptTokens: 0, completionTokens: 0, cacheTokens: 0 },
         row: baseRow(),
-        expected: "0.00000000",
-    },
-    {
-        name: "missing pricing row (null) → 0 (documented fallback)",
-        usage: { promptTokens: 9999, completionTokens: 9999, cacheTokens: 9999 },
-        row: null,
         expected: "0.00000000",
     },
     {
@@ -154,6 +152,15 @@ describe("calculateCost", () => {
         expect(typeof cost.usd).toBe("string");
     });
 
+    test("null pricing row → throws UnknownPricingError", () => {
+        // The ingest path catches it and reports the unpriced (provider, model)
+        // pair so unknown models surface to the customer instead of silently
+        // billing 0; priced events in the same batch still persist.
+        expect(() =>
+            calculateCost({ promptTokens: 100, completionTokens: 50 }, null),
+        ).toThrowError(UnknownPricingError);
+    });
+
     test("does not mutate inputs", () => {
         const usage = { promptTokens: 100, completionTokens: 100 };
         const row = baseRow();
@@ -184,5 +191,101 @@ describe("calculateCost", () => {
         );
 
         expect(cost.usd).toBe("0.00001135");
+    });
+});
+
+describe("calculateCost precision (#911)", () => {
+    /**
+     * The IEEE 754 float path that calculateCost used before #911 was fixed
+     * shifts the intermediate product/sum off the exact decimal value by ULPs
+     * that can propagate into the 8-digit `numeric(14,8)` output column. Big-
+     * based arithmetic computes the exact decimal product/quotient. These
+     * tests pin the new behaviour: typical invoices unchanged at 8 digits,
+     * edge-case inputs no longer drift.
+     */
+
+    test("exact: 3 tokens at $0.005/1M = 0.00000002 (float drifts to 0.00000001)", () => {
+        // True value: 3 * 0.005 / 1_000_000 = 1.5e-8.
+        // toFixed(8) half-up → "0.00000002".
+        // Float path: 3 * 0.005 = 0.015 represented as 0.014999999999999999... ;
+        // /1e6 = 1.499...e-8 → toFixed(8) → "0.00000001".
+        const row = baseRow({
+            inputPer1mUsd: "0.005",
+            outputPer1mUsd: "0",
+            cachePer1mUsd: null,
+        });
+        const cost = calculateCost({ promptTokens: 3, completionTokens: 0 }, row);
+        expect(cost.usd).toBe("0.00000002");
+    });
+
+    test("exact: 100 tokens at $0.00125/1M = 0.00000013 (float drifts to 0.00000012)", () => {
+        // True value: 100 * 0.00125 / 1e6 = 1.25e-7 → toFixed(8) = "0.00000013".
+        // Float path lands just below the half-up boundary.
+        const row = baseRow({
+            inputPer1mUsd: "0.00125",
+            outputPer1mUsd: "0",
+            cachePer1mUsd: null,
+        });
+        const cost = calculateCost({ promptTokens: 100, completionTokens: 0 }, row);
+        expect(cost.usd).toBe("0.00000013");
+    });
+
+    test("exact: 999_999_999_999 tokens at $0.005/1M = 5000.00000000 (float drifts down by a cent)", () => {
+        // True value: 999_999_999_999 * 0.005 / 1e6 = 4999.999999995
+        // → toFixed(8) half-up = "5000.00000000" (Big agrees on exact decimal).
+        // Float path: 4999.999999994999... → toFixed(8) = "4999.99999999".
+        const row = baseRow({
+            inputPer1mUsd: "0.005",
+            outputPer1mUsd: "0",
+            cachePer1mUsd: null,
+        });
+        const cost = calculateCost(
+            { promptTokens: 999_999_999_999, completionTokens: 0 },
+            row,
+        );
+        expect(cost.usd).toBe("5000.00000000");
+    });
+
+    test("scoped DP: a lowered global Big.DP cannot truncate the intermediate division", () => {
+        // If another module lowers the GLOBAL Big.DP below ~8, an unscoped
+        // `div` would truncate before the final round-to-8 and undercharge.
+        // The cost math runs on a dedicated Big constructor with a pinned DP,
+        // so the global mutation is ignored and the result stays exact.
+        const originalDp = Big.DP;
+        Big.DP = 2;
+        try {
+            // 3 * 0.005 / 1_000_000 = 1.5e-8 → toFixed(8) half-up = "0.00000002".
+            // With a truncating global DP=2 the quotient would collapse to 0.
+            const cost = calculateCost(
+                { promptTokens: 3, completionTokens: 0 },
+                baseRow({ inputPer1mUsd: "0.005", outputPer1mUsd: "0", cachePer1mUsd: null }),
+            );
+            expect(cost.usd).toBe("0.00000002");
+        } finally {
+            Big.DP = originalDp;
+        }
+    });
+
+    test("invariance: typical invoice inputs match the float-based formula at 8 fractional digits", () => {
+        // Customer-facing invariant: the fix MUST NOT shift invoices for the
+        // realistic (rate, tokens) shape used by actual provider rates. Drift-
+        // sensitive rates (the test cases above) are intentionally excluded
+        // — those are the cases where Big now produces the correct value.
+        const tokenSweep = [1, 7, 42, 1_000, 9_999, 123_456, 1_000_000, 7_654_321];
+        const rateSweep = ["0.0028", "0.14", "0.28", "2.5", "10", "75.123456"];
+
+        for (const promptTokens of tokenSweep) {
+            for (const rate of rateSweep) {
+                const expected = (
+                    (promptTokens * Number.parseFloat(rate)) /
+                    1_000_000
+                ).toFixed(8);
+                const actual = calculateCost(
+                    { promptTokens, completionTokens: 0 },
+                    baseRow({ inputPer1mUsd: rate, outputPer1mUsd: "0", cachePer1mUsd: null }),
+                ).usd;
+                expect(actual).toBe(expected);
+            }
+        }
     });
 });

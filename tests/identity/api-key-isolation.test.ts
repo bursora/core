@@ -5,6 +5,7 @@ import {
     revokeApiKeyUseCase,
 } from "@/lib/identity";
 import { describe, expect, test } from "bun:test";
+import { InMemoryApiKeyAuditLogRepository } from "./fakes/in-memory-api-key-audit-log.repository";
 import { InMemoryApiKeyRepository } from "./fakes/in-memory-api-key.repository";
 
 const PEPPER = "isolation-pepper";
@@ -14,24 +15,28 @@ const WORKSPACE_B = "11111111-2222-3333-4444-555555555555";
 describe("api-key workspace isolation", () => {
     test("listApiKeys never returns keys from another workspace", async () => {
         const repo = new InMemoryApiKeyRepository();
+        const audit = new InMemoryApiKeyAuditLogRepository();
 
         await issueApiKeyUseCase({
             workspaceId: WORKSPACE_A,
             name: "test",
             pepper: PEPPER,
             keys: repo,
+            audit,
         });
         await issueApiKeyUseCase({
             workspaceId: WORKSPACE_A,
             name: "test",
             pepper: PEPPER,
             keys: repo,
+            audit,
         });
         await issueApiKeyUseCase({
             workspaceId: WORKSPACE_B,
             name: "test",
             pepper: PEPPER,
             keys: repo,
+            audit,
         });
 
         const aKeys = await listApiKeysUseCase({ workspaceId: WORKSPACE_A, keys: repo });
@@ -50,6 +55,7 @@ describe("api-key workspace isolation", () => {
             name: "test",
             pepper: PEPPER,
             keys: repo,
+            audit: new InMemoryApiKeyAuditLogRepository(),
         });
 
         const result = await listApiKeysUseCase({ workspaceId: WORKSPACE_A, keys: repo });
@@ -58,17 +64,20 @@ describe("api-key workspace isolation", () => {
 
     test("revoke fails silently when caller's workspace does not own the key", async () => {
         const repo = new InMemoryApiKeyRepository();
+        const audit = new InMemoryApiKeyAuditLogRepository();
         const issued = await issueApiKeyUseCase({
             workspaceId: WORKSPACE_A,
             name: "test",
             pepper: PEPPER,
             keys: repo,
+            audit,
         });
 
         const result = await revokeApiKeyUseCase({
             id: issued.id,
             workspaceId: WORKSPACE_B,
             keys: repo,
+            audit,
         });
 
         expect(result).toBe(false);

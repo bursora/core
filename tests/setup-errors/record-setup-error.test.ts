@@ -8,10 +8,6 @@ const noopNotifications = (): InMemoryNotificationsRepository =>
 const noopListMembers = async (): Promise<readonly string[]> => [];
 
 const EXISTING_WORKSPACE = "11111111-2222-3333-4444-555555555555";
-const NONEXISTENT_WORKSPACE = "99999999-9999-9999-9999-999999999999";
-
-const workspaceExists = (id: string): Promise<boolean> =>
-    Promise.resolve(id === EXISTING_WORKSPACE);
 
 describe("recordSetupErrorUseCase", () => {
     test("known-workspace + ingest_invalid_body increments per-workspace bucket", async () => {
@@ -22,7 +18,6 @@ describe("recordSetupErrorUseCase", () => {
             input: { kind: "ingest_invalid_body", workspaceId: EXISTING_WORKSPACE },
             now,
             repo,
-            workspaceExists,
             notifications: noopNotifications(),
             listMemberUserIds: noopListMembers,
         });
@@ -34,39 +29,13 @@ describe("recordSetupErrorUseCase", () => {
         expect(repo.rows[0]?.count).toBe(1);
     });
 
-    test("known workspaceId → auth_revoked attributed to that workspace", async () => {
+    test("auth_failure with hashPrefix + sourceIp → global auth_unknown bucket (never per-workspace)", async () => {
         const repo = new InMemorySetupErrorRepository();
 
         await recordSetupErrorUseCase({
-            input: {
-                kind: "auth_failure",
-                workspaceId: EXISTING_WORKSPACE,
-                hashPrefix: "deadbeef",
-            },
+            input: { kind: "auth_failure", hashPrefix: "deadbeef", sourceIp: "203.0.113.7" },
             now: new Date("2025-05-10T12:34:56.000Z"),
             repo,
-            workspaceExists,
-            notifications: noopNotifications(),
-            listMemberUserIds: noopListMembers,
-        });
-
-        expect(repo.rows.length).toBe(1);
-        expect(repo.rows[0]?.workspaceId).toBe(EXISTING_WORKSPACE);
-        expect(repo.rows[0]?.category).toBe("auth_revoked");
-    });
-
-    test("workspaceId parses but workspace is unknown → auth_unknown, global bucket", async () => {
-        const repo = new InMemorySetupErrorRepository();
-
-        await recordSetupErrorUseCase({
-            input: {
-                kind: "auth_failure",
-                workspaceId: NONEXISTENT_WORKSPACE,
-                hashPrefix: "deadbeef",
-            },
-            now: new Date("2025-05-10T12:34:56.000Z"),
-            repo,
-            workspaceExists,
             notifications: noopNotifications(),
             listMemberUserIds: noopListMembers,
         });
@@ -76,31 +45,13 @@ describe("recordSetupErrorUseCase", () => {
         expect(repo.rows[0]?.category).toBe("auth_unknown");
     });
 
-    test("malformed plaintext (workspaceId null) → auth_unknown, global bucket", async () => {
+    test("auth_failure with no headers (hashPrefix + sourceIp null) → global auth_unknown bucket", async () => {
         const repo = new InMemorySetupErrorRepository();
 
         await recordSetupErrorUseCase({
-            input: { kind: "auth_failure", workspaceId: null, hashPrefix: "deadbeef" },
+            input: { kind: "auth_failure", hashPrefix: null, sourceIp: null },
             now: new Date("2025-05-10T12:34:56.000Z"),
             repo,
-            workspaceExists,
-            notifications: noopNotifications(),
-            listMemberUserIds: noopListMembers,
-        });
-
-        expect(repo.rows.length).toBe(1);
-        expect(repo.rows[0]?.workspaceId).toBeNull();
-        expect(repo.rows[0]?.category).toBe("auth_unknown");
-    });
-
-    test("missing plaintext (workspaceId + hashPrefix null) → auth_unknown, global bucket", async () => {
-        const repo = new InMemorySetupErrorRepository();
-
-        await recordSetupErrorUseCase({
-            input: { kind: "auth_failure", workspaceId: null, hashPrefix: null },
-            now: new Date("2025-05-10T12:34:56.000Z"),
-            repo,
-            workspaceExists,
             notifications: noopNotifications(),
             listMemberUserIds: noopListMembers,
         });
@@ -118,7 +69,6 @@ describe("recordSetupErrorUseCase", () => {
             input,
             now: new Date("2025-05-10T12:00:00.000Z"),
             repo,
-            workspaceExists,
             notifications: noopNotifications(),
             listMemberUserIds: noopListMembers,
         });
@@ -126,7 +76,6 @@ describe("recordSetupErrorUseCase", () => {
             input,
             now: new Date("2025-05-10T12:59:59.000Z"),
             repo,
-            workspaceExists,
             notifications: noopNotifications(),
             listMemberUserIds: noopListMembers,
         });
@@ -142,7 +91,6 @@ describe("recordSetupErrorUseCase", () => {
             input: { kind: "sdk_unknown_provider", workspaceId: EXISTING_WORKSPACE },
             now: new Date("2025-05-10T12:34:56.000Z"),
             repo,
-            workspaceExists,
             notifications: noopNotifications(),
             listMemberUserIds: noopListMembers,
         });

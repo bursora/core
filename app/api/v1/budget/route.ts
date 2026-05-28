@@ -17,18 +17,15 @@
  */
 
 import { decideBudget } from "@/lib/budgeting/server";
-import { recordAuthFailure, withBursoraKey } from "@/lib/identity/with-bursora-key";
-import { applyRateLimit } from "@/lib/rate-limit/middleware";
+import { recordAuthFailure } from "@/lib/identity/with-bursora-key";
+import { withSdkAuthz } from "@/lib/identity/with-sdk-authz";
 import { NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request): Promise<NextResponse> {
-    const auth = await withBursoraKey(request, { onAuthFailure: recordAuthFailure });
-    if (!auth.ok) return auth.response;
-
-    const rateLimit = await applyRateLimit(auth.apiKey.id);
-    if (rateLimit.response !== null) return rateLimit.response;
+    const authz = await withSdkAuthz(request, { onAuthFailure: recordAuthFailure });
+    if (!authz.allowed) return authz.response;
 
     const url = new URL(request.url);
     const tenant = url.searchParams.get("tenant");
@@ -38,7 +35,7 @@ export async function GET(request: Request): Promise<NextResponse> {
     const model = url.searchParams.get("model");
 
     const decision = await decideBudget({
-        workspaceId: auth.apiKey.workspaceId,
+        workspaceId: authz.apiKey.workspaceId,
         tenantId: tenant,
         agentId: agent,
         workflowId: workflow,

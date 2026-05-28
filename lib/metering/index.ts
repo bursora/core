@@ -7,30 +7,23 @@
  * partition rollover service used by the retention cron.
  */
 
-export { calculateCost, type Usage } from "./pricing/calculate-cost";
+export { calculateCost, UnknownPricingError, type Usage } from "./pricing/calculate-cost";
 export { money, zeroMoney, type Money } from "./pricing/money";
+export {
+    createDrizzlePricingResolver,
+    type DrizzlePricingResolverDeps,
+    type PricingResolver,
+    type PricingResolverInput,
+} from "./pricing/pricing-resolver";
 
-export {
-    countEventsForWorkspaceUseCase,
-    type CountEventsForWorkspaceInput,
-} from "./count-events-for-workspace.usecase";
-export {
-    getLastUsageEventAtUseCase,
-    type GetLastUsageEventAtInput,
-} from "./get-last-usage-event-at.usecase";
 export { getSpendSeriesUseCase, type GetSpendSeriesInput } from "./get-spend-series.usecase";
 export { getTopSpendersUseCase, type GetTopSpendersInput } from "./get-top-spenders.usecase";
-export {
-    listDistinctMeteringValuesBulkUseCase,
-    type ListDistinctMeteringValuesBulkInput,
-} from "./list-distinct-metering-values-bulk.usecase";
 
 export type { MeteringDeps, MeteringReadDeps } from "./server";
 
 export {
     ingestEventsUseCase,
     type IngestEventsInput,
-    type IngestLogger,
     type IngestSummary,
 } from "./ingest-events.usecase";
 
@@ -97,6 +90,9 @@ export {
     ACTIVITY_RANGE_MS,
     ACTIVITY_RANGE_VALUES,
     ACTIVITY_SEVERITY_VALUES,
+    deserializeActivityFilters,
     parseActivityOption,
+    serializeActivityFilters,
+    type ActivityFilterParams,
     type ActivityRange,
 } from "./activity-filter-params";

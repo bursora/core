@@ -95,4 +95,25 @@ describe("GET /api/internal/workspace/.../activity (filtered)", () => {
         const res = await callRoute("?kind=bogus");
         expect(res.status).toBe(400);
     });
+
+    test("rejects oversized cursor with 400", async () => {
+        setupActivity();
+        const huge = "1".repeat(501);
+        const res = await callRoute(`?cursor=${huge}`);
+        expect(res.status).toBe(400);
+    });
+
+    test("rejects malformed cursor with 400", async () => {
+        setupActivity();
+        const res = await callRoute("?cursor=not-a-number");
+        expect(res.status).toBe(400);
+    });
+
+    test("accepts valid numeric cursor", async () => {
+        setupActivity();
+        const res = await callRoute("?cursor=1700000000000");
+        expect(res.status).toBe(200);
+        const body = (await res.json()) as { items?: unknown; nextCursor?: unknown };
+        expect(Array.isArray(body.items)).toBe(true);
+    });
 });

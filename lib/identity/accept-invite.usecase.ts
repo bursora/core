@@ -25,13 +25,19 @@ export async function acceptInviteUseCase(input: AcceptInviteInput): Promise<Acc
         throw new Error("invite expired");
     }
 
-    const now = new Date();
-    const membership = await input.members.addMember({
-        workspaceId: invite.workspaceId,
-        userId: input.userId,
-        role: invite.role,
-    });
-    await input.invites.markAccepted(invite.token, now);
+    // Atomic claim: a single UPDATE with WHERE accepted_at IS NULL. Without
+    // this, two concurrent accepts both see acceptedAt === null above and
+    // race past the check.
+    const claimed = await input.invites.claim(invite.token, new Date());
+    if (!claimed) {
+        throw new Error("invite already accepted");
+    }
 
-    return { membership, workspaceId: invite.workspaceId };
+    const membership = await input.members.addMember({
+        workspaceId: claimed.workspaceId,
+        userId: input.userId,
+        role: claimed.role,
+    });
+
+    return { membership, workspaceId: claimed.workspaceId };
 }

@@ -1,7 +1,7 @@
 import "server-only";
 
 import type { Db } from "@/lib/db";
-import { notificationDeliveries } from "@/lib/db";
+import { notificationDeliveries } from "@/lib/db/schema";
 import { and, desc, eq, gte, inArray, sql } from "drizzle-orm";
 import type { NotificationChannelKind, NotificationDeliveryStatus } from "./channel-health";
 

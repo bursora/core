@@ -8,7 +8,6 @@ import { requireSessionUI } from "@/lib/auth";
 import { parseWindowKey, resolveWindow, type DashboardWindow } from "@/lib/dashboard-window";
 import { buildWorkspacePath } from "@/lib/routes";
 import { FACETS, type Facet } from "@/lib/spend-types";
-import { oneOf } from "@/lib/type-guards";
 import { Suspense } from "react";
 import { BurnRateTile } from "./_components/burn-rate-tile";
 import { CapacityRow } from "./_components/capacity-row";
@@ -19,16 +18,14 @@ import { RunwayProjection } from "./_components/runway-projection";
 import { StatusStrip } from "./_components/status-strip";
 import { TopSpendersSnapshot } from "./_components/top-spenders-snapshot";
 import { TrajectoriesToWatchPanel } from "./_components/trajectories-to-watch";
-import { getSpendComposition } from "./_lib/spend-composition";
-import { getCustomerTrajectories, getModelTrajectories } from "./_lib/trajectories";
-import { getWhatsBreaking } from "./_lib/whats-breaking";
+import { getSpendComposition } from "@/lib/compose/spend-composition";
+import { getCustomerTrajectories, getModelTrajectories } from "@/lib/compose/trajectories";
+import { getWhatsBreaking } from "@/lib/compose/whats-breaking";
 
 interface DashboardPageProps {
     params: Promise<{ workspaceId: string }>;
     searchParams: Promise<{ window?: string | string[]; facet?: string }>;
 }
-
-const isFacet = oneOf(FACETS);
 
 export default async function DashboardPage({ params, searchParams }: DashboardPageProps) {
     const session = await requireSessionUI();
@@ -36,7 +33,10 @@ export default async function DashboardPage({ params, searchParams }: DashboardP
     const { window: rawWindow, facet: rawFacet } = await searchParams;
     const windowKey = parseWindowKey(rawWindow);
     const dashboardWindow = resolveWindow(windowKey, new Date());
-    const facet: Facet = isFacet(rawFacet) ? rawFacet : "tenant";
+    const facet: Facet =
+        rawFacet !== undefined && (FACETS as readonly string[]).includes(rawFacet)
+            ? (rawFacet as Facet)
+            : "tenant";
 
     return (
         <section className="flex flex-col gap-6">

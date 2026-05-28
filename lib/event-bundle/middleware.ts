@@ -4,8 +4,7 @@
  *   1. `checkEventBundleHardCap` runs after rate-limit and spike-protection
  *      but before the DB write. If the workspace has a hard cap configured
  *      and accepting the batch would push accrued overage past it, returns
- *      a 202 response carrying `X-Bursora-Cap-Hit: events`. Event is NOT
- *      recorded.
+ *      a deny decision with `reason: "bundle"`. Event is NOT recorded.
  *
  *   2. `recordEventBundleUsage` runs after a successful DB write. It bumps
  *      the Redis counter by the batch size and, when the per-workspace
@@ -24,7 +23,7 @@
 
 import "server-only";
 
-import { NextResponse } from "next/server";
+import type { CappingDecision } from "../capping/middleware";
 import { LruCache } from "../lru-cache";
 import { monthKey, overageCentsAt, wouldExceedHardCap } from "./counter";
 import { eventBundleDeps } from "./server";
@@ -44,17 +43,12 @@ export function resetEventBundleColdWriteTracker(): void {
     lastColdWrite.clear();
 }
 
-export interface EventBundleHardCapOutcome {
-    /** 202 response with the cap header set, or `null` when allowed. */
-    readonly response: NextResponse | null;
-}
-
 export async function checkEventBundleHardCap(input: {
     readonly workspaceId: string;
     readonly eventCount: number;
-}): Promise<EventBundleHardCapOutcome> {
+}): Promise<CappingDecision> {
     const deps = eventBundleDeps();
-    if (!deps.enabled) return { response: null };
+    if (!deps.enabled) return { allowed: true };
 
     const month = monthKey(deps.now());
     const [settings, priorCount] = await Promise.all([
@@ -62,7 +56,7 @@ export async function checkEventBundleHardCap(input: {
         deps.counter.readMonth({ workspaceId: input.workspaceId, month }),
     ]);
     const hardCapUsdCents = settings?.hardCapUsdCents ?? null;
-    if (hardCapUsdCents === null) return { response: null };
+    if (hardCapUsdCents === null) return { allowed: true };
 
     if (
         wouldExceedHardCap({
@@ -71,10 +65,10 @@ export async function checkEventBundleHardCap(input: {
             hardCapUsdCents,
         })
     ) {
-        return { response: cappedResponse(hardCapUsdCents) };
+        return { allowed: false, reason: "bundle" };
     }
 
-    return { response: null };
+    return { allowed: true };
 }
 
 export async function recordEventBundleUsage(input: {
@@ -118,14 +112,4 @@ function shouldFlushCold(args: {
     if (args.nowMs - entry.storedAtMs >= COLD_WRITE_INTERVAL_MS) return true;
     if (args.newCount - entry.value.lastWrittenCount >= COLD_WRITE_BATCH_EVENTS) return true;
     return false;
-}
-
-function cappedResponse(hardCapUsdCents: number): NextResponse {
-    const limitUsd = hardCapUsdCents / 100;
-    const response = NextResponse.json(
-        { status: "events_capped", limit_usd: limitUsd },
-        { status: 202 },
-    );
-    response.headers.set("X-Bursora-Cap-Hit", "events");
-    return response;
 }

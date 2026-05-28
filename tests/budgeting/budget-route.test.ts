@@ -109,7 +109,6 @@ const setupHarness = (opts: {
     });
     setSetupErrorsDepsForTesting({
         repo: new InMemorySetupErrorRepository(),
-        workspaceExists: async () => false,
         now: () => new Date("2025-05-10T12:00:00.000Z"),
         notifications: new InMemoryNotificationsRepository(),
         listMemberUserIds: async () => [],

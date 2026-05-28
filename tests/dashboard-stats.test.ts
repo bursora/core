@@ -31,7 +31,7 @@ import {
     paceDirection,
     setDashboardStatsDepsForTesting,
     type DashboardStatsDeps,
-} from "@/app/(dashboard)/workspace/[workspaceId]/_lib/dashboard-stats";
+} from "@/lib/dashboard/dashboard-stats";
 import { resolveWindow } from "@/lib/dashboard-window";
 import type { MeteringFilters } from "@/lib/metering/metering-read.repository";
 import { afterEach, describe, expect, test } from "bun:test";

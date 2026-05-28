@@ -1,20 +1,36 @@
 import { InMemoryRateLimiter } from "@/lib/rate-limit/in-memory.adapter";
 import { applyRateLimit } from "@/lib/rate-limit/middleware";
 import { setRateLimitDepsForTesting } from "@/lib/rate-limit/server";
+import type { RateLimitDecision, RateLimiter } from "@/lib/rate-limit/types";
 import { afterEach, describe, expect, test } from "bun:test";
 
 const API_KEY_ID = "00000000-1111-2222-3333-444444444444";
 
-const baseDeps = (overrides?: { limit?: number; burstLimit?: number; now?: () => Date }) => {
+const baseDeps = (overrides?: {
+    limit?: number;
+    burstLimit?: number;
+    now?: () => Date;
+    isCloud?: boolean;
+}) => {
     const limiter = new InMemoryRateLimiter();
     return {
         limiter,
         enabled: true,
+        isCloud: overrides?.isCloud ?? false,
         config: { limit: overrides?.limit ?? 3, windowMs: 1_000 },
         burstConfig: { limit: overrides?.burstLimit ?? 100, windowMs: 10_000 },
         now: overrides?.now ?? (() => new Date("2025-01-01T00:00:00.000Z")),
     };
 };
+
+class ThrowingRateLimiter implements RateLimiter {
+    async check(): Promise<RateLimitDecision> {
+        throw new Error("redis_unavailable");
+    }
+    async count(): Promise<number> {
+        throw new Error("redis_unavailable");
+    }
+}
 
 describe("applyRateLimit", () => {
     afterEach(() => setRateLimitDepsForTesting(null));
@@ -77,5 +93,27 @@ describe("applyRateLimit", () => {
         t = 2_100; // past 1s window
         const allowed = await applyRateLimit(API_KEY_ID);
         expect(allowed.response).toBeNull();
+    });
+
+    test("cloud: Redis error returns 503 with Retry-After (fail-closed)", async () => {
+        setRateLimitDepsForTesting({
+            ...baseDeps({ isCloud: true }),
+            limiter: new ThrowingRateLimiter(),
+        });
+        const result = await applyRateLimit(API_KEY_ID);
+        expect(result.response).not.toBeNull();
+        expect(result.response?.status).toBe(503);
+        expect(result.response?.headers.get("Retry-After")).toBe("5");
+        const body = await result.response?.json();
+        expect(body.error).toBe("rate_limit_unavailable");
+    });
+
+    test("self-host: Redis error returns null (fail-open)", async () => {
+        setRateLimitDepsForTesting({
+            ...baseDeps({ isCloud: false }),
+            limiter: new ThrowingRateLimiter(),
+        });
+        const result = await applyRateLimit(API_KEY_ID);
+        expect(result.response).toBeNull();
     });
 });

@@ -4,8 +4,8 @@
  * Given (provider, model, region, ts) and the caller's workspace, fetches the
  * candidate rows from the repository and delegates row selection to the pure
  * `findPricingRow` helper. Returns null when no rule applies — the caller
- * (metering's cost-calc path) treats this as a "pricing_missing" condition and
- * stores cost_usd = 0.
+ * (metering's cost-calc path) translates this into an `UnknownPricingError`
+ * so the ingest path sets the event aside and reports it as `unpriced`.
  */
 
 import { lookupPricingRowUseCase } from "./lookup-pricing-row.usecase";

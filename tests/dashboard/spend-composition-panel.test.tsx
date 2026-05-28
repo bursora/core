@@ -6,7 +6,7 @@
  */
 
 import { SpendCompositionPanel } from "@/components/ui/dashboard-views/spend-composition-panel";
-import type { CustomerComposition } from "@/lib/spend-composition";
+import type { CustomerComposition } from "@/lib/spend-composition/compute";
 import { describe, expect, test } from "bun:test";
 import type { Route } from "next";
 import { renderToStaticMarkup } from "react-dom/server";

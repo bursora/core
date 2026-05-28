@@ -7,8 +7,9 @@
  * candidate rows (workspace-scoped overrides + global rows) from the repo and
  * delegate selection to the pure helper.
  *
- * Returns null when no row applies — the metering use case treats this as a
- * "pricing_missing" condition and stores cost_usd = 0.
+ * Returns null when no row applies — the metering path translates this into an
+ * `UnknownPricingError` so the ingest use case sets the event aside and reports
+ * it as `unpriced`.
  */
 
 import { findPricingRow } from "./find-pricing-row";

@@ -20,13 +20,16 @@ const SCOPED_FILES: readonly string[] = [
     `${SETTINGS}/page.tsx`,
     `${SETTINGS}/_components/tabs-client.tsx`,
     `${SETTINGS}/_components/general-section.tsx`,
-    `${SETTINGS}/_components/rename-workspace-form.tsx`,
+    `${SETTINGS}/_components/general-settings-form.tsx`,
     `${SETTINGS}/_components/alert-channels-section.tsx`,
     `${SETTINGS}/_components/alert-channels-form.tsx`,
+    `${SETTINGS}/_components/event-bundle-section.tsx`,
+    `${SETTINGS}/_components/event-bundle-form.tsx`,
     `${SETTINGS}/_components/pricing-overrides-panel.tsx`,
     `${SETTINGS}/_components/pricing-override-section.tsx`,
     `${SETTINGS}/_components/pricing-override-form.tsx`,
     `${SETTINGS}/_components/activity-tab.tsx`,
+    `${SETTINGS}/_components/activity-active-filters.tsx`,
     `${SETTINGS}/_components/delete-workspace-dialog.tsx`,
 ];
 

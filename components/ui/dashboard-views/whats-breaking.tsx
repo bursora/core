@@ -59,7 +59,7 @@ export function WhatsBreakingPanel({
                 <ul className="flex flex-col divide-y divide-border/60">
                     {rows.map((row) => (
                         <BreakingRow
-                            key={row.source.budgetId}
+                            key={row.budgetId}
                             workspaceId={workspaceId}
                             row={row}
                             actionsEnabled={actionsEnabled}

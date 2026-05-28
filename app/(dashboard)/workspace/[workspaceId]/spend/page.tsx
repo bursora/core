@@ -1,7 +1,3 @@
-import {
-    priorWindow,
-    relativeDelta,
-} from "@/app/(dashboard)/workspace/[workspaceId]/_lib/window-delta";
 import { PageHeader } from "@/components/shell/page-header";
 import { TopSpendersTable } from "@/components/ui/dashboard-views/top-spenders-table";
 import { FeedItem } from "@/components/ui/feed-item";
@@ -28,7 +24,6 @@ import { resolveModelProviders } from "@/lib/models-server";
 import { buildWorkspacePath } from "@/lib/routes";
 import { readMeteringFilters, readMeteringStatus, readParam } from "@/lib/search-params";
 import { FACETS, FACET_LABEL, type Facet } from "@/lib/spend-types";
-import { oneOf } from "@/lib/type-guards";
 import { AlertTriangle } from "lucide-react";
 import Link from "next/link";
 import { EmptyOnboarding } from "./_components/empty-onboarding";
@@ -54,14 +49,15 @@ interface SpendPageProps {
 
 const TOP_LIMIT = 10;
 
-const isFacet = oneOf(FACETS);
-
 export default async function SpendPage({ params, searchParams }: SpendPageProps) {
     const { workspaceId } = await params;
     const search = await searchParams;
     await requireSessionUI();
 
-    const facet: Facet = isFacet(search.facet) ? search.facet : "tenant";
+    const facet: Facet =
+        search.facet !== undefined && (FACETS as readonly string[]).includes(search.facet)
+            ? (search.facet as Facet)
+            : "tenant";
     const { from, to } = resolveSpendWindow({
         from: search.from,
         to: search.to,
@@ -385,6 +381,20 @@ const RECENT_ALERTS_LIMIT = 5;
 function spendDirection(delta: number | null): KpiTone {
     if (delta === null || delta === 0) return "neut";
     return delta > 0 ? "up" : "down";
+}
+
+function priorWindow(from: Date, to: Date): { from: Date; to: Date } {
+    const span = to.getTime() - from.getTime();
+    return { from: new Date(from.getTime() - span), to: from };
+}
+
+function relativeDelta(current: number, prior: number): number | null {
+    if (!Number.isFinite(current) || !Number.isFinite(prior)) return null;
+    if (prior === 0) {
+        if (current === 0) return 0;
+        return current > 0 ? 1 : -1;
+    }
+    return (current - prior) / prior;
 }
 
 const CLOCK_FMT = new Intl.DateTimeFormat(undefined, {

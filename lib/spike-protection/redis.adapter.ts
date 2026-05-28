@@ -1,35 +1,42 @@
 /**
  * Redis `SpikeStateStore`. Two key shapes:
  *
- *   sp:cnt:{workspaceId}:{minute}  — INCR'd by the middleware, expires after
- *                                     two minutes so the rollover is clean.
- *   sp:cd:{workspaceId}            — set to the cooldown end epoch (ms);
- *                                     EXPIRE matches the cooldown duration
- *                                     so the key clears itself.
+ *   sp:cnt:{workspaceId}:{minute}  — per-minute counter INCR'd via the shared
+ *                                     `RequestCounterState`; expires after two
+ *                                     minutes so the rollover is clean.
+ *   sp:cd:{workspaceId}            — cooldown end epoch (ms); auto-clears via
+ *                                     the shared state's TTL semantics.
+ *
+ * The Redis primitives live in `@/lib/request-counter`; the per-workspace
+ * per-minute policy (key shape, prior/new count derivation) stays here.
  */
 
 import "server-only";
 
 import type { Redis } from "ioredis";
+import { createRedisRequestCounterState } from "../request-counter/redis.state";
+import type { RequestCounterState } from "../request-counter/state";
 import type { CooldownState, SpikeBucketIncrement, SpikeStateStore } from "./types";
 
-const COUNTER_TTL_SECONDS = 120;
+const COUNTER_TTL_MS = 120_000;
 
 export class RedisSpikeStateStore implements SpikeStateStore {
-    constructor(private readonly redis: Redis) {}
+    private readonly state: RequestCounterState;
+
+    constructor(redis: Redis) {
+        this.state = createRedisRequestCounterState(redis);
+    }
 
     async incrementMinute(input: {
         readonly workspaceId: string;
         readonly bucketMs: number;
         readonly n: number;
     }): Promise<SpikeBucketIncrement> {
-        const key = `sp:cnt:${input.workspaceId}:${input.bucketMs}`;
-        const batch = this.redis.multi();
-        batch.incrby(key, input.n);
-        batch.expire(key, COUNTER_TTL_SECONDS);
-        const commit = batch.exec.bind(batch);
-        const result = await commit();
-        const newCount = readNumber(result, 0);
+        const newCount = await this.state.incrementBucket(
+            bucketKey(input.workspaceId, input.bucketMs),
+            input.n,
+            COUNTER_TTL_MS,
+        );
         return {
             priorCount: Math.max(0, newCount - input.n),
             newCount,
@@ -40,30 +47,18 @@ export class RedisSpikeStateStore implements SpikeStateStore {
         readonly workspaceId: string;
         readonly untilMs: number;
     }): Promise<void> {
-        const key = `sp:cd:${input.workspaceId}`;
-        const nowMs = Date.now();
-        const ttlMs = Math.max(1_000, input.untilMs - nowMs);
-        await this.redis.set(key, String(input.untilMs), "PX", ttlMs);
+        await this.state.setCooldown(cooldownKey(input.workspaceId), input.untilMs);
     }
 
     async getCooldown(input: { readonly workspaceId: string }): Promise<CooldownState> {
-        const key = `sp:cd:${input.workspaceId}`;
-        const raw = await this.redis.get(key);
-        if (raw === null) return { untilMs: 0 };
-        const n = Number(raw);
-        return { untilMs: Number.isFinite(n) ? n : 0 };
+        return { untilMs: await this.state.getCooldown(cooldownKey(input.workspaceId)) };
     }
 }
 
-function readNumber(
-    result: ReadonlyArray<readonly [Error | null, unknown]> | null,
-    index: number,
-): number {
-    if (result === null) return 0;
-    const entry = result[index];
-    if (!entry) return 0;
-    const [err, value] = entry;
-    if (err !== null) return 0;
-    const n = Number(value);
-    return Number.isFinite(n) ? n : 0;
+function bucketKey(workspaceId: string, bucketMs: number): string {
+    return `sp:cnt:${workspaceId}:${bucketMs}`;
+}
+
+function cooldownKey(workspaceId: string): string {
+    return `sp:cd:${workspaceId}`;
 }

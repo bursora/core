@@ -648,6 +648,44 @@ describe("LemonSqueezyApiAdapter.verifyAndParseEvent", () => {
         expect(event.type).toBe("payment.failed");
     });
 
+    test("projects trial_ends_at from a trialing subscription payload as a Date", () => {
+        // LS stamps `trial_ends_at` on subscription objects when the variant
+        // has a trial period configured. The neutral event must carry it so
+        // `handleWebhookUseCase` can persist it onto the workspace row, and
+        // the spend aggregator can gate billing on the trial window.
+        const body = JSON.stringify({
+            meta: {
+                event_name: "subscription_created",
+                custom_data: { workspace_id: WORKSPACE_ID },
+            },
+            data: {
+                id: "12345",
+                type: "subscriptions",
+                attributes: {
+                    store_id: 1,
+                    customer_id: 99,
+                    status: "trialing",
+                    trial_ends_at: "2025-03-15T00:00:00.000000Z",
+                },
+            },
+        });
+        const signature = sign(body, WEBHOOK_SECRET);
+        const event = adapter.verifyAndParseEvent({
+            rawBody: body,
+            signatureHeader: signature,
+        });
+        expect(event.trialEndsAt).toEqual(new Date("2025-03-15T00:00:00.000Z"));
+    });
+
+    test("trialEndsAt is null when the payload omits trial_ends_at", () => {
+        const signature = sign(subscriptionCreatedBody, WEBHOOK_SECRET);
+        const event = adapter.verifyAndParseEvent({
+            rawBody: subscriptionCreatedBody,
+            signatureHeader: signature,
+        });
+        expect(event.trialEndsAt).toBeNull();
+    });
+
     test("unrecognised events project to unknown", () => {
         const body = JSON.stringify({
             meta: { event_name: "license_key_created" },
@@ -1227,5 +1265,92 @@ describe("LemonSqueezyApiAdapter.cancelSubscription", () => {
         await expect(
             adapter.cancelSubscription({ subscriptionId: SUBSCRIPTION_ID }),
         ).rejects.toThrow();
+    });
+});
+
+describe("LemonSqueezyApiAdapter.verifyCredentials", () => {
+    test("GETs /v1/users/me with the bearer key and reports ok on 200", async () => {
+        const { fetcher, calls } = recordingFetch([
+            new Response(
+                JSON.stringify({ data: { id: "1", type: "users", attributes: {} } }),
+                { status: 200, headers: { "content-type": "application/vnd.api+json" } },
+            ),
+        ]);
+
+        const adapter = new LemonSqueezyApiAdapter({
+            apiKey: API_KEY,
+            webhookSecret: WEBHOOK_SECRET,
+            storeId: STORE_ID,
+            fetch: fetcher,
+        });
+
+        const result = await adapter.verifyCredentials();
+
+        expect(result).toEqual({ ok: true });
+        expect(calls).toHaveLength(1);
+        const call = calls[0]!;
+        expect(call.url).toBe("https://api.lemonsqueezy.com/v1/users/me");
+        expect(call.init.method ?? "GET").toBe("GET");
+        const headers = new Headers(call.init.headers);
+        expect(headers.get("Authorization")).toBe(`Bearer ${API_KEY}`);
+        expect(headers.get("Accept")).toBe("application/vnd.api+json");
+    });
+
+    test("reports unauthorized on a 401 rather than throwing", async () => {
+        const { fetcher } = recordingFetch([
+            new Response(JSON.stringify({ errors: [{ detail: "Unauthenticated." }] }), {
+                status: 401,
+                headers: { "content-type": "application/vnd.api+json" },
+            }),
+        ]);
+
+        const adapter = new LemonSqueezyApiAdapter({
+            apiKey: API_KEY,
+            webhookSecret: WEBHOOK_SECRET,
+            storeId: STORE_ID,
+            fetch: fetcher,
+        });
+
+        const result = await adapter.verifyCredentials();
+
+        expect(result).toEqual({ ok: false, reason: "unauthorized" });
+    });
+
+    test("treats a 403 as unauthorized too", async () => {
+        const { fetcher } = recordingFetch([
+            new Response(JSON.stringify({ errors: [{ detail: "Forbidden" }] }), {
+                status: 403,
+                headers: { "content-type": "application/vnd.api+json" },
+            }),
+        ]);
+
+        const adapter = new LemonSqueezyApiAdapter({
+            apiKey: API_KEY,
+            webhookSecret: WEBHOOK_SECRET,
+            storeId: STORE_ID,
+            fetch: fetcher,
+        });
+
+        const result = await adapter.verifyCredentials();
+
+        expect(result).toEqual({ ok: false, reason: "unauthorized" });
+    });
+
+    test("throws on a transient 5xx so a flaky LS does not look like a bad key", async () => {
+        const { fetcher } = recordingFetch([
+            new Response(JSON.stringify({ errors: [{ detail: "Internal error" }] }), {
+                status: 500,
+                headers: { "content-type": "application/vnd.api+json" },
+            }),
+        ]);
+
+        const adapter = new LemonSqueezyApiAdapter({
+            apiKey: API_KEY,
+            webhookSecret: WEBHOOK_SECRET,
+            storeId: STORE_ID,
+            fetch: fetcher,
+        });
+
+        await expect(adapter.verifyCredentials()).rejects.toThrow();
     });
 });

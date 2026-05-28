@@ -26,7 +26,7 @@
 import "server-only";
 
 import type { Db } from "@/lib/db";
-import { usageEvents, workspaces } from "@/lib/db";
+import { usageEvents, workspaces } from "@/lib/db/schema";
 import { and, count, eq, gte, lt, sql } from "drizzle-orm";
 import { alias, pgSchema, text } from "drizzle-orm/pg-core";
 import type {

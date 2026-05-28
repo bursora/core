@@ -1,5 +1,5 @@
-import { loadEnv } from "@/lib/env";
-import { describe, expect, test } from "bun:test";
+import { env, loadEnv, resetEnvCacheForTesting } from "@/lib/env";
+import { afterEach, describe, expect, test } from "bun:test";
 
 const BASE = {
     DATABASE_URL: "postgres://x",
@@ -161,5 +161,132 @@ describe("loadEnv", () => {
         expect(e.BURSORA_RATE_LIMIT_ENABLED).toBe(false);
         expect(e.BURSORA_SPIKE_PROTECTION_ENABLED).toBe(false);
         expect(e.REDIS_URL).toBe("");
+    });
+
+    test("BETTER_AUTH_TRUSTED_ORIGINS defaults to NEXT_PUBLIC_APP_URL + local dev fallbacks (deduped)", () => {
+        const e = loadEnv(BASE);
+        // NEXT_PUBLIC_APP_URL == http://localhost:3000, which dedups with the
+        // localhost:3000 fallback. Expect the unique dev origins + ngrok tunnels.
+        expect(e.BETTER_AUTH_TRUSTED_ORIGINS).toEqual([
+            "http://localhost:3000",
+            "http://localhost:3001",
+            "http://127.0.0.1:3000",
+            "https://app-bursora.ngrok.app",
+            "https://bursora.ngrok.app",
+        ]);
+    });
+
+    test("BETTER_AUTH_TRUSTED_ORIGINS prepends a non-local NEXT_PUBLIC_APP_URL to the dev fallbacks", () => {
+        const e = loadEnv({ ...BASE, NEXT_PUBLIC_APP_URL: "https://app.bursora.com" });
+        expect(e.BETTER_AUTH_TRUSTED_ORIGINS).toEqual([
+            "https://app.bursora.com",
+            "http://localhost:3000",
+            "http://localhost:3001",
+            "http://127.0.0.1:3000",
+            "https://app-bursora.ngrok.app",
+            "https://bursora.ngrok.app",
+        ]);
+    });
+
+    test("BETTER_AUTH_TRUSTED_ORIGINS parses a single origin", () => {
+        const e = loadEnv({
+            ...BASE,
+            BETTER_AUTH_TRUSTED_ORIGINS: "https://app.bursora.com",
+        });
+        expect(e.BETTER_AUTH_TRUSTED_ORIGINS).toEqual(["https://app.bursora.com"]);
+    });
+
+    test("BETTER_AUTH_TRUSTED_ORIGINS parses multiple comma-separated origins", () => {
+        const e = loadEnv({
+            ...BASE,
+            BETTER_AUTH_TRUSTED_ORIGINS:
+                "https://app.bursora.com,https://staging.bursora.com,https://admin.bursora.com",
+        });
+        expect(e.BETTER_AUTH_TRUSTED_ORIGINS).toEqual([
+            "https://app.bursora.com",
+            "https://staging.bursora.com",
+            "https://admin.bursora.com",
+        ]);
+    });
+
+    test("BETTER_AUTH_TRUSTED_ORIGINS trims whitespace and drops empty entries", () => {
+        const e = loadEnv({
+            ...BASE,
+            BETTER_AUTH_TRUSTED_ORIGINS:
+                "  https://app.bursora.com  ,, https://staging.bursora.com ,",
+        });
+        expect(e.BETTER_AUTH_TRUSTED_ORIGINS).toEqual([
+            "https://app.bursora.com",
+            "https://staging.bursora.com",
+        ]);
+    });
+
+    test("BETTER_AUTH_TRUSTED_ORIGINS throws when set but empty (commas/whitespace only)", () => {
+        expect(() =>
+            loadEnv({
+                ...BASE,
+                BETTER_AUTH_TRUSTED_ORIGINS: "   , ,  ",
+            }),
+        ).toThrow(/BETTER_AUTH_TRUSTED_ORIGINS/);
+    });
+});
+
+describe("env() cache reset", () => {
+    // Snapshot every key we mutate so we can fully restore process.env. Without
+    // this, leaking IS_CLOUD into later tests is exactly the bug being fixed.
+    const KEYS = [
+        "IS_CLOUD",
+        "DATABASE_URL",
+        "BURSORA_API_KEY_PEPPER",
+        "BETTER_AUTH_SECRET",
+        "BETTER_AUTH_URL",
+        "SMTP_HOST",
+        "SMTP_PORT",
+        "CRON_SECRET",
+        "NEXT_PUBLIC_APP_URL",
+        "LEMONSQUEEZY_API_KEY",
+        "LEMONSQUEEZY_WEBHOOK_SECRET",
+        "LEMONSQUEEZY_STORE_ID",
+        "LEMONSQUEEZY_VARIANT_ID",
+        "BURSORA_RATE_LIMIT_ENABLED",
+        "BURSORA_SPIKE_PROTECTION_ENABLED",
+    ] as const;
+    const snapshot = new Map<string, string | undefined>();
+
+    afterEach(() => {
+        for (const k of KEYS) {
+            const prior = snapshot.get(k);
+            if (prior === undefined) Reflect.deleteProperty(process.env, k);
+            else process.env[k] = prior;
+        }
+        snapshot.clear();
+        resetEnvCacheForTesting();
+    });
+
+    test("env() reflects fresh process.env after resetEnvCacheForTesting()", () => {
+        for (const k of KEYS) snapshot.set(k, process.env[k]);
+
+        process.env.DATABASE_URL = "postgres://x";
+        process.env.BURSORA_API_KEY_PEPPER = "pepper";
+        process.env.BETTER_AUTH_SECRET = "secret";
+        process.env.BETTER_AUTH_URL = "http://localhost:3000";
+        process.env.SMTP_HOST = "localhost";
+        process.env.SMTP_PORT = "1025";
+        process.env.CRON_SECRET = "cron-secret";
+        process.env.NEXT_PUBLIC_APP_URL = "http://localhost:3000";
+        process.env.IS_CLOUD = "true";
+        process.env.BURSORA_RATE_LIMIT_ENABLED = "false";
+        process.env.BURSORA_SPIKE_PROTECTION_ENABLED = "false";
+        process.env.LEMONSQUEEZY_API_KEY = "ls_test_x";
+        process.env.LEMONSQUEEZY_WEBHOOK_SECRET = "ls_whsec_x";
+        process.env.LEMONSQUEEZY_STORE_ID = "store_x";
+        process.env.LEMONSQUEEZY_VARIANT_ID = "variant_x";
+
+        resetEnvCacheForTesting();
+        expect(env().IS_CLOUD).toBe(true);
+
+        delete process.env.IS_CLOUD;
+        resetEnvCacheForTesting();
+        expect(env().IS_CLOUD).toBe(false);
     });
 });

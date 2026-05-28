@@ -1,5 +1,5 @@
-import type { RequestMemoCache } from "@/app/(dashboard)/workspace/[workspaceId]/_lib/per-request-cache";
-import { withRequestMemo } from "@/app/(dashboard)/workspace/[workspaceId]/_lib/per-request-cache";
+import type { RequestMemoCache } from "@/lib/dashboard/per-request-cache";
+import { withRequestMemo } from "@/lib/dashboard/per-request-cache";
 import { describe, expect, test } from "bun:test";
 
 function makeStringCache(): RequestMemoCache {

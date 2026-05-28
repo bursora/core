@@ -1,5 +1,3 @@
-import { oneOf } from "@/lib/type-guards";
-
 interface PricingRowViewBase {
     readonly provider: string;
     readonly model: string;
@@ -37,7 +35,8 @@ export interface PricingFormInitialValues {
 
 export type RowStatus = "active" | "scheduled" | "expired";
 
-export const isRowStatus = oneOf(["active", "scheduled", "expired"] as const);
+export const isRowStatus = (value: string): value is RowStatus =>
+    (["active", "scheduled", "expired"] as readonly string[]).includes(value);
 
 export interface PricingRowCounts {
     readonly global: number;

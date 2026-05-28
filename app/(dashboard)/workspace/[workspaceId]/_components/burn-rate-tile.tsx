@@ -6,7 +6,7 @@
 import {
     getDailyRateInWindow,
     getSpendSeries,
-} from "@/app/(dashboard)/workspace/[workspaceId]/_lib/dashboard-stats";
+} from "@/lib/dashboard/dashboard-stats";
 import { SparkChart } from "@/components/ui/spark-chart";
 import type { DashboardWindow } from "@/lib/dashboard-window";
 import { formatUsd } from "@/lib/format";

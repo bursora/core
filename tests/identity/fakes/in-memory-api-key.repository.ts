@@ -30,8 +30,15 @@ export class InMemoryApiKeyRepository implements ApiKeyRepository {
         return null;
     }
 
-    async listByWorkspace(workspaceId: string): Promise<readonly ApiKey[]> {
-        return [...this.rows.values()].filter((row) => row.workspaceId === workspaceId);
+    async listByWorkspace(
+        workspaceId: string,
+        opts?: { readonly includeRevoked?: boolean },
+    ): Promise<readonly ApiKey[]> {
+        const includeRevoked = opts?.includeRevoked ?? false;
+        return [...this.rows.values()].filter(
+            (row) =>
+                row.workspaceId === workspaceId && (includeRevoked || row.revokedAt === null),
+        );
     }
 
     async rename(id: string, workspaceId: string, name: string): Promise<boolean> {

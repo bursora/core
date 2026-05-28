@@ -40,6 +40,7 @@
  *     strict bound set the cap with that headroom in mind.
  */
 
+import Big from "big.js";
 import type { Budget, BudgetMode, Decision } from "./budget";
 import type { Spend } from "./spend-snapshot";
 import { spendKey } from "./spend-snapshot";
@@ -92,20 +93,28 @@ export function evaluateBudget(
 
     const trips: TripContext[] = [];
     let strictestUnder: TripContext | null = null;
+    let strictestUnderHeadroom: Big | null = null;
 
     for (const b of budgets) {
-        const limit = parseLimit(b.amountUsd);
-        const used = spend.get(spendKey(b.scopeType, b.scopeId, b.periodFrom));
-        const ctx: TripContext = { budget: b, used, limit };
+        // `amountUsd` is `numeric(12,4)` and arrives as a decimal string from
+        // the repo; parsing through Big keeps the limit exact to 4 fractional
+        // digits without IEEE 754 drift. Spend arrives from the aggregator as
+        // a JS number — wrap via its own string representation so the compare
+        // also runs in decimal space (#926).
+        const limitBig = parseLimitBig(b.amountUsd);
+        const usedNum = spend.get(spendKey(b.scopeType, b.scopeId, b.periodFrom));
+        const usedBig = numberToBig(usedNum);
+        const ctx: TripContext = { budget: b, used: usedNum, limit: limitBig.toNumber() };
 
-        if (used >= limit) {
+        if (usedBig.gte(limitBig)) {
             trips.push(ctx);
             continue;
         }
 
-        const headroom = limit - used;
-        if (strictestUnder === null || headroom < strictestUnder.limit - strictestUnder.used) {
+        const headroom = limitBig.minus(usedBig);
+        if (strictestUnderHeadroom === null || headroom.lt(strictestUnderHeadroom)) {
             strictestUnder = ctx;
+            strictestUnderHeadroom = headroom;
         }
     }
 
@@ -190,9 +199,21 @@ function formatUnderReason(ctx: TripContext): string {
     return `under:${ctx.budget.scopeType}:${scopeId}:${formatNumber(ctx.used)}/${formatNumber(ctx.limit)}`;
 }
 
-function parseLimit(amountUsd: string): number {
-    const n = Number.parseFloat(amountUsd);
-    return Number.isFinite(n) && n >= 0 ? n : 0;
+function parseLimitBig(amountUsd: string): Big {
+    // Defensive parse — repo guarantees a `numeric(12,4)` string but a corrupt
+    // row should be treated as a zero limit (over for any spend > 0), matching
+    // the prior `parseFloat` fallback.
+    try {
+        const parsed = new Big(amountUsd);
+        return parsed.lt(0) ? new Big(0) : parsed;
+    } catch {
+        return new Big(0);
+    }
+}
+
+function numberToBig(n: number): Big {
+    if (!Number.isFinite(n) || n < 0) return new Big(0);
+    return new Big(n);
 }
 
 function formatNumber(n: number): string {

@@ -13,9 +13,10 @@ import "server-only";
 import { db } from "@/lib/db";
 import { env } from "@/lib/env";
 import { buildWorkspacePath } from "@/lib/routes";
-import { createCheckoutSessionUseCase } from "./create-checkout-session.usecase";
-import { DrizzleEventBundleRollupRepository } from "./drizzle-event-bundle-rollup.repository";
+import type { BillingWebhookEventStore } from "./billing-webhook-event.store";
+import { billingWebhookPruneCutoff } from "./billing-webhook-retention";
 import { DrizzleBillingWebhookEventStore } from "./drizzle-billing-webhook-event.store";
+import { DrizzleEventBundleRollupRepository } from "./drizzle-event-bundle-rollup.repository";
 import { DrizzleTrackedSpendRepository } from "./drizzle-tracked-spend.repository";
 import { DrizzleWorkspaceBillingRepository } from "./drizzle-workspace-billing.repository";
 import { getBillingPortalUrlUseCase } from "./get-billing-portal-url.usecase";
@@ -24,7 +25,6 @@ import { LemonSqueezyApiAdapter } from "./lemonsqueezy.adapter";
 import { nextBillEstimateUseCase } from "./next-bill-estimate";
 import { requestRefundUseCase } from "./request-refund.usecase";
 import { rollupBillUseCase } from "./rollup-bill.usecase";
-import type { BillingWebhookEventStore } from "./billing-webhook-event.store";
 import type { TrackedSpendRepository } from "./tracked-spend.repository";
 import type {
     BillingDeps,
@@ -87,6 +87,63 @@ export function billingDeps(): BillingDeps {
     return testOverride ?? buildDeps();
 }
 
+/**
+ * Probe the configured payment provider once to confirm its API key actually
+ * authenticates. `env.ts` only proves the key is *present*; a rotated or
+ * revoked key passes boot validation yet fails the first invoice. This runs a
+ * single cheap authenticated call so that failure surfaces loudly at boot
+ * instead of silently when the monthly rollup fires.
+ *
+ * No-op off cloud: self-host installs have no provider to probe. On an
+ * unauthorized key it logs a structured signal and throws so ops sees the
+ * dead key. Transient/non-auth failures propagate as-is — a flaky upstream is
+ * not a bad key, and the memoized wrapper clears its cache on any throw so a
+ * later call retries rather than pinning a rejected promise for the process.
+ */
+export async function runBillingCredentialCheck(deps: {
+    readonly isCloud: boolean;
+    readonly provider: Pick<PaymentProviderAdapter, "verifyCredentials">;
+}): Promise<void> {
+    if (!deps.isCloud) return;
+    const result = await deps.provider.verifyCredentials();
+    if (!result.ok) {
+        console.error("billing.credentials.invalid", {
+            event: "billing.credentials.invalid",
+            reason: result.reason,
+        });
+        throw new Error(
+            `billing credential check failed: payment provider rejected the API key (${result.reason}). Rotate LEMONSQUEEZY_API_KEY.`,
+        );
+    }
+}
+
+let credentialCheck: Promise<void> | null = null;
+
+/**
+ * Boot hook: verify billing credentials once per process. Memoized so the
+ * probe never runs per request — the cron + webhook routes call this on their
+ * first invocation and every later call resolves the cached promise. On
+ * failure the cache is cleared so a transient error does not pin a rejected
+ * promise for the life of the process.
+ */
+export function checkBillingCredentials(): Promise<void> {
+    if (credentialCheck === null) {
+        credentialCheck = runBillingCredentialCheck({
+            isCloud: env().IS_CLOUD,
+            provider: billingDeps().provider,
+        }).catch((err: unknown) => {
+            credentialCheck = null;
+            throw err;
+        });
+    }
+    return credentialCheck;
+}
+
+/** Test-only: reset the memoized credential check so each test starts fresh. */
+export function resetBillingCredentialCheckForTesting(): void {
+    credentialCheck = null;
+}
+
 const settingsUrl = (workspaceId: string, status: "ok" | "cancel"): string =>
     `${billingDeps().appUrl}${buildWorkspacePath(workspaceId, "settings")}?billing=${status}`;
 
@@ -95,14 +152,14 @@ export async function createCheckoutSession(input: {
     userEmail: string;
 }): Promise<{ url: string }> {
     const deps = billingDeps();
-    return createCheckoutSessionUseCase({
+    const session = await deps.provider.createCheckoutSession({
         workspaceId: input.workspaceId,
         userEmail: input.userEmail,
         variantId: deps.variantIdTeam,
         successUrl: settingsUrl(input.workspaceId, "ok"),
         cancelUrl: settingsUrl(input.workspaceId, "cancel"),
-        provider: deps.provider,
     });
+    return { url: session.url };
 }
 
 export async function getBillingPortalUrl(input: {
@@ -151,6 +208,17 @@ export async function runBillingRollup(now: Date): Promise<RollupBillUseCaseResu
         trackedSpend: deps.trackedSpend,
         eventBundleRollup: deps.eventBundleRollup,
     });
+}
+
+/**
+ * Delete `billing_webhook_events` rows older than the retention window. The
+ * daily prune cron calls this. Returns the number of rows removed so the
+ * scheduler logs see what happened.
+ */
+export async function runBillingWebhookPrune(now: Date): Promise<{ rowsPruned: number }> {
+    const deps = billingDeps();
+    const rowsPruned = await deps.webhookEvents.pruneOlderThan(billingWebhookPruneCutoff(now));
+    return { rowsPruned };
 }
 
 /** Live month-to-date bill estimate for one workspace. */

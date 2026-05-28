@@ -81,6 +81,15 @@ export interface Env {
     readonly BURSORA_SPIKE_PROTECTION_ENABLED: boolean;
     /** Empty string when both rate-limit and spike-protection are off. */
     readonly REDIS_URL: string;
+    /**
+     * CSRF allow-list for better-auth. Defaults to `[NEXT_PUBLIC_APP_URL,
+     * 'http://localhost:3000', 'http://localhost:3001',
+     * 'http://127.0.0.1:3000']` (deduped) so local dev across site (3000)
+     * and core (3001) works without extra config. Set
+     * `BETTER_AUTH_TRUSTED_ORIGINS` as a comma-separated list to override
+     * for preview deployments or secondary domains.
+     */
+    readonly BETTER_AUTH_TRUSTED_ORIGINS: readonly string[];
 }
 
 const parseBool = (value: string | undefined, fallback: boolean): boolean => {
@@ -90,6 +99,26 @@ const parseBool = (value: string | undefined, fallback: boolean): boolean => {
     if (normalized === "false" || normalized === "0" || normalized === "no") return false;
     return fallback;
 };
+
+/**
+ * Parse a comma-separated origin list. Trims each entry and drops empties.
+ * Unset / empty input falls back to `fallback`. Throws when the var is set
+ * but resolves to no usable origins. An empty allow-list would reject every
+ * cross-origin request, which is never what the operator intended.
+ */
+function parseTrustedOrigins(value: string | undefined, fallback: readonly string[]): string[] {
+    if (value === undefined || value.trim().length === 0) return [...fallback];
+    const origins = value
+        .split(",")
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0);
+    if (origins.length === 0) {
+        throw new Error(
+            "BETTER_AUTH_TRUSTED_ORIGINS is set but contains no valid origins after trimming",
+        );
+    }
+    return origins;
+}
 
 export function loadEnv(source: Record<string, string | undefined>): Env {
     const isCloud = parseBool(source.IS_CLOUD, false);
@@ -155,6 +184,25 @@ export function loadEnv(source: Record<string, string | undefined>): Env {
         return v;
     };
 
+    const appUrl = getAlways("NEXT_PUBLIC_APP_URL");
+    const defaultOrigins = Array.from(
+        new Set(
+            isCloud
+                ? [appUrl]
+                : [
+                      appUrl,
+                      "http://localhost:3000",
+                      "http://localhost:3001",
+                      "http://127.0.0.1:3000",
+                      "https://app-bursora.ngrok.app",
+                      "https://bursora.ngrok.app",
+                  ],
+        ),
+    );
+    const trustedOrigins = Object.freeze(
+        parseTrustedOrigins(source.BETTER_AUTH_TRUSTED_ORIGINS, defaultOrigins),
+    );
+
     return Object.freeze({
         DATABASE_URL: getAlways("DATABASE_URL"),
         BURSORA_API_KEY_PEPPER: getAlways("BURSORA_API_KEY_PEPPER"),
@@ -180,6 +228,7 @@ export function loadEnv(source: Record<string, string | undefined>): Env {
         BURSORA_RATE_LIMIT_ENABLED: rateLimitEnabled,
         BURSORA_SPIKE_PROTECTION_ENABLED: spikeProtectionEnabled,
         REDIS_URL: needsRedis ? (source.REDIS_URL ?? "") : "",
+        BETTER_AUTH_TRUSTED_ORIGINS: trustedOrigins,
     });
 }
 
@@ -195,4 +244,14 @@ export function env(): Env {
         cached = loadEnv(process.env);
     }
     return cached;
+}
+
+/**
+ * Drop the memoized env so the next `env()` call re-reads `process.env`.
+ * Test-only: cloud-mode tests mutate `process.env` and must reset, otherwise
+ * the cached cloud env leaks into later self-host tests in the same in-process
+ * run.
+ */
+export function resetEnvCacheForTesting(): void {
+    cached = null;
 }

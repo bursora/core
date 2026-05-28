@@ -2,15 +2,10 @@
  * Read-side helpers for the budgeting feature.
  *
  * Pages call `listBudgets` to render the dashboard list; the SDK route calls
- * `decideBudget` (from `./decide`) for the live decision read path. The
- * `listBudgetsUseCase` form is exposed for tests that wire in their own
- * repo fake.
+ * `decideBudget` (from `./decide`) for the live decision read path.
  */
 
 export type { BudgetStats } from "./server";
-
-export { getBudgetUseCase, type GetBudgetUseCaseInput } from "./get-budget.usecase";
-export { listBudgetsUseCase, type ListBudgetsInput } from "./list-budgets.usecase";
 
 export type {
     BudgetListFilter,

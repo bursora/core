@@ -13,7 +13,7 @@ import {
     users as userTable,
     workspaceMembers as workspaceMembersTable,
     workspaces as workspacesTable,
-} from "@/lib/db";
+} from "@/lib/db/schema";
 import {
     acceptInviteUseCase,
     API_KEY_PREFIX,
@@ -24,6 +24,7 @@ import {
     revokeApiKeyUseCase,
 } from "@/lib/identity";
 import { CapturingMailer } from "@/tests/identity/fakes/capturing-mailer";
+import { InMemoryApiKeyAuditLogRepository } from "@/tests/identity/fakes/in-memory-api-key-audit-log.repository";
 import { InMemoryApiKeyRepository } from "@/tests/identity/fakes/in-memory-api-key.repository";
 import {
     InMemoryInviteRepository,
@@ -85,11 +86,13 @@ describe("@/lib/identity public API", () => {
 
     test("api-key issue + list + revoke (rotation)", async () => {
         const keys = new InMemoryApiKeyRepository();
+        const audit = new InMemoryApiKeyAuditLogRepository();
         const issued = await issueApiKeyUseCase({
             workspaceId: WORKSPACE,
             name: "test",
             pepper: PEPPER,
             keys,
+            audit,
         });
         expect(issued.plaintext.startsWith(API_KEY_PREFIX)).toBe(true);
         const listed = await listApiKeysUseCase({ workspaceId: WORKSPACE, keys });
@@ -98,8 +101,9 @@ describe("@/lib/identity public API", () => {
             id: issued.id,
             workspaceId: WORKSPACE,
             keys,
+            audit,
         });
         const after = await listApiKeysUseCase({ workspaceId: WORKSPACE, keys });
-        expect(after.find((k: { id: string }) => k.id === issued.id)?.revokedAt).not.toBeNull();
+        expect(after.find((k: { id: string }) => k.id === issued.id)).toBeUndefined();
     });
 });

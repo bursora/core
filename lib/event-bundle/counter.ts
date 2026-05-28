@@ -43,19 +43,28 @@ export function bannerLevel(input: BannerInput): EventBundleBannerLevel {
 
 /**
  * Cents of overage accrued at the given event count. Events at or below the
- * bundle accrue zero. Past the bundle, every event is 0.03 cents; we ceil to
- * avoid undercharging due to integer arithmetic.
+ * bundle accrue zero. Past the bundle, every event is 0.03 cents.
+ *
+ * Rounded to the nearest cent (Math.round): the per-event ±0.5 cent bias is
+ * symmetric, so over many workspaces and many months the residual averages
+ * to zero. The previous Math.ceil over-billed every workspace whose overage
+ * was not an exact multiple of 1,000 events.
  */
 export function overageCentsAt(eventsCount: number): number {
     const overageEvents = Math.max(0, eventsCount - BUNDLE_EVENTS_PER_MONTH);
     if (overageEvents === 0) return 0;
-    return Math.ceil((overageEvents * OVERAGE_CENTS_PER_1000) / 1000);
+    return Math.round((overageEvents * OVERAGE_CENTS_PER_1000) / 1000);
 }
 
 /**
  * Returns true when an additional `nextEventCount` events would push accrued
- * overage past the workspace's hard cap. Pre-write check — the caller uses
- * this to decide whether to reject the batch before the DB write.
+ * overage to or past the workspace's hard cap. Pre-write check — the caller
+ * uses this to decide whether to reject the batch before the DB write.
+ *
+ * Both `projected` and `hardCapUsdCents` are integer cents. The boundary
+ * defensively floors the cap so a fractional input (the type says
+ * `number`, the schema says integer, but defense in depth) can never round
+ * upward and silently let a workspace slip past its limit.
  *
  * Null cap → always false (no cap configured).
  */
@@ -65,16 +74,26 @@ export function wouldExceedHardCap(input: {
     readonly hardCapUsdCents: number | null;
 }): boolean {
     if (input.hardCapUsdCents === null) return false;
+    const capCents = Math.floor(input.hardCapUsdCents);
     const projected = overageCentsAt(input.priorCount + input.nextEventCount);
-    return projected > input.hardCapUsdCents;
+    // Why: >= so a workspace that would exactly hit the cap is blocked rather
+    // than allowed (cap is the maximum spend, not maximum-plus-one).
+    return projected >= capCents;
 }
+
+const MONTH_KEY_PATTERN = /^\d{4}-(0[1-9]|1[0-2])$/;
 
 /**
  * Format YYYY-MM for the given Date in UTC. Calendar months are timezone-
- * agnostic in this context.
+ * agnostic in this context. Throws on invalid Date; defensive only, since a
+ * well-formed Date can never produce a bad key.
  */
 export function monthKey(at: Date): string {
     const y = at.getUTCFullYear();
     const m = (at.getUTCMonth() + 1).toString().padStart(2, "0");
-    return `${y}-${m}`;
+    const key = `${y}-${m}`;
+    if (!MONTH_KEY_PATTERN.test(key)) {
+        throw new Error(`monthKey: produced invalid key "${key}" from Date input`);
+    }
+    return key;
 }

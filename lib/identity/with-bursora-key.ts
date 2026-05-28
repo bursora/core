@@ -3,8 +3,9 @@
  *
  * Every public `/api/v1/*` route runs the same dance: read `X-Bursora-Key`,
  * look up the workspace, 401 on miss. Routes that want to surface failures
- * in the dashboard pass `onAuthFailure`; the helper invokes it with the
- * parsed workspace id and an eight-char hash prefix for log correlation.
+ * in the dashboard pass `onAuthFailure`; the helper invokes it with a
+ * non-attributable fingerprint (hash prefix + source IP) so a forged key
+ * carrying a victim's workspace fragment cannot pollute their bucket.
  *
  * Usage:
  *
@@ -18,14 +19,17 @@
 import "server-only";
 
 import { NextResponse } from "next/server";
-import { recordSetupError } from "../setup-errors/server";
+import { setupErrorLogger } from "../setup-errors/server";
 import type { ApiKeyLookup } from "./api-key";
-import { apiKeyHashPrefix, parseApiKeyPlaintext } from "./api-key.crypto";
+import { apiKeyHashPrefix } from "./api-key.crypto";
 import { lookupApiKey } from "./server";
+import { clientIpFromHeaders } from "@/lib/client-ip";
 
 export interface AuthFailureInfo {
-    readonly workspaceId: string | null;
+    /** Eight-char SHA-256 prefix of the offered plaintext; null when the header was missing. */
     readonly hashPrefix: string | null;
+    /** Best-effort client IP from `x-forwarded-for` (first hop) or `x-real-ip`; null when neither header was set. */
+    readonly sourceIp: string | null;
 }
 
 export interface WithBursoraKeyOptions {
@@ -43,7 +47,10 @@ export async function withBursoraKey(
     const plaintext = request.headers.get("x-bursora-key");
     if (plaintext === null) {
         if (opts.onAuthFailure !== undefined) {
-            void opts.onAuthFailure({ workspaceId: null, hashPrefix: null });
+            void opts.onAuthFailure({
+                hashPrefix: null,
+                sourceIp: clientIpFromHeaders(request.headers),
+            });
         }
         return { ok: false, response: unauthorized() };
     }
@@ -51,10 +58,9 @@ export async function withBursoraKey(
     const apiKey = await lookupApiKey(plaintext);
     if (apiKey === null) {
         if (opts.onAuthFailure !== undefined) {
-            const parsed = parseApiKeyPlaintext(plaintext);
             void opts.onAuthFailure({
-                workspaceId: parsed?.workspaceId ?? null,
                 hashPrefix: apiKeyHashPrefix(plaintext),
+                sourceIp: clientIpFromHeaders(request.headers),
             });
         }
         return { ok: false, response: unauthorized() };
@@ -64,14 +70,15 @@ export async function withBursoraKey(
 }
 
 /**
- * Default `onAuthFailure` handler: records an `auth_failure` setup-error so
- * the workspace owner sees misconfigured SDKs in the dashboard.
+ * Default `onAuthFailure` handler: records an `auth_failure` setup-error
+ * against the global bucket. We never attribute these to a workspace because
+ * the offered key may carry a forged workspace fragment.
  */
 export function recordAuthFailure(info: AuthFailureInfo): Promise<void> {
-    return recordSetupError({
+    return setupErrorLogger().log({
         kind: "auth_failure",
-        workspaceId: info.workspaceId,
         hashPrefix: info.hashPrefix,
+        sourceIp: info.sourceIp,
     });
 }
 

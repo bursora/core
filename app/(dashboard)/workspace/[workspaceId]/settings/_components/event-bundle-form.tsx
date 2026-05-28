@@ -5,7 +5,7 @@
  *
  * Toggle enables a hard overage cap in USD. When off, accrued overage bills
  * without a ceiling. When on, an integer dollar amount is required; events
- * past that overage are rejected (HTTP 202 with `X-Bursora-Cap-Hit: events`).
+ * past that overage are rejected (HTTP 429 with `X-Bursora-Cap-Hit: events`).
  *
  * The current-cycle stats (events count, overage accrued, bundle remaining)
  * render above the form so operators can read the impact of their setting
@@ -77,7 +77,7 @@ export function EventBundleForm({
                 <div>
                     <Label htmlFor="event-bundle-enabled">Enable hard cap</Label>
                     <p className="mt-1 text-sm text-muted-foreground">
-                        Reject events once overage hits the limit; new events return 202 with an
+                        Reject events once overage hits the limit; new events return 429 with an
                         `events_capped` body.
                     </p>
                 </div>

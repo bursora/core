@@ -7,7 +7,7 @@ import {
     getSpendDelta,
     getSpendInWindow,
     getSpendSeries,
-} from "@/app/(dashboard)/workspace/[workspaceId]/_lib/dashboard-stats";
+} from "@/lib/dashboard/dashboard-stats";
 import { NowStripView } from "@/components/ui/dashboard-views/now-strip-view";
 import type { KpiTone } from "@/components/ui/kpi";
 import { BUDGET_USAGE_WARN_THRESHOLD } from "@/lib/budgeting";

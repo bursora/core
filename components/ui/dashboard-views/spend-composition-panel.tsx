@@ -1,5 +1,5 @@
 import { formatUsd, formatWholePercent } from "@/lib/format";
-import type { CustomerComposition } from "@/lib/spend-composition";
+import type { CustomerComposition } from "@/lib/spend-composition/compute";
 import { cn } from "@/lib/utils";
 import type { Route } from "next";
 import Link from "next/link";

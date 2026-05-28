@@ -6,27 +6,27 @@
  *   2. For each row, compute the period window in UTC.
  *   3. Query the SpendAggregator port for the spend in that scope+window.
  *   4. Build a Spend snapshot and run the pure `evaluateBudget` deep module.
- *   5. When the evaluator surfaces a winning over-budget trigger, record
- *      the crossing (idempotent per workspace+budget+period). If the row
- *      was inserted (first crossing in this window), publish a
- *      `BudgetAlertRaisedEvent` so the notification dispatcher fans out
- *      to the workspace's channels.
+ *   5. When the evaluator surfaces a winning over-budget trigger, return a
+ *      `BudgetCrossingTrigger` so the caller can record the crossing
+ *      (idempotent per workspace+budget+period) and publish a
+ *      `BudgetAlertRaisedEvent` for the notification dispatcher.
  *
- * The orchestrator stays thin — all enforcement policy lives in
- * `evaluateBudget`. Period math lives in `period.ts`.
- *
- * `bus` and `alerts` are optional so the use case keeps working in
- * unit/feature tests that exercise the decision path in isolation.
+ * Decoupling: this use case never touches the alerts repository or the event
+ * bus. It returns the decision plus, when applicable, a trigger object that
+ * carries the crossing record to persist and a builder that produces the
+ * event once the alert row id is known. Wiring lives in the composition root
+ * (`server.ts`).
  */
 
-import type { AlertRepository } from "../detection/alert.repository";
+import type { BudgetAlertRaisedEvent } from "../event-bus";
+import { ALERT_RAISED_TOPIC } from "../event-bus";
 import { errMessage } from "../error-message";
-import { ALERT_RAISED_TOPIC, type BudgetAlertRaisedEvent, type EventBus } from "../event-bus";
+import type { BudgetCrossingRecord } from "../detection/alert.repository";
 import type { Budget, Decision } from "./budget";
 import type { BudgetRepository } from "./budget.repository";
 import type { BudgetTrigger, EvaluateBudgetOptions } from "./evaluate-budget";
 import { evaluateBudget } from "./evaluate-budget";
-import { periodWindow } from "./period";
+import { defaultPeriodResolver, type PeriodResolver } from "./period";
 import type { SpendAggregator } from "./spend-aggregator";
 import { spendKey } from "./spend-snapshot";
 
@@ -62,12 +62,34 @@ export interface DecideBudgetInput {
     readonly budgets: BudgetRepository;
     readonly spend: SpendAggregator;
     readonly ttlSeconds?: number;
-    readonly bus?: EventBus;
-    readonly alerts?: AlertRepository;
     readonly recordBlocked?: RecordBlockedCall;
+    readonly periodResolver?: PeriodResolver;
 }
 
-export async function decideBudgetUseCase(input: DecideBudgetInput): Promise<Decision> {
+/**
+ * Event shape that the dispatcher accepts: a `BudgetAlertRaisedEvent` with
+ * its topic stamped so the EventDispatcher seam can route it.
+ */
+export type BudgetAlertRaisedDispatchEvent = BudgetAlertRaisedEvent & {
+    readonly topic: typeof ALERT_RAISED_TOPIC;
+};
+
+/**
+ * Side-effect packet the use case hands back when a budget crosses its cap.
+ * The caller persists `crossing` via the alert repository; on inserted=true
+ * it calls `buildEvent(alertId)` to materialize the publishable event.
+ */
+export interface BudgetCrossingTrigger {
+    readonly crossing: BudgetCrossingRecord;
+    readonly buildEvent: (alertId: string) => BudgetAlertRaisedDispatchEvent;
+}
+
+export interface DecideBudgetResult {
+    readonly decision: Decision;
+    readonly trigger?: BudgetCrossingTrigger;
+}
+
+export async function decideBudgetUseCase(input: DecideBudgetInput): Promise<DecideBudgetResult> {
     const raw = await input.budgets.findApplicable({
         workspaceId: input.workspaceId,
         tenantId: input.tenantId,
@@ -76,13 +98,19 @@ export async function decideBudgetUseCase(input: DecideBudgetInput): Promise<Dec
     });
 
     if (raw.length === 0) {
-        return evaluateBudget({ get: () => 0 }, [], evalOpts(input)).decision;
+        return { decision: evaluateBudget({ get: () => 0 }, [], evalOpts(input)).decision };
     }
 
+    const resolver = input.periodResolver ?? defaultPeriodResolver;
     const windows = raw.map((row) => ({
         row,
-        window: periodWindow(row.period, input.now),
+        window: resolver.resolveWindow(row.period, input.now),
     }));
+
+    // Read-only decision: nothing mutates spend here, so the spend read +
+    // evaluation needs no lock. Real cost lands on a separate report-usage
+    // request that never takes a lock; serializing this preflight path bought
+    // latency without preventing overshoot.
     const spends = await Promise.all(
         windows.map(({ row, window }) =>
             input.spend.getSpendForScopePeriod({
@@ -107,54 +135,57 @@ export async function decideBudgetUseCase(input: DecideBudgetInput): Promise<Dec
     });
 
     const snapshot = { get: (key: string) => spendMap.get(key) ?? 0 };
-    const outcome = evaluateBudget(snapshot, resolved, evalOpts(input));
+    const evalOutcome = evaluateBudget(snapshot, resolved, evalOpts(input));
 
-    if (outcome.trigger !== undefined) {
-        const trigger = outcome.trigger;
-        const triggerBudget = resolved.find((b) => b.id === trigger.budgetId);
-        if (triggerBudget === undefined) {
-            throw new Error("invariant: trigger budget id must exist in resolved budgets");
-        }
-        await handleCrossing(input, trigger, triggerBudget, outcome.decision.reason);
-        if (trigger.mode === "block" && input.recordBlocked !== undefined) {
-            // Fire-and-forget: blocked-row write must not delay SDK response.
-            void input
-                .recordBlocked({
-                    workspaceId: input.workspaceId,
-                    tenantId: input.tenantId,
-                    agentId: input.agentId,
-                    workflowId: input.workflowId,
-                    ts: input.now,
-                    budgetId: trigger.budgetId,
-                    intendedProvider: input.intendedProvider ?? null,
-                    intendedModel: input.intendedModel ?? null,
-                    blockReason: outcome.decision.reason,
-                })
-                .catch((err) => {
-                    console.warn("blocked_call.record_failed", {
-                        workspaceId: input.workspaceId,
-                        budgetId: trigger.budgetId,
-                        error: errMessage(err),
-                    });
-                });
-        }
+    if (evalOutcome.trigger === undefined) {
+        return { decision: evalOutcome.decision };
     }
 
-    return outcome.decision;
+    const trigger = evalOutcome.trigger;
+    const triggerBudget = resolved.find((b) => b.id === trigger.budgetId);
+    if (triggerBudget === undefined) {
+        throw new Error("invariant: trigger budget id must exist in resolved budgets");
+    }
+
+    if (trigger.mode === "block" && input.recordBlocked !== undefined) {
+        // Fire-and-forget: blocked-row write must not delay SDK response.
+        void input
+            .recordBlocked({
+                workspaceId: input.workspaceId,
+                tenantId: input.tenantId,
+                agentId: input.agentId,
+                workflowId: input.workflowId,
+                ts: input.now,
+                budgetId: trigger.budgetId,
+                intendedProvider: input.intendedProvider ?? null,
+                intendedModel: input.intendedModel ?? null,
+                blockReason: evalOutcome.decision.reason,
+            })
+            .catch((err) => {
+                console.warn("blocked_call.record_failed", {
+                    workspaceId: input.workspaceId,
+                    budgetId: trigger.budgetId,
+                    error: errMessage(err),
+                });
+            });
+    }
+
+    return {
+        decision: evalOutcome.decision,
+        trigger: buildTrigger(input, trigger, triggerBudget, evalOutcome.decision.reason),
+    };
 }
 
-async function handleCrossing(
+function buildTrigger(
     input: DecideBudgetInput,
     trigger: BudgetTrigger,
     budget: Budget,
     reason: string,
-): Promise<void> {
-    if (input.alerts === undefined) return;
-
+): BudgetCrossingTrigger {
     const pctOver = computePctOver(trigger.used, trigger.limit);
     const severity = trigger.mode === "block" ? "critical" : "warning";
 
-    const result = await input.alerts.recordBudgetCrossing({
+    const crossing: BudgetCrossingRecord = {
         workspaceId: input.workspaceId,
         budgetId: trigger.budgetId,
         periodFrom: trigger.periodFrom,
@@ -170,37 +201,28 @@ async function handleCrossing(
             limit: trigger.limit,
         },
         raisedAt: input.now,
-    });
-
-    if (!result.inserted || result.id === null || input.bus === undefined) return;
-
-    const event: BudgetAlertRaisedEvent = {
-        kind: "budget",
-        alertId: result.id,
-        workspaceId: input.workspaceId,
-        budgetId: trigger.budgetId,
-        scopeType: trigger.scopeType,
-        scopeId: trigger.scopeId,
-        period: budget.period,
-        periodFrom: trigger.periodFrom,
-        mode: trigger.mode,
-        used: trigger.used,
-        limit: trigger.limit,
-        pctOver,
-        severity,
-        raisedAt: input.now,
     };
-    // Fire-and-forget: dispatch handler awaits webhook POSTs + SMTP, which
-    // can take seconds. The SDK pre-call decision must not block on them.
-    // Errors are swallowed by the in-process event bus, but a publish-time
-    // failure (e.g. bus disposed) should still be logged.
-    void input.bus.publish<BudgetAlertRaisedEvent>(ALERT_RAISED_TOPIC, event).catch((err) => {
-        console.warn("budget_alert.publish_failed", {
+
+    return {
+        crossing,
+        buildEvent: (alertId: string) => ({
+            topic: ALERT_RAISED_TOPIC,
+            kind: "budget",
+            alertId,
             workspaceId: input.workspaceId,
             budgetId: trigger.budgetId,
-            error: errMessage(err),
-        });
-    });
+            scopeType: trigger.scopeType,
+            scopeId: trigger.scopeId,
+            period: budget.period,
+            periodFrom: trigger.periodFrom,
+            mode: trigger.mode,
+            used: trigger.used,
+            limit: trigger.limit,
+            pctOver,
+            severity,
+            raisedAt: input.now,
+        }),
+    };
 }
 
 function computePctOver(used: number, limit: number): number {

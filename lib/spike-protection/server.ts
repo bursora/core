@@ -32,6 +32,11 @@ import type {
 
 export interface SpikeProtectionDeps {
     readonly enabled: boolean;
+    /**
+     * Cloud installs fail-closed on Redis errors (return 503); self-host
+     * stays fail-open. Wired from `env().IS_CLOUD`.
+     */
+    readonly isCloud: boolean;
     readonly state: SpikeStateStore;
     readonly baseline: BaselineSource;
     readonly settings: SpikeSettingsRepository;
@@ -58,6 +63,7 @@ export function spikeProtectionDeps(): SpikeProtectionDeps {
         : new InMemorySpikeStateStore();
     return {
         enabled,
+        isCloud: e.IS_CLOUD,
         state,
         baseline: drizzleBaselineSource(db()),
         settings: drizzleSpikeSettingsRepository(db()),

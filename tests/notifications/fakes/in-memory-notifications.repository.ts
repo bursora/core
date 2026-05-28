@@ -1,6 +1,7 @@
 import type {
     InsertNotificationInput,
     NotificationRow,
+    NotificationsCursor,
     NotificationsRepository,
 } from "@/lib/notifications/notifications.repository";
 import type { NotificationDisplay, NotificationSource } from "@/lib/notifications/types";
@@ -61,14 +62,31 @@ export class InMemoryNotificationsRepository implements NotificationsRepository 
         sources?: readonly NotificationSource[];
         includeRead?: boolean;
         display?: NotificationDisplay;
+        limit?: number;
+        cursor?: NotificationsCursor;
     }): Promise<readonly NotificationRow[]> {
-        return this.rows
+        const sorted = this.rows
             .filter((r) => r.userId === input.userId)
             .filter((r) => (input.workspaceId ? r.workspaceId === input.workspaceId : true))
             .filter((r) => (input.sources ? input.sources.includes(r.source) : true))
             .filter((r) => (input.display ? r.display === input.display : true))
             .filter((r) => (input.includeRead ? true : r.readAt === null))
-            .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+            .sort((a, b) => {
+                const dt = b.createdAt.getTime() - a.createdAt.getTime();
+                if (dt !== 0) return dt;
+                return a.id < b.id ? 1 : a.id > b.id ? -1 : 0;
+            });
+
+        const afterCursor = input.cursor
+            ? sorted.filter((r) => {
+                  const ms = r.createdAt.getTime();
+                  if (ms < input.cursor!.createdAtMs) return true;
+                  if (ms === input.cursor!.createdAtMs && r.id < input.cursor!.id) return true;
+                  return false;
+              })
+            : sorted;
+
+        return input.limit !== undefined ? afterCursor.slice(0, input.limit) : afterCursor;
     }
 
     async markRead(input: { userId: string; ids: readonly string[]; now: Date }): Promise<void> {

@@ -23,6 +23,7 @@ import type {
     RefundAllOrdersResult,
     ReportUsageInput,
     ReportUsageResult,
+    VerifyCredentialsResult,
     VerifyEventInput,
     WebhookEvent,
     WebhookEventType,
@@ -217,7 +218,8 @@ export class LemonSqueezyApiAdapter implements PaymentProviderAdapter {
                 };
             };
         };
-        const itemId = subscriptionPayload.data?.relationships?.["subscription-items"]?.data?.[0]?.id;
+        const itemId =
+            subscriptionPayload.data?.relationships?.["subscription-items"]?.data?.[0]?.id;
         if (itemId === undefined || itemId === null || String(itemId).length === 0) {
             throw new Error(
                 `lemonsqueezy.reportUsage: subscription ${input.subscriptionId} has no subscription-item`,
@@ -260,9 +262,7 @@ export class LemonSqueezyApiAdapter implements PaymentProviderAdapter {
 
         if (!response.ok) {
             const errorText = await response.text().catch(() => "");
-            throw new Error(
-                `lemonsqueezy.reportUsage failed: ${response.status} ${errorText}`,
-            );
+            throw new Error(`lemonsqueezy.reportUsage failed: ${response.status} ${errorText}`);
         }
 
         const payload = (await response.json()) as { data?: { id?: string | number } };
@@ -401,9 +401,27 @@ export class LemonSqueezyApiAdapter implements PaymentProviderAdapter {
         ) {
             return;
         }
-        throw new Error(
-            `lemonsqueezy.cancelSubscription failed: ${response.status} ${errorText}`,
-        );
+        throw new Error(`lemonsqueezy.cancelSubscription failed: ${response.status} ${errorText}`);
+    }
+
+    async verifyCredentials(): Promise<VerifyCredentialsResult> {
+        // `/v1/users/me` is the cheapest authenticated read: it touches no
+        // store data and exists on every LS account. A 401/403 means the key
+        // is dead; any other non-2xx is a transient upstream issue we surface
+        // as a throw so a flaky LS is not mistaken for a rotated key.
+        const response = await this.fetcher(`${LS_API_BASE}/v1/users/me`, {
+            method: "GET",
+            headers: {
+                Authorization: `Bearer ${this.apiKey}`,
+                Accept: JSON_API_CONTENT_TYPE,
+            },
+        });
+        if (response.ok) return { ok: true };
+        if (response.status === 401 || response.status === 403) {
+            return { ok: false, reason: "unauthorized" };
+        }
+        const errorText = await response.text().catch(() => "");
+        throw new Error(`lemonsqueezy.verifyCredentials failed: ${response.status} ${errorText}`);
     }
 }
 
@@ -486,6 +504,11 @@ export function mapLemonSqueezyEvent(
         String(storeIdAttr) === expectedStoreId;
     const type = storeMatches ? eventNameToWebhookType(eventName) : "unknown";
 
+    // LS stamps `trial_ends_at` as an ISO 8601 string on subscription
+    // objects with a trial period. Parse it into a Date so downstream
+    // billing code can compare against `now` without re-parsing.
+    const trialEndsAt = parseTrialEndsAt(attributes.trial_ends_at);
+
     return {
         id: eventId,
         type,
@@ -493,8 +516,20 @@ export function mapLemonSqueezyEvent(
         customerId,
         subscriptionId,
         status,
+        trialEndsAt,
         ...(invoiceId !== null ? { invoiceId } : {}),
     };
+}
+
+// LS stamps `trial_ends_at` as an ISO 8601 string on subscription objects
+// with a trial period. Parse into a Date so downstream billing can compare
+// against `now` without re-parsing. An unparseable value yields Invalid Date,
+// whose getTime() is NaN; is-billable-now's `NaN <= now` is false, which would
+// pin a trialing workspace as permanently non-billable. Reject it to null.
+function parseTrialEndsAt(attr: unknown): Date | null {
+    if (typeof attr !== "string" || attr.length === 0) return null;
+    const d = new Date(attr);
+    return Number.isNaN(d.getTime()) ? null : d;
 }
 
 function eventNameToWebhookType(eventName: string): WebhookEventType {

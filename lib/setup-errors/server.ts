@@ -4,14 +4,12 @@ import { db, schema, type Db } from "@/lib/db";
 import { and, eq, gte, sql } from "drizzle-orm";
 import { errMessage } from "../error-message";
 import { DrizzleMemberRepository } from "../identity/drizzle-member.repository";
-import { DrizzleWorkspaceRepository } from "../identity/drizzle-workspace.repository";
 import { NOTICE_LABELS } from "../notices/labels";
 import {
     drizzleNotificationsRepository,
     type NotificationsRepository,
 } from "../notifications/notifications.repository";
 import { buildWorkspacePath } from "../routes";
-import { isUuid } from "../uuid";
 import { type DashboardSetupErrorCategory, type SetupErrorCategory } from "./category";
 
 export interface SetupErrorBucketRow {
@@ -42,15 +40,14 @@ export type RecordSetupErrorInput =
     | { readonly kind: "sdk_unknown_provider"; readonly workspaceId: string }
     | {
           readonly kind: "auth_failure";
-          /** Parsed workspace id from the key; null when the key failed to parse or was missing. */
-          readonly workspaceId: string | null;
-          /** Eight-char SHA-256 prefix of the plaintext for log correlation; null when the key was missing. */
+          /** Eight-char SHA-256 prefix of the offered plaintext; null when the header was missing. */
           readonly hashPrefix: string | null;
+          /** Best-effort client IP from proxy headers; null when none was set. */
+          readonly sourceIp: string | null;
       };
 
 export interface SetupErrorsDeps {
     readonly repo: SetupErrorRepository;
-    readonly workspaceExists: (workspaceId: string) => Promise<boolean>;
     readonly now: () => Date;
     readonly notifications: NotificationsRepository;
     readonly listMemberUserIds: (workspaceId: string) => Promise<readonly string[]>;
@@ -65,10 +62,6 @@ export function setSetupErrorsDepsForTesting(deps: SetupErrorsDeps | null): void
 function defaultDeps(): SetupErrorsDeps {
     return {
         repo: drizzleSetupErrorRepository(db()),
-        workspaceExists: async (workspaceId) => {
-            if (!isUuid(workspaceId)) return false;
-            return (await new DrizzleWorkspaceRepository(db()).findById(workspaceId)) !== null;
-        },
         now: () => new Date(),
         notifications: drizzleNotificationsRepository(db()),
         listMemberUserIds: (workspaceId) =>
@@ -140,7 +133,6 @@ export async function recordSetupErrorUseCase(args: {
     input: RecordSetupErrorInput;
     now: Date;
     repo: SetupErrorRepository;
-    workspaceExists: (workspaceId: string) => Promise<boolean>;
     notifications: NotificationsRepository;
     listMemberUserIds: (workspaceId: string) => Promise<readonly string[]>;
 }): Promise<void> {
@@ -163,41 +155,21 @@ export async function recordSetupErrorUseCase(args: {
         }
         return;
     }
-    const workspaceId = args.input.workspaceId;
-    const hashPrefix = args.input.hashPrefix;
-    if (workspaceId === null || !(await args.workspaceExists(workspaceId))) {
-        console.warn("setup_error.auth_failure", {
-            category: "auth_unknown",
-            workspaceId,
-            hashPrefix,
-        });
-        // Global bucket; no workspace, no recipients; never fans out.
-        await args.repo.incrementBucket({
-            workspaceId: null,
-            category: "auth_unknown",
-            bucketHour,
-        });
-        return;
-    }
+    // Auth failures never attribute to a workspace: the offered key may
+    // carry a forged workspace fragment, so logging it would let an
+    // attacker pollute a victim's bucket and trigger false alarms. The
+    // hash prefix + source IP correlate retries across logs without
+    // exposing the key.
     console.warn("setup_error.auth_failure", {
-        category: "auth_revoked",
-        workspaceId,
-        hashPrefix,
+        category: "auth_unknown",
+        hashPrefix: args.input.hashPrefix,
+        sourceIp: args.input.sourceIp,
     });
-    const { created } = await args.repo.incrementBucket({
-        workspaceId,
-        category: "auth_revoked",
+    await args.repo.incrementBucket({
+        workspaceId: null,
+        category: "auth_unknown",
         bucketHour,
     });
-    if (created) {
-        await fanOutSetupErrorNotification({
-            workspaceId,
-            category: "auth_revoked",
-            bucketHour,
-            notifications: args.notifications,
-            listMemberUserIds: args.listMemberUserIds,
-        });
-    }
 }
 
 const SETUP_ERROR_DEDUP_PREFIX = "setup_error:";
@@ -243,7 +215,6 @@ export async function recordSetupError(input: RecordSetupErrorInput): Promise<vo
             input,
             now: d.now(),
             repo: d.repo,
-            workspaceExists: d.workspaceExists,
             notifications: d.notifications,
             listMemberUserIds: d.listMemberUserIds,
         });
@@ -254,6 +225,30 @@ export async function recordSetupError(input: RecordSetupErrorInput): Promise<vo
             err: errMessage(err),
         });
     }
+}
+
+/**
+ * Single observability seam for setup-error reporting. Call sites depend on
+ * the interface, not the concrete recorder, so tests can swap in a recording
+ * fake via {@link setSetupErrorLoggerForTesting} and production code stays
+ * pointed at the persistent rollup.
+ */
+export interface SetupErrorLogger {
+    log(input: RecordSetupErrorInput): Promise<void>;
+}
+
+const defaultSetupErrorLogger: SetupErrorLogger = {
+    log: recordSetupError,
+};
+
+let setupErrorLoggerOverride: SetupErrorLogger | null = null;
+
+export function setSetupErrorLoggerForTesting(logger: SetupErrorLogger | null): void {
+    setupErrorLoggerOverride = logger;
+}
+
+export function setupErrorLogger(): SetupErrorLogger {
+    return setupErrorLoggerOverride ?? defaultSetupErrorLogger;
 }
 
 export interface SetupErrorSummary {

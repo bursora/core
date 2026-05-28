@@ -12,7 +12,8 @@
 
 import "server-only";
 
-import { db, pricing } from "@/lib/db";
+import { db } from "@/lib/db";
+import { pricing } from "@/lib/db/schema";
 import { inArray } from "drizzle-orm";
 
 export interface ModelProviderResolver {

@@ -1,14 +1,15 @@
 /**
  * Notification bootstrap.
  *
- * Subscribes the dispatch-alert handler to the in-process event bus so any
- * `alert.raised` event is fanned out to the workspace's configured Slack,
- * Discord, and email channels. Idempotent — safe to call from multiple
- * callers.
+ * Wires alert handlers onto the `EventDispatcher` seam so every
+ * `alert.raised` event reaches the channel dispatcher and the per-member
+ * notification fan-out. Bridges the legacy in-process event bus into the
+ * dispatcher so existing publishers (decide-budget, anomaly-detection) keep
+ * working untouched. Idempotent — safe to call from multiple callers.
  *
- * Wires the handler factory with the adapter singletons and registers the
- * result on the shared event bus. Does not run at module load — call
- * `ensureNotificationBootstrap` explicitly.
+ * The bus subscriber reads the denied-since-trip count once per event and
+ * augments the dispatched event so both handlers share that work instead of
+ * double-querying.
  */
 
 import "server-only";
@@ -18,6 +19,7 @@ import { countBlockedSinceTrip } from "../budgeting/blocked-calls";
 import { ALERT_RAISED_TOPIC, type AlertRaisedEvent } from "../event-bus";
 import { DrizzleMemberRepository } from "../identity/drizzle-member.repository";
 import { eventBus } from "../in-memory-event-bus";
+import { createEventDispatcher, type EventDispatcher } from "../notifications/event-dispatcher";
 import { fanOutAlertNotification } from "../notifications/fan-out-alert";
 import { drizzleNotificationDeliveriesRepository } from "../notifications/notification-deliveries.repository";
 import { drizzleNotificationsRepository } from "../notifications/notifications.repository";
@@ -26,11 +28,19 @@ import { drizzleAlertChannelRepository } from "./drizzle-alert-channel.repositor
 import { defaultSmtpMailer } from "./send";
 import { httpWebhookSender } from "./webhook-sender.adapter";
 
+type AlertRaisedDispatchEvent = AlertRaisedEvent & {
+    readonly topic: typeof ALERT_RAISED_TOPIC;
+    readonly deniedSinceTrip: number;
+};
+
 let bootstrapped = false;
+let dispatcher: EventDispatcher | null = null;
 
 export function ensureNotificationBootstrap(): void {
     if (bootstrapped) return;
     bootstrapped = true;
+
+    dispatcher = createEventDispatcher();
 
     const dispatch = dispatchAlertHandler({
         channels: drizzleAlertChannelRepository(db()),
@@ -42,9 +52,21 @@ export function ensureNotificationBootstrap(): void {
     const notifications = drizzleNotificationsRepository(db());
     const members = new DrizzleMemberRepository(db());
 
-    // Single subscriber: read the denied-since-trip count once per budget
-    // event, then fan out to both the channel dispatch and the per-member
-    // notifications insert. Avoids the double DB hit per alert.
+    dispatcher.on<AlertRaisedDispatchEvent>(ALERT_RAISED_TOPIC, async (event) => {
+        await dispatch(event, { deniedSinceTrip: event.deniedSinceTrip });
+    });
+    dispatcher.on<AlertRaisedDispatchEvent>(ALERT_RAISED_TOPIC, async (event) => {
+        await fanOutAlertNotification({
+            event,
+            notifications,
+            listMemberUserIds: (workspaceId) => members.listMemberUserIds(workspaceId),
+            deniedSinceTrip: event.deniedSinceTrip,
+        });
+    });
+
+    // Bridge: legacy publishers still call `bus.publish(ALERT_RAISED_TOPIC, ...)`.
+    // Read denied-since-trip once per event, then dispatch the augmented event
+    // so both handlers share that work instead of double-querying.
     eventBus().subscribe<AlertRaisedEvent>(ALERT_RAISED_TOPIC, async (event) => {
         const deniedSinceTrip =
             event.kind === "budget"
@@ -54,15 +76,11 @@ export function ensureNotificationBootstrap(): void {
                       since: event.raisedAt,
                   }).catch(() => 0)
                 : 0;
-        await Promise.all([
-            dispatch(event, { deniedSinceTrip }),
-            fanOutAlertNotification({
-                event,
-                notifications,
-                listMemberUserIds: (workspaceId) => members.listMemberUserIds(workspaceId),
-                deniedSinceTrip,
-            }),
-        ]);
+        await dispatcher?.dispatch<AlertRaisedDispatchEvent>({
+            ...event,
+            topic: ALERT_RAISED_TOPIC,
+            deniedSinceTrip,
+        });
     });
 }
 
@@ -72,4 +90,5 @@ export function ensureNotificationBootstrap(): void {
  */
 export function resetNotificationBootstrapForTesting(): void {
     bootstrapped = false;
+    dispatcher = null;
 }

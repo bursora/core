@@ -1,25 +1,24 @@
 /**
- * Drizzle SpendAggregator — direct SUM(cost_usd) against `usage_events`.
+ * Drizzle SpendAggregator — adapter over the unified `SpendRepository`.
  *
- * Filters:
- *   - workspace_id (always)
- *   - ts >= from AND ts < to (the half-open window from `periodWindow`)
- *   - scope_type → matches the corresponding column:
- *       'workspace' → no extra filter (workspace_id alone scopes it)
- *       'tenant'    → tenant_id = scopeId
- *       'agent'     → agent_id = scopeId
- *       'workflow'  → workflow_id = scopeId
+ * The single-shot `getSpendForScopePeriod` delegates to
+ * `SpendRepository.getSpendForScope` so the WHERE clause stays in lockstep
+ * with the metering dashboards.
  *
- * Returns a USD float. The column is `numeric(14,8)` so the SUM comes back
- * as a decimal string from postgres-js; we parseFloat at the boundary. Sub-
- * cent precision is acceptable for budget evaluation (limits are in dollars).
+ * `getSpendForScopePeriodBatch` keeps its own GROUP BY + IN-list query path
+ * because it collapses N per-scope reads into one SQL per (period, scopeType).
+ * The unified repo intentionally stays single-scope; batching is a budgeting-
+ * specific optimization for the dashboard list.
  */
 
 import "server-only";
 
 import type { Db } from "@/lib/db";
 import { schema } from "@/lib/db";
-import { and, eq, gte, inArray, lt, sum } from "drizzle-orm";
+import { buildMeteringWhereClause } from "@/lib/metering/usage-events-filters";
+import type { SpendRepository } from "@/lib/spend";
+import { drizzleSpendRepository } from "@/lib/spend";
+import { and, gte, inArray, lt, sum } from "drizzle-orm";
 import type { ScopeType } from "./budget";
 import type { SpendAggregator, SpendAggregatorQuery } from "./spend-aggregator";
 
@@ -43,30 +42,23 @@ const parseTotal = (raw: string | null): number => {
 };
 
 export class DrizzleSpendAggregator implements SpendAggregator {
-    constructor(private readonly db: Db) {}
+    private readonly spend: SpendRepository;
+
+    constructor(private readonly db: Db) {
+        this.spend = drizzleSpendRepository(db);
+    }
 
     async getSpendForScopePeriod(query: SpendAggregatorQuery): Promise<number> {
-        const filters = [
-            eq(schema.usageEvents.workspaceId, query.workspaceId),
-            gte(schema.usageEvents.ts, query.from),
-            lt(schema.usageEvents.ts, query.to),
-            eq(schema.usageEvents.status, "ok"),
-        ];
-
-        if (query.scopeType === "tenant" && query.scopeId !== null) {
-            filters.push(eq(schema.usageEvents.tenantId, query.scopeId));
-        } else if (query.scopeType === "agent" && query.scopeId !== null) {
-            filters.push(eq(schema.usageEvents.agentId, query.scopeId));
-        } else if (query.scopeType === "workflow" && query.scopeId !== null) {
-            filters.push(eq(schema.usageEvents.workflowId, query.scopeId));
-        }
-
-        const [row] = await this.db
-            .select({ total: sum(schema.usageEvents.costUsd) })
-            .from(schema.usageEvents)
-            .where(and(...filters));
-
-        return parseTotal(row?.total ?? null);
+        // Hardcoded 'ok' — budgets only cap real spend; denied calls cost
+        // nothing and would otherwise inflate the running total.
+        return this.spend.getSpendForScope({
+            workspaceId: query.workspaceId,
+            scopeType: query.scopeType,
+            scopeId: query.scopeId,
+            from: query.from,
+            to: query.to,
+            status: "ok",
+        });
     }
 
     /**
@@ -122,6 +114,8 @@ export class DrizzleSpendAggregator implements SpendAggregator {
                 });
         });
 
+        // Hardcoded 'ok' on both branches — matches the single-shot path
+        // above; budgets cap real spend only.
         const workspaceJobs: Promise<void>[] = [];
         for (const { from, to, indices } of workspaceGroups.values()) {
             workspaceJobs.push(
@@ -131,10 +125,12 @@ export class DrizzleSpendAggregator implements SpendAggregator {
                         .from(schema.usageEvents)
                         .where(
                             and(
-                                eq(schema.usageEvents.workspaceId, query.workspaceId),
+                                ...buildMeteringWhereClause({
+                                    workspaceId: query.workspaceId,
+                                    status: "ok",
+                                }),
                                 gte(schema.usageEvents.ts, from),
                                 lt(schema.usageEvents.ts, to),
-                                eq(schema.usageEvents.status, "ok"),
                             ),
                         );
                     const total = parseTotal(row?.total ?? null);
@@ -157,10 +153,12 @@ export class DrizzleSpendAggregator implements SpendAggregator {
                         .from(schema.usageEvents)
                         .where(
                             and(
-                                eq(schema.usageEvents.workspaceId, query.workspaceId),
+                                ...buildMeteringWhereClause({
+                                    workspaceId: query.workspaceId,
+                                    status: "ok",
+                                }),
                                 gte(schema.usageEvents.ts, group.from),
                                 lt(schema.usageEvents.ts, group.to),
-                                eq(schema.usageEvents.status, "ok"),
                                 inArray(column, scopeIds),
                             ),
                         )

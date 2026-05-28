@@ -6,9 +6,8 @@ import { listActivityPage } from "@/lib/compose/activity";
 import { formatRelativeTime } from "@/lib/format";
 import {
     ACTIVITY_KIND_LABELS,
-    ACTIVITY_KIND_VALUES,
-    ACTIVITY_SEVERITY_VALUES,
-    parseActivityOption,
+    deserializeActivityFilters,
+    serializeActivityFilters,
     type ActivityFilters as ActivityFilterValues,
     type ActivityItem,
     type ActivityKind,
@@ -51,29 +50,31 @@ export interface ActivityTabProps {
 
 const DEFAULT_ACTIVITY_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 
-function parseDateParam(raw: string | undefined): Date | null {
-    if (raw === undefined) return null;
-    const d = new Date(raw);
-    return Number.isNaN(d.getTime()) ? null : d;
+function toSearchParams(input: ActivityTabProps["searchParams"]): URLSearchParams {
+    const out = new URLSearchParams();
+    if (input.kind !== undefined) out.set("kind", input.kind);
+    if (input.severity !== undefined) out.set("severity", input.severity);
+    if (input.from !== undefined) out.set("from", input.from);
+    if (input.to !== undefined) out.set("to", input.to);
+    if (input.cursor !== undefined) out.set("cursor", input.cursor);
+    return out;
 }
 
 export async function ActivityTab({
     workspaceId,
     searchParams,
 }: ActivityTabProps): Promise<React.JSX.Element> {
-    const kind = parseActivityOption<ActivityKind>(searchParams.kind, ACTIVITY_KIND_VALUES);
-    const severity = parseActivityOption(searchParams.severity, ACTIVITY_SEVERITY_VALUES);
-    const cursor = searchParams.cursor ?? null;
+    const parsed = deserializeActivityFilters(toSearchParams(searchParams));
+    const cursor = parsed.cursor ?? null;
 
     const now = new Date();
-    const to = parseDateParam(searchParams.to) ?? now;
-    const from =
-        parseDateParam(searchParams.from) ?? new Date(to.getTime() - DEFAULT_ACTIVITY_WINDOW_MS);
+    const to = parsed.to ?? now;
+    const from = parsed.from ?? new Date(to.getTime() - DEFAULT_ACTIVITY_WINDOW_MS);
 
     const filters: ActivityFilterValues = {
         from,
-        ...(kind !== null ? { kind } : {}),
-        ...(severity !== null ? { severity } : {}),
+        ...(parsed.kind !== undefined ? { kind: parsed.kind } : {}),
+        ...(parsed.severity !== undefined ? { severity: parsed.severity } : {}),
     };
 
     const page = await listActivityPage({ workspaceId, now, filters, cursor });
@@ -282,11 +283,12 @@ interface LoadMoreProps {
 }
 
 function LoadMore({ workspaceId, searchParams, cursor }: LoadMoreProps): React.JSX.Element {
-    const query: Record<string, string> = { tab: "activity", cursor };
-    if (searchParams.kind !== undefined) query.kind = searchParams.kind;
-    if (searchParams.severity !== undefined) query.severity = searchParams.severity;
-    if (searchParams.from !== undefined) query.from = searchParams.from;
-    if (searchParams.to !== undefined) query.to = searchParams.to;
+    const filterParams = deserializeActivityFilters(toSearchParams(searchParams));
+    const out = serializeActivityFilters({ ...filterParams, cursor });
+    const query: Record<string, string> = { tab: "activity" };
+    out.forEach((value, key) => {
+        query[key] = value;
+    });
 
     const href = buildWorkspacePath(workspaceId, "settings", query);
 

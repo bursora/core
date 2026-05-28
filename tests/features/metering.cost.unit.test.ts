@@ -5,8 +5,8 @@
  * deep module's contract is locked at the feature boundary.
  */
 
-import { calculateCost } from "@/lib/metering";
-import type { PricingRow } from "@/lib/metering/pricing";
+import { calculateCost, UnknownPricingError } from "@/lib/metering";
+import type { PricingRow } from "@/lib/metering/pricing/pricing-row";
 import { describe, expect, test } from "bun:test";
 
 const row = (overrides: Partial<PricingRow> = {}): PricingRow => ({
@@ -26,17 +26,11 @@ const row = (overrides: Partial<PricingRow> = {}): PricingRow => ({
 interface Case {
     readonly name: string;
     readonly usage: { promptTokens: number; completionTokens: number; cacheTokens?: number };
-    readonly row: PricingRow | null;
+    readonly row: PricingRow;
     readonly expected: string;
 }
 
 const cases: readonly Case[] = [
-    {
-        name: "null pricing row → zero",
-        usage: { promptTokens: 1000, completionTokens: 500 },
-        row: null,
-        expected: "0.00000000",
-    },
     {
         name: "openai / gpt-4o / global, no cache",
         usage: { promptTokens: 1000, completionTokens: 1000 },
@@ -83,4 +77,12 @@ describe("@/lib/metering calculateCost", () => {
             expect(result.usd).toBe(c.expected);
         });
     }
+
+    test("null pricing row → throws UnknownPricingError", () => {
+        // Issue #915: ingest path catches it and reports the unpriced
+        // (provider, model) pair instead of silently storing cost_usd = 0.
+        expect(() =>
+            calculateCost({ promptTokens: 1000, completionTokens: 500 }, null),
+        ).toThrowError(UnknownPricingError);
+    });
 });

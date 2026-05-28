@@ -2,7 +2,7 @@ import "server-only";
 
 import type { Db } from "@/lib/db";
 import { schema } from "@/lib/db";
-import { and, desc, eq, isNull } from "drizzle-orm";
+import { and, count, desc, eq, gt, isNull } from "drizzle-orm";
 import type { Invite, MemberRole, WorkspaceMember } from "./member";
 import type { InviteRepository, MemberListRow, MemberRepository } from "./member.repository";
 
@@ -118,11 +118,26 @@ export class DrizzleInviteRepository implements InviteRepository {
         return row ? toInvite(row) : null;
     }
 
-    async markAccepted(token: string, acceptedAt: Date): Promise<void> {
-        await this.db
+    async claim(token: string, acceptedAt: Date): Promise<Invite | null> {
+        // Atomic compare-and-swap. The WHERE acceptedAt IS NULL clause is
+        // evaluated inside the UPDATE, so concurrent transactions race on
+        // the row-level lock; only one observes the row as unclaimed.
+        //
+        // The `expires_at > acceptedAt` predicate folds the expiry check into
+        // the same UPDATE. Without it, an invite could pass the pre-check in
+        // `acceptInviteUseCase` and then claim seconds after the deadline.
+        const [row] = await this.db
             .update(schema.workspaceInvites)
             .set({ acceptedAt })
-            .where(eq(schema.workspaceInvites.token, token));
+            .where(
+                and(
+                    eq(schema.workspaceInvites.token, token),
+                    isNull(schema.workspaceInvites.acceptedAt),
+                    gt(schema.workspaceInvites.expiresAt, acceptedAt),
+                ),
+            )
+            .returning();
+        return row ? toInvite(row) : null;
     }
 
     async deletePending(input: { workspaceId: string; email: string }): Promise<number> {
@@ -151,6 +166,19 @@ export class DrizzleInviteRepository implements InviteRepository {
             )
             .orderBy(desc(schema.workspaceInvites.createdAt));
         return rows.map(toInvite);
+    }
+
+    async countPendingByWorkspace(workspaceId: string): Promise<number> {
+        const [row] = await this.db
+            .select({ count: count() })
+            .from(schema.workspaceInvites)
+            .where(
+                and(
+                    eq(schema.workspaceInvites.workspaceId, workspaceId),
+                    isNull(schema.workspaceInvites.acceptedAt),
+                ),
+            );
+        return row?.count ?? 0;
     }
 }
 

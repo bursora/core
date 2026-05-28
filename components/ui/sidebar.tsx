@@ -60,19 +60,21 @@ function SidebarProvider({
 
     // This is the internal state of the sidebar.
     // We use openProp and setOpenProp for control from outside the component.
-    const [_open, _setOpen] = React.useState(defaultOpen);
-    const open = openProp ?? _open;
+    const [internalOpen, setInternalOpen] = React.useState<boolean>(defaultOpen);
+    const open = openProp ?? internalOpen;
     const setOpen = React.useCallback(
         (value: boolean | ((value: boolean) => boolean)) => {
             const openState = typeof value === "function" ? value(open) : value;
             if (setOpenProp) {
                 setOpenProp(openState);
             } else {
-                _setOpen(openState);
+                setInternalOpen(openState);
             }
-
-            // This sets the cookie to keep the sidebar state.
-            document.cookie = `${SIDEBAR_COOKIE_NAME}=${openState}; path=/; max-age=${SIDEBAR_COOKIE_MAX_AGE}`;
+            // Persist the choice so it survives reloads, matching the shadcn
+            // baseline cookie format (`<key>=<bool>; path=/; max-age=<1 week>`).
+            if (typeof document !== "undefined") {
+                document.cookie = `${SIDEBAR_COOKIE_NAME}=${openState}; path=/; max-age=${SIDEBAR_COOKIE_MAX_AGE}`;
+            }
         },
         [setOpenProp, open],
     );

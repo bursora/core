@@ -10,10 +10,13 @@
  * Self-host installs with `BURSORA_RATE_LIMIT_ENABLED=false` bypass entirely
  * (the deps return `enabled: false` and we no-op). Cloud always evaluates.
  *
- * Fail-open: a Redis error or Lua failure logs a warning and returns
- * `response: null` (allow). Ingest stays available when Redis is down; the
- * SDK already fails open on the customer side, so the server-side limiter
- * matches that contract instead of taking down the request path.
+ * Redis failure policy splits by deploy mode:
+ *   - Cloud (`IS_CLOUD=true`): fail-closed with 503 + `Retry-After: 5`. A
+ *     blind allow during a Redis outage lets a single bad actor blow through
+ *     unlimited traffic in seconds, which is the exact failure mode the cap
+ *     exists to prevent.
+ *   - Self-host: fail-open (return null) and log a warning. Operators run
+ *     their own Redis; taking ingest down during their outage is hostile.
  */
 
 import "server-only";
@@ -22,8 +25,10 @@ import { NextResponse } from "next/server";
 import { errMessage } from "../error-message";
 import { rateLimitBurstKey, rateLimitDeps, rateLimitKey } from "./server";
 
+const FAIL_CLOSED_RETRY_AFTER_SECONDS = 5;
+
 export interface RateLimitOutcome {
-    /** 429 response to return immediately, or `null` if the request is allowed. */
+    /** 429 / 503 response to return immediately, or `null` if the request is allowed. */
     readonly response: NextResponse | null;
 }
 
@@ -50,9 +55,19 @@ export async function applyRateLimit(apiKeyId: string): Promise<RateLimitOutcome
 
         return { response: null };
     } catch (err) {
-        console.warn("rate_limit.redis_error", { err: errMessage(err) });
+        console.warn("rate_limit.redis_error", {
+            err: errMessage(err),
+            mode: deps.isCloud ? "cloud_fail_closed" : "self_host_fail_open",
+        });
+        if (deps.isCloud) return { response: unavailableResponse() };
         return { response: null };
     }
+}
+
+function unavailableResponse(): NextResponse {
+    const response = NextResponse.json({ error: "rate_limit_unavailable" }, { status: 503 });
+    response.headers.set("Retry-After", String(FAIL_CLOSED_RETRY_AFTER_SECONDS));
+    return response;
 }
 
 function capResponse(retryAfterMs: number): NextResponse {

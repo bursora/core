@@ -1,7 +1,7 @@
 /**
  * Pricing feature integration test.
  *
- * Drives the public API exposed by `@/lib/metering/pricing` — the surface metering
+ * Drives the public API exposed by `@/lib/metering/pricing/*` — the surface metering
  * and other consumers depend on. Uses an in-memory fake `PricingRepository`
  * (identical pattern to `tests/features/identity.test.ts`); the goal here is to
  * lock the feature folder's public contract: `lookup` selects correctly across
@@ -9,8 +9,9 @@
  * `pricing` table is re-exported.
  */
 
-import { pricing as pricingTable } from "@/lib/db";
-import { lookup, type PricingRepository, type PricingRow } from "@/lib/metering/pricing";
+import { pricing as pricingTable } from "@/lib/db/schema";
+import { lookup } from "@/lib/metering/pricing/lookup";
+import type { PricingRepository, PricingRow } from "@/lib/metering/pricing/pricing-row";
 import { describe, expect, test } from "bun:test";
 
 const baseRow = (overrides: Partial<PricingRow> = {}): PricingRow => ({

@@ -41,15 +41,25 @@ export function daysInUtcMonth(at: Date): number {
     return next.getUTCDate();
 }
 
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
+/** Days since the epoch for the UTC calendar day containing `d`. */
+function utcDayNumber(d: Date): number {
+    return Math.floor(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()) / MS_PER_DAY);
+}
+
 /**
- * Number of UTC days in the closed range [from, to]. Both ends inclusive
- * — a signup at the very end of the month covers one day, not zero.
- * Negative ranges return 0.
+ * Whole UTC calendar days in the half-open range [from, to). Counts the day
+ * of `from` and every day up to but not including the day of `to`. The
+ * billing period end is the first-of-next-month at 00:00 UTC, so passing it
+ * straight in counts exactly the active days with no boundary fudging.
+ *
+ * Both ends are floored to their UTC day number before subtracting, so a
+ * DST shift in the caller's local zone can never move the count: the inputs
+ * are read as UTC dates regardless of how they were built. Negative or
+ * empty ranges return 0.
  */
-export function daysActiveInclusive(from: Date, to: Date): number {
-    const dayStart = (d: Date): number =>
-        Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
-    const diffMs = dayStart(to) - dayStart(from);
-    if (diffMs < 0) return 0;
-    return Math.floor(diffMs / (24 * 60 * 60 * 1000)) + 1;
+export function utcDayDiff(from: Date, to: Date): number {
+    const diff = utcDayNumber(to) - utcDayNumber(from);
+    return diff < 0 ? 0 : diff;
 }

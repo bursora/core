@@ -15,7 +15,7 @@
 import "server-only";
 
 import type { Db } from "@/lib/db";
-import { alertRules } from "@/lib/db";
+import { alertRules } from "@/lib/db/schema";
 import { and, eq } from "drizzle-orm";
 import type { AlertKind } from "../severity";
 import type { AlertChannel } from "./alert-channel";

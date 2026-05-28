@@ -58,9 +58,13 @@ const teardown = () => {
     session = null;
 };
 
-const callGet = async () => {
+const callGet = async (query?: Record<string, string>) => {
     const { GET } = await import("@/app/api/internal/user/notifications/route");
-    return GET();
+    const url = new URL("http://localhost/api/internal/user/notifications");
+    if (query) {
+        for (const [k, v] of Object.entries(query)) url.searchParams.set(k, v);
+    }
+    return GET(new Request(url));
 };
 
 const callPost = async (body: unknown) => {
@@ -90,9 +94,74 @@ describe("GET /api/internal/user/notifications", () => {
         expect(res.status).toBe(200);
         const body = (await res.json()) as {
             items: { workspaceId: string; workspaceName: string }[];
+            nextCursor: string | null;
         };
         expect(body.items).toHaveLength(2);
         expect(body.items.map((i) => i.workspaceName).sort()).toEqual(["Acme", "Beta"]);
+        expect(body.nextCursor).toBeNull();
+    });
+
+    test("caps at 50 items by default and returns a nextCursor for the rest", async () => {
+        session = { user: { id: USER_ID } };
+        repo = new InMemoryNotificationsRepository();
+        repo.setWorkspaceName(WORKSPACE_A, "Acme");
+        setNotificationsRepoForTesting(repo);
+        // Insert 60 rows with distinct dedup keys + distinct createdAt so order is stable.
+        const seed = Array.from({ length: 60 }, (_, i) => ({
+            workspaceId: WORKSPACE_A,
+            userId: USER_ID,
+            source: "alert" as const,
+            dedupKey: `k-${String(i).padStart(3, "0")}`,
+            severity: "warning" as const,
+            title: `t-${i}`,
+            body: `b-${i}`,
+            href: null,
+        }));
+        await repo.insertIgnore(seed);
+        // Force distinct createdAt so cursor pagination is deterministic.
+        for (let i = 0; i < repo.rows.length; i++) {
+            repo.rows[i]!.createdAt = new Date(2026, 0, 1, 0, 0, i);
+        }
+
+        const first = await callGet();
+        expect(first.status).toBe(200);
+        const firstBody = (await first.json()) as {
+            items: { id: string }[];
+            nextCursor: string | null;
+        };
+        expect(firstBody.items).toHaveLength(50);
+        expect(firstBody.nextCursor).not.toBeNull();
+
+        const second = await callGet({ cursor: firstBody.nextCursor! });
+        expect(second.status).toBe(200);
+        const secondBody = (await second.json()) as {
+            items: { id: string }[];
+            nextCursor: string | null;
+        };
+        expect(secondBody.items).toHaveLength(10);
+        expect(secondBody.nextCursor).toBeNull();
+
+        // No id appears in both pages.
+        const firstIds = new Set(firstBody.items.map((i) => i.id));
+        const overlap = secondBody.items.filter((i) => firstIds.has(i.id));
+        expect(overlap).toEqual([]);
+    });
+
+    test("rejects limit above 100", async () => {
+        session = { user: { id: USER_ID } };
+        await setup();
+        const res = await callGet({ limit: "500" });
+        expect(res.status).toBe(400);
+    });
+
+    test("honors a smaller limit query param", async () => {
+        session = { user: { id: USER_ID } };
+        await setup();
+        const res = await callGet({ limit: "1" });
+        expect(res.status).toBe(200);
+        const body = (await res.json()) as { items: unknown[]; nextCursor: string | null };
+        expect(body.items).toHaveLength(1);
+        expect(body.nextCursor).not.toBeNull();
     });
 });
 

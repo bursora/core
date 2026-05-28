@@ -40,9 +40,22 @@ export interface InviteRepository {
 
     findByToken(token: string): Promise<Invite | null>;
 
-    markAccepted(token: string, acceptedAt: Date): Promise<void>;
+    /**
+     * Atomic compare-and-swap: set `acceptedAt` to the given value only when
+     * the row is currently unaccepted. Returns the row on success, `null` if
+     * the invite is missing or already accepted. This is the single-use
+     * guarantee for invite redemption; concurrent callers cannot both win.
+     */
+    claim(token: string, acceptedAt: Date): Promise<Invite | null>;
 
     listPendingByWorkspace(workspaceId: string): Promise<readonly Invite[]>;
+
+    /**
+     * Counts rows where `workspace_id = ?` AND `accepted_at IS NULL`. Used
+     * by the cap check in `inviteMemberUseCase` to reject new invites once
+     * the workspace hits `MAX_PENDING_INVITES_PER_WORKSPACE`.
+     */
+    countPendingByWorkspace(workspaceId: string): Promise<number>;
 
     deletePending(input: { workspaceId: string; email: string }): Promise<number>;
 }

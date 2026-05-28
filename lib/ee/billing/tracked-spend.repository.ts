@@ -27,8 +27,15 @@ export interface TrackedSpendRepository {
     /** Override-adjusted sum of `usage_events.cost_usd` in cents. */
     sumMonthlySpendCents(query: MonthlySpendQuery): Promise<number>;
     /**
-     * Active billing-provider workspaces. Active = `provider_customer_id`
-     * set and `subscription_status` in {`active`, `trialing`, `past_due`}.
+     * Billable cloud workspaces. A row is billable when
+     * `provider_customer_id` is set AND one of:
+     *   - `subscription_status` is `active` or `past_due`, or
+     *   - `subscription_status` is `trialing` AND the trial window has
+     *     elapsed (`trial_ends_at` is null or in the past).
+     *
+     * See `isWorkspaceBillableNow` for the single-source-of-truth
+     * decision; the SQL filter and the in-memory test fake both delegate
+     * to it.
      */
     listActiveCloudWorkspaceIds(): Promise<readonly string[]>;
 }

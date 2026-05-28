@@ -7,8 +7,6 @@ const WORKSPACE = "11111111-2222-3333-4444-555555555555";
 const USER_A = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
 const USER_B = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb";
 
-const workspaceExists = (id: string): Promise<boolean> => Promise.resolve(id === WORKSPACE);
-
 const members = (ids: readonly string[]) => async (workspaceId: string) =>
     workspaceId === WORKSPACE ? ids : [];
 
@@ -21,7 +19,6 @@ describe("recordSetupErrorUseCase — notification fan-out", () => {
             input: { kind: "ingest_invalid_body", workspaceId: WORKSPACE },
             now: new Date("2025-05-10T12:34:56.000Z"),
             repo: setupErrors,
-            workspaceExists,
             notifications: notifs,
             listMemberUserIds: members([USER_A, USER_B]),
         });
@@ -46,7 +43,6 @@ describe("recordSetupErrorUseCase — notification fan-out", () => {
             input,
             now: new Date("2025-05-10T12:00:00.000Z"),
             repo: setupErrors,
-            workspaceExists,
             notifications: notifs,
             listMemberUserIds: members([USER_A, USER_B]),
         });
@@ -54,7 +50,6 @@ describe("recordSetupErrorUseCase — notification fan-out", () => {
             input,
             now: new Date("2025-05-10T12:59:59.000Z"),
             repo: setupErrors,
-            workspaceExists,
             notifications: notifs,
             listMemberUserIds: members([USER_A, USER_B]),
         });
@@ -72,7 +67,6 @@ describe("recordSetupErrorUseCase — notification fan-out", () => {
             input,
             now: new Date("2025-05-10T12:00:00.000Z"),
             repo: setupErrors,
-            workspaceExists,
             notifications: notifs,
             listMemberUserIds: members([USER_A]),
         });
@@ -80,7 +74,6 @@ describe("recordSetupErrorUseCase — notification fan-out", () => {
             input,
             now: new Date("2025-05-10T13:00:00.000Z"),
             repo: setupErrors,
-            workspaceExists,
             notifications: notifs,
             listMemberUserIds: members([USER_A]),
         });
@@ -98,10 +91,9 @@ describe("recordSetupErrorUseCase — notification fan-out", () => {
         const notifs = new InMemoryNotificationsRepository();
 
         await recordSetupErrorUseCase({
-            input: { kind: "auth_failure", workspaceId: null, hashPrefix: "deadbeef" },
+            input: { kind: "auth_failure", hashPrefix: "deadbeef", sourceIp: null },
             now: new Date("2025-05-10T12:00:00.000Z"),
             repo: setupErrors,
-            workspaceExists,
             notifications: notifs,
             listMemberUserIds: members([USER_A]),
         });
@@ -118,7 +110,6 @@ describe("recordSetupErrorUseCase — notification fan-out", () => {
             input: { kind: "sdk_unknown_provider", workspaceId: WORKSPACE },
             now: new Date("2025-05-10T12:34:56.000Z"),
             repo: setupErrors,
-            workspaceExists,
             notifications: notifs,
             listMemberUserIds: members([USER_A, USER_B]),
         });
@@ -139,7 +130,6 @@ describe("recordSetupErrorUseCase — notification fan-out", () => {
             input,
             now: new Date("2025-05-10T12:00:00.000Z"),
             repo: setupErrors,
-            workspaceExists,
             notifications: notifs,
             listMemberUserIds: members([USER_A, USER_B]),
         });
@@ -147,7 +137,6 @@ describe("recordSetupErrorUseCase — notification fan-out", () => {
             input,
             now: new Date("2025-05-10T12:59:59.000Z"),
             repo: setupErrors,
-            workspaceExists,
             notifications: notifs,
             listMemberUserIds: members([USER_A, USER_B]),
         });

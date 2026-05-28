@@ -11,6 +11,7 @@
  *   3. Rows that won't breach within the period come last, period-end ascending.
  */
 
+import type { PeriodResolver } from "@/lib/budgeting";
 import { computeWhatsBreaking, type WhatsBreakingInput } from "@/lib/budgeting/whats-breaking";
 import { describe, expect, test } from "bun:test";
 
@@ -84,6 +85,21 @@ describe("computeWhatsBreaking", () => {
         expect(rows[0]?.etaKind).toBe("safe");
     });
 
+    test("injected PeriodResolver controls periodEnd on returned rows (ignores real now)", () => {
+        const fixedTo = new Date("2030-12-31T00:00:00.000Z");
+        const fakeResolver: PeriodResolver = {
+            resolveWindow: () => ({ from: new Date("2030-12-01T00:00:00.000Z"), to: fixedTo }),
+        };
+        const rows = computeWhatsBreaking({
+            budgets: [baseBudget({ period: "monthly", limit: 500, spent: 100, usage: 0.2 })],
+            dailyRate: 50,
+            now: NOW,
+            periodResolver: fakeResolver,
+        });
+
+        expect(rows[0]?.periodEnd).toEqual(fixedTo);
+    });
+
     test("sort: overage > breach-soon > breach-later > safe", () => {
         // dailyRate = $50/day across all rows. Period ends ~21 days out from NOW.
         // overage:    spent 600/500 → today (priority 0)
@@ -101,6 +117,6 @@ describe("computeWhatsBreaking", () => {
             now: NOW,
         });
 
-        expect(rows.map((r) => r.source.budgetId)).toEqual(["overage", "soon", "later", "safe"]);
+        expect(rows.map((r) => r.budgetId)).toEqual(["overage", "soon", "later", "safe"]);
     });
 });

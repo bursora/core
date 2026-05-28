@@ -9,8 +9,14 @@
  * Workspace-scoped override rows are NEVER touched by this flow — the repo's
  * `findLatestGlobal` filters them out.
  *
- * One source failing does not abort the others; failed providers surface in
- * the run summary.
+ * Per-source failures are collected so siblings still process; once all
+ * sources are tried, if any failed the use case throws
+ * `PricingSyncPartialFailure`. The throw is what surfaces the failure to the
+ * cron runner (route → 500 → scheduler retry/page). Silently returning
+ * "success with failedProviders=[...]" used to hide stale-rate windows.
+ *
+ * On a fully successful run, the optional `recordHeartbeat` callback fires
+ * with `now` so the operator can observe a freshness signal.
  */
 
 import type { NewPricingRow, PricingRepository } from "./pricing-row";
@@ -19,7 +25,6 @@ import type { PricingSource, ScrapedRate } from "./pricing-source";
 export interface SyncSummary {
     inserted: number;
     unchanged: number;
-    failedProviders: string[];
 }
 
 export type SyncPricingRepo = Pick<
@@ -27,23 +32,45 @@ export type SyncPricingRepo = Pick<
     "findLatestGlobal" | "closeAndInsert" | "insert"
 >;
 
+export type HeartbeatRecorder = (now: Date) => Promise<void>;
+
+export interface SyncPricingOptions {
+    recordHeartbeat?: HeartbeatRecorder;
+}
+
+/**
+ * Thrown when one or more pricing sources fail during a sync run. The cron
+ * route surfaces this as a 500 with the structured `failedProviders` list so
+ * the scheduler can retry / page the operator.
+ */
+export class PricingSyncPartialFailure extends Error {
+    readonly failedProviders: readonly string[];
+
+    constructor(failedProviders: readonly string[]) {
+        super(`pricing sync failed for providers: ${failedProviders.join(", ")}`);
+        this.name = "PricingSyncPartialFailure";
+        this.failedProviders = failedProviders;
+    }
+}
+
 export async function syncPricing(
     sources: readonly PricingSource[],
     repo: SyncPricingRepo,
     now: Date,
+    options: SyncPricingOptions = {},
 ): Promise<SyncSummary> {
     const summary: SyncSummary = {
         inserted: 0,
         unchanged: 0,
-        failedProviders: [],
     };
+    const failedProviders: string[] = [];
 
     for (const source of sources) {
         let rates: ScrapedRate[];
         try {
             rates = await source.fetchRates();
         } catch (error: unknown) {
-            summary.failedProviders.push(source.provider);
+            failedProviders.push(source.provider);
             const message = error instanceof Error ? error.message : String(error);
             console.warn(`pricing-sync.source_failed`, {
                 provider: source.provider,
@@ -69,6 +96,14 @@ export async function syncPricing(
             await repo.closeAndInsert(current.id, now, toNewRow(rate, now));
             summary.inserted += 1;
         }
+    }
+
+    if (failedProviders.length > 0) {
+        throw new PricingSyncPartialFailure(failedProviders);
+    }
+
+    if (options.recordHeartbeat) {
+        await options.recordHeartbeat(now);
     }
 
     return summary;

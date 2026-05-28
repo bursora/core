@@ -20,6 +20,11 @@ import type { RateLimitConfig, RateLimiter } from "./types";
 export interface RateLimitDeps {
     readonly limiter: RateLimiter;
     readonly enabled: boolean;
+    /**
+     * Cloud installs fail-closed on Redis errors (return 503); self-host
+     * stays fail-open. Wired from `env().IS_CLOUD`.
+     */
+    readonly isCloud: boolean;
     readonly config: RateLimitConfig;
     readonly burstConfig: RateLimitConfig;
     readonly now: () => Date;
@@ -47,6 +52,7 @@ export function rateLimitDeps(): RateLimitDeps {
     return {
         limiter,
         enabled,
+        isCloud: e.IS_CLOUD,
         config: DEFAULT_SUSTAINED,
         burstConfig: DEFAULT_BURST,
         now: () => new Date(),

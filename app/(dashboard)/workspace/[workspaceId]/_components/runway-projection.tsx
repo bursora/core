@@ -13,7 +13,7 @@ import {
     confidenceLabel,
     getMonthlySpendCap,
     getProjectedEom,
-} from "@/app/(dashboard)/workspace/[workspaceId]/_lib/dashboard-stats";
+} from "@/lib/dashboard/dashboard-stats";
 import { formatDashboardPercent, formatDashboardUsd, formatSignedPercent } from "@/lib/format";
 import { cn } from "@/lib/utils";
 

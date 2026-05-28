@@ -7,10 +7,7 @@
  * dashboard.
  */
 
-import type {
-    CustomerTrajectory,
-    ModelTrajectory,
-} from "@/app/(dashboard)/workspace/[workspaceId]/_lib/trajectories";
+import type { CustomerTrajectory, ModelTrajectory } from "@/lib/compose/trajectories";
 import { describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 

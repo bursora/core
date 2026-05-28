@@ -11,7 +11,7 @@
  * the read-side feed reachable via `listAlertsUseCase`.
  */
 
-import { alerts as alertsTable } from "@/lib/db";
+import { alerts as alertsTable } from "@/lib/db/schema";
 import {
     listAlertsUseCase,
     runAnomalyDetection,

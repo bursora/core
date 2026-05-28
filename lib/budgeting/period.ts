@@ -58,3 +58,15 @@ function monthlyWindow(now: Date): PeriodWindow {
 export function startOfDayUtc(d: Date): Date {
     return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
 }
+
+/**
+ * Injection seam for period math. Lets use cases pin a deterministic window
+ * in tests without faking `Date.now()`. Production wires `defaultPeriodResolver`.
+ */
+export interface PeriodResolver {
+    resolveWindow(period: Period, now: Date): PeriodWindow;
+}
+
+export const defaultPeriodResolver: PeriodResolver = {
+    resolveWindow: (period, now) => periodWindow(period, now),
+};

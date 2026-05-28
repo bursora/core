@@ -89,6 +89,73 @@ describe("handleWebhookUseCase", () => {
         expect(row?.providerSubscriptionId).toBe("sub_99");
     });
 
+    test("subscription.activated persists trial_ends_at when the provider signals a trial", async () => {
+        const workspaces = new InMemoryWorkspaceBillingRepository();
+        seedUnsubscribed(workspaces);
+        const trialEnd = new Date("2025-03-15T00:00:00Z");
+
+        await runWebhook(
+            {
+                id: "evt_trial_checkout",
+                type: "subscription.activated",
+                workspaceId: WORKSPACE_ID,
+                customerId: "cus_99",
+                subscriptionId: "sub_99",
+                trialEndsAt: trialEnd,
+            },
+            workspaces,
+        );
+
+        const row = await workspaces.findById(WORKSPACE_ID);
+        expect(row?.trialEndsAt).toEqual(trialEnd);
+    });
+
+    test("subscription.activated leaves trial_ends_at null when the provider omits it", async () => {
+        const workspaces = new InMemoryWorkspaceBillingRepository();
+        seedUnsubscribed(workspaces);
+
+        await runWebhook(
+            {
+                id: "evt_no_trial_checkout",
+                type: "subscription.activated",
+                workspaceId: WORKSPACE_ID,
+                customerId: "cus_99",
+                subscriptionId: "sub_99",
+            },
+            workspaces,
+        );
+
+        const row = await workspaces.findById(WORKSPACE_ID);
+        expect(row?.trialEndsAt).toBeNull();
+    });
+
+    test("subscription.activated with status=trialing preserves trialing rather than forcing active", async () => {
+        // A trial checkout fires subscription_created → subscription.activated
+        // with `status=trialing`. Forcing the row to `active` would defeat
+        // the trial filter on the spend aggregator. Preserve the
+        // provider-reported status verbatim.
+        const workspaces = new InMemoryWorkspaceBillingRepository();
+        seedUnsubscribed(workspaces);
+        const trialEnd = new Date("2025-03-15T00:00:00Z");
+
+        await runWebhook(
+            {
+                id: "evt_trial_activated",
+                type: "subscription.activated",
+                workspaceId: WORKSPACE_ID,
+                customerId: "cus_99",
+                subscriptionId: "sub_99",
+                status: "trialing",
+                trialEndsAt: trialEnd,
+            },
+            workspaces,
+        );
+
+        const row = await workspaces.findById(WORKSPACE_ID);
+        expect(row?.subscriptionStatus).toBe("trialing");
+        expect(row?.trialEndsAt).toEqual(trialEnd);
+    });
+
     test("subscription.canceled records subscription_status='canceled'", async () => {
         const workspaces = new InMemoryWorkspaceBillingRepository();
         seedActive(workspaces, "cus_99", "sub_99");
@@ -171,6 +238,37 @@ describe("handleWebhookUseCase", () => {
 
         expect(replay.verified).toBe(true);
         expect(replay.deduped).toBe(true);
+    });
+
+    test("a side-effect failure rolls back the idempotency row so the retry re-runs", async () => {
+        const workspaces = new InMemoryWorkspaceBillingRepository();
+        seedActive(workspaces, "cus_99", "sub_99");
+        const webhookEvents = new InMemoryBillingWebhookEventStore();
+        const event: WebhookEvent = {
+            id: "evt_retry_me",
+            type: "subscription.updated",
+            customerId: "cus_99",
+            subscriptionId: "sub_99",
+            status: "past_due",
+        };
+
+        // First delivery: the side effect throws. The handler must propagate
+        // (so the route 500s) AND drop the idempotency row it just recorded.
+        workspaces.update = async () => {
+            throw new Error("db down");
+        };
+        await expect(runWebhook(event, workspaces, webhookEvents)).rejects.toThrow("db down");
+        expect(webhookEvents.has("evt_retry_me")).toBe(false);
+
+        // Provider retry: a healthy workspace repo applies the event for real
+        // instead of finding it recorded-as-handled and skipping it.
+        const healthy = new InMemoryWorkspaceBillingRepository();
+        seedActive(healthy, "cus_99", "sub_99");
+        const retry = await runWebhook(event, healthy, webhookEvents);
+
+        expect(retry.verified).toBe(true);
+        expect(retry.deduped ?? false).toBe(false);
+        expect((await healthy.findById(WORKSPACE_ID))?.subscriptionStatus).toBe("past_due");
     });
 
     test("subscription event with unknown customer is a verified no-op", async () => {

@@ -91,7 +91,6 @@ const setup = (opts: { existingWorkspaces?: readonly string[] } = {}): Harness =
     const setupErrors = new InMemorySetupErrorRepository();
     setSetupErrorsDepsForTesting({
         repo: setupErrors,
-        workspaceExists: async (id) => existing.has(id),
         now: () => new Date("2025-05-10T12:00:00.000Z"),
         notifications: new InMemoryNotificationsRepository(),
         listMemberUserIds: async () => [],
@@ -147,10 +146,13 @@ describe("setup-error route hooks", () => {
         expect(setupErrors.rows[0]?.category).toBe("auth_unknown");
     });
 
-    test("GET /api/v1/budget 401 with key for existing workspace → auth_revoked attributed", async () => {
+    test("GET /api/v1/budget 401 with key whose workspace fragment matches a real workspace → still global auth_unknown (no victim pollution)", async () => {
         const { setupErrors } = setup();
-        // Known workspace, but no live row: simulate a revoked key by clearing
-        // the stub to null.
+        // Key fragment matches an existing workspace, but the api_keys row
+        // is missing. Pre-fix this attributed the bucket to that workspace
+        // (an unverified field), letting a forged key trigger banners on a
+        // victim's dashboard. Now the bucket always lands in the global
+        // auth_unknown counter.
         apiKeyRow = null;
 
         const res = await getBudget(
@@ -162,8 +164,8 @@ describe("setup-error route hooks", () => {
 
         expect(res.status).toBe(401);
         expect(setupErrors.rows.length).toBe(1);
-        expect(setupErrors.rows[0]?.workspaceId).toBe(WORKSPACE);
-        expect(setupErrors.rows[0]?.category).toBe("auth_revoked");
+        expect(setupErrors.rows[0]?.workspaceId).toBeNull();
+        expect(setupErrors.rows[0]?.category).toBe("auth_unknown");
     });
 
     test("POST /api/v1/events 401 missing key → records auth_unknown globally", async () => {
@@ -225,7 +227,6 @@ describe("setup-error route hooks", () => {
                 },
                 sumByCategorySince: async () => [],
             },
-            workspaceExists: async () => true,
             now: () => new Date(),
             notifications: new InMemoryNotificationsRepository(),
             listMemberUserIds: async () => [],

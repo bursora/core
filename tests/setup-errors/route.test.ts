@@ -17,7 +17,7 @@
 import type { ApiKey } from "@/lib/identity";
 import { setSetupErrorsDepsForTesting } from "@/lib/setup-errors/server";
 import { InMemoryNotificationsRepository } from "@/tests/notifications/fakes/in-memory-notifications.repository";
-import { afterEach, beforeAll, describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeAll, describe, expect, mock, spyOn, test } from "bun:test";
 import { InMemorySetupErrorRepository } from "./fakes/in-memory-setup-error.repository";
 
 const WORKSPACE = "11111111-2222-3333-4444-555555555555";
@@ -58,7 +58,6 @@ const setup = (opts: { knownKey?: boolean } = {}): Harness => {
     const setupErrors = new InMemorySetupErrorRepository();
     setSetupErrorsDepsForTesting({
         repo: setupErrors,
-        workspaceExists: async (id) => id === WORKSPACE,
         now: () => new Date("2025-05-10T12:00:00.000Z"),
         notifications: new InMemoryNotificationsRepository(),
         listMemberUserIds: async () => [],
@@ -144,6 +143,30 @@ describe("POST /api/v1/setup-error", () => {
         expect(setupErrors.rows.some((r) => r.category === "sdk_unknown_provider")).toBe(false);
     });
 
+    test("crafted key bsk_<victim_workspace>_<bad> never pollutes the victim's bucket", async () => {
+        // Attacker presents a syntactically-valid key whose workspace fragment
+        // is a real workspace, but the secret half doesn't match anything in
+        // the api_keys table. The auth-failure log must not be attributed to
+        // the victim workspace — it lands in the global auth_unknown bucket.
+        const { setupErrors } = setup({ knownKey: false });
+
+        const res = await POST(
+            makeRequest(JSON.stringify({ kind: "sdk_unknown_provider" }), {
+                "x-bursora-key": PLAINTEXT,
+                "x-forwarded-for": "203.0.113.7",
+            }),
+        );
+        await flush();
+
+        expect(res.status).toBe(401);
+        // Critical: zero rows attributed to the victim workspace.
+        expect(setupErrors.rows.some((r) => r.workspaceId === WORKSPACE)).toBe(false);
+        // Failure lands as a global auth_unknown bucket — no per-workspace
+        // bucket exists for the attacker to pollute.
+        const globalRow = setupErrors.rows.find((r) => r.category === "auth_unknown");
+        expect(globalRow?.workspaceId).toBeNull();
+    });
+
     test("400 on malformed JSON body", async () => {
         const { setupErrors } = setup();
 
@@ -166,5 +189,38 @@ describe("POST /api/v1/setup-error", () => {
 
         expect(res.status).toBe(400);
         expect(setupErrors.rows.length).toBe(0);
+    });
+
+    test("400 invalid_body logs sanitized Zod issues with workspace + apiKey id, no raw payload", async () => {
+        setup();
+        const warn = spyOn(console, "warn").mockImplementation(() => {});
+        const rawPayload = "definitely_not_a_real_kind_marker_xyz";
+
+        const res = await POST(
+            makeRequest(JSON.stringify({ kind: rawPayload }), {
+                "x-bursora-key": PLAINTEXT,
+            }),
+        );
+        await flush();
+        const json = await res.json();
+
+        expect(res.status).toBe(400);
+        expect(json).toEqual({ error: "invalid_body" });
+
+        const invalidBodyCall = warn.mock.calls.find((c) => c[0] === "v1.invalid_body");
+        expect(invalidBodyCall).toBeDefined();
+        const payload = invalidBodyCall?.[1] as Record<string, unknown>;
+        expect(payload.route).toBe("/api/v1/setup-error");
+        expect(payload.workspaceId).toBe(WORKSPACE);
+        expect(payload.apiKeyId).toBe(API_KEY_ID);
+        const issues = payload.issues as Array<{ path: string; code: string; message: string }>;
+        expect(Array.isArray(issues)).toBe(true);
+        expect(issues.length).toBeGreaterThan(0);
+        expect(issues[0]?.path).toBe("kind");
+        // Raw user payload must never appear in the log entry.
+        const serialized = JSON.stringify(payload);
+        expect(serialized.includes(rawPayload)).toBe(false);
+
+        warn.mockRestore();
     });
 });

@@ -12,7 +12,8 @@
  * missing rows would silently cost $0.
  *
  * Non-2xx fetches throw; bad shape throws. The surrounding `syncPricing`
- * use case catches and records this as `failedProviders: ["litellm"]`.
+ * use case catches per-source errors, completes the remaining sources, then
+ * throws `PricingSyncPartialFailure` listing this provider.
  */
 
 import type { PricingSource, ScrapedRate } from "./pricing-source";

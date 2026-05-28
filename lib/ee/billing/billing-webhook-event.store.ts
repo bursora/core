@@ -17,4 +17,21 @@ export interface BillingWebhookEventStore {
      * so the check-and-insert is a single atomic statement.
      */
     recordIfNew(input: { readonly eventId: string; readonly eventType: string }): Promise<boolean>;
+
+    /**
+     * Delete the recorded row for `eventId`, if present. The webhook handler
+     * calls this to roll back its idempotency reservation when a side effect
+     * throws, so the provider's retry re-runs the event instead of finding it
+     * recorded and skipping it forever.
+     */
+    deleteByEventId(eventId: string): Promise<void>;
+
+    /**
+     * Delete every recorded event whose `processed_at` is strictly older than
+     * `cutoff`. Returns the number of rows removed. The daily prune cron calls
+     * this to keep the append-only idempotency log from growing without bound:
+     * upstream retries cap within days, so rows past the retention window are
+     * pure forensic weight.
+     */
+    pruneOlderThan(cutoff: Date): Promise<number>;
 }

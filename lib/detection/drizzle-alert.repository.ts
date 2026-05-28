@@ -17,7 +17,7 @@
 import "server-only";
 
 import type { Db } from "@/lib/db";
-import { alerts as alertsTable } from "@/lib/db";
+import { alerts as alertsTable } from "@/lib/db/schema";
 import { and, desc, eq, gte, inArray, lt, sql } from "drizzle-orm";
 import type { Alert, AnomalyAlert } from "./alert";
 import { rowToAlert } from "./alert-row";

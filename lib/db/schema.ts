@@ -7,6 +7,7 @@
  * the `PARTITION BY RANGE` and partition-creation DDL.
  */
 
+import { sql } from "drizzle-orm";
 import {
     boolean,
     index,
@@ -79,20 +80,22 @@ export const verification = pgTable("verification", {
 
 // --- workspaces ---------------------------------------------------------------
 // `provider_customer_id`, `provider_subscription_id`, `subscription_status`,
-// `subscribed_at`, `refund_eligible_until`, `last_invoice_ref`, and
-// `last_billed_month` are billing-owned columns that live on the workspace
-// row to keep the webhook handler's write a single UPDATE. All are
-// nullable: cloud workspaces that have never opened Checkout and every
-// self-host workspace leave them empty. `subscription_status` mirrors the
-// upstream provider's subscription state verbatim (e.g. `active`, `past_due`,
-// `canceled`).
+// `subscribed_at`, `refund_eligible_until`, `last_invoice_ref`,
+// `last_billed_month`, and `trial_ends_at` are billing-owned columns that
+// live on the workspace row to keep the webhook handler's write a single
+// UPDATE. All are nullable: cloud workspaces that have never opened
+// Checkout and every self-host workspace leave them empty.
+// `subscription_status` mirrors the upstream provider's subscription
+// state verbatim (e.g. `active`, `past_due`, `canceled`, `trialing`).
 //
 // `subscribed_at` is set the first time Checkout completes; the rollup
 // cron uses it to pro-rate the first invoice. `refund_eligible_until` is
 // signup + 30 days — used by the UI to surface the money-back window.
 // `last_invoice_ref` carries the most recent invoice the rollup pushed
 // (deep-link target). `last_billed_month` (YYYY-MM) lets the cron skip
-// months it already invoiced after a retry.
+// months it already invoiced after a retry. `trial_ends_at` carries the
+// provider-issued trial expiry for `trialing` subscriptions so the spend
+// aggregator knows whether the trial window is still open.
 export const workspaces = pgTable(
     "workspaces",
     {
@@ -106,6 +109,7 @@ export const workspaces = pgTable(
         refundEligibleUntil: timestamp("refund_eligible_until", { withTimezone: true }),
         lastInvoiceRef: text("last_invoice_ref"),
         lastBilledMonth: text("last_billed_month"),
+        trialEndsAt: timestamp("trial_ends_at", { withTimezone: true }),
         createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     },
     (t) => [
@@ -174,6 +178,32 @@ export const apiKeys = pgTable(
         uniqueIndex("api_keys_key_hash_idx").on(t.keyHash),
         index("api_keys_workspace_idx").on(t.workspaceId),
     ],
+);
+
+// --- api_key_audit_log -------------------------------------------------------
+// Append-only audit trail for `api_keys` lifecycle (create / revoke / rename).
+// Each successful mutation against `api_keys` writes a row here so the workspace
+// can answer "who did what, from where, when?" without reconstructing it from
+// application logs.
+//
+// `user_id` is ON DELETE SET NULL so historical entries survive a user removal
+// (the action still happened — we just don't know who anymore). `metadata` is
+// jsonb so per-action shape can grow without a schema migration.
+export const apiKeyAuditLog = pgTable(
+    "api_key_audit_log",
+    {
+        id: uuid("id").primaryKey().defaultRandom(),
+        workspaceId: uuid("workspace_id")
+            .notNull()
+            .references(() => workspaces.id, { onDelete: "cascade" }),
+        apiKeyId: uuid("api_key_id").notNull(),
+        userId: uuid("user_id").references(() => users.id, { onDelete: "set null" }),
+        action: text("action").notNull(), // 'create' | 'revoke' | 'rename'
+        metadata: jsonb("metadata"),
+        ip: text("ip"),
+        ts: timestamp("ts", { withTimezone: true }).notNull().defaultNow(),
+    },
+    (t) => [index("api_key_audit_log_workspace_ts_idx").on(t.workspaceId, t.ts.desc())],
 );
 
 // --- budgets ------------------------------------------------------------------
@@ -261,7 +291,18 @@ export const alerts = pgTable(
         windowCostUsd: numeric("window_cost_usd", { precision: 14, scale: 8 }),
         raisedAt: timestamp("raised_at", { withTimezone: true }).notNull().defaultNow(),
     },
-    (t) => [index("alerts_workspace_raised_idx").on(t.workspaceId, t.raisedAt)],
+    (t) => [
+        index("alerts_workspace_raised_idx").on(t.workspaceId, t.raisedAt),
+        // Partial unique: budget rows dedupe per (workspace, scope, window).
+        // Mirrors migrations 0012 + 0034 so drizzle-kit diff stays a no-op.
+        // The live index is declared `NULLS NOT DISTINCT` so workspace-level
+        // crossings (scope_id IS NULL) collide on conflict; drizzle's
+        // uniqueIndex builder has no API for that clause on a partial index,
+        // so the SQL is authored by hand in migration 0034. Do not regenerate.
+        uniqueIndex("alerts_budget_crossing_uniq")
+            .on(t.workspaceId, t.scopeId, t.periodFrom)
+            .where(sql`${t.kind} = 'budget'`),
+    ],
 );
 
 // --- usage_events (partitioned parent) ---------------------------------------
@@ -293,6 +334,12 @@ export const usageEvents = pgTable(
         latencyMs: integer("latency_ms"),
         costUsd: numeric("cost_usd", { precision: 14, scale: 8 }).notNull(),
         requestId: text("request_id"),
+        // Lifecycle of the event row.
+        //   'ok'      → real call accepted by the budget, billed at recorded cost.
+        //   'blocked' → call denied by `evaluateBudget`; `block_reason` and
+        //               `decided_by_budget_id` are populated, cost is 0.
+        // Future states (e.g. 'refunded', 'invoiced') would extend this enum
+        // as billing flows that need to mutate or annotate past rows land.
         status: text("status").notNull().default("ok"),
         decidedByBudgetId: uuid("decided_by_budget_id").references(() => budgets.id, {
             onDelete: "set null",
@@ -306,18 +353,41 @@ export const usageEvents = pgTable(
     // key in the PK. Workspace+status+ts index covers dashboard aggregates that
     // the lookup btree (workspace, tenant, agent, ts) can't serve without pinned
     // tenant_id / agent_id.
+    //
+    // Partial unique index `(workspace_id, request_id, ts) WHERE request_id IS
+    // NOT NULL` makes ingest idempotent per `requestId`: retried SDK deliveries
+    // land on the same row instead of double-billing the customer. `ts` is the
+    // trailing key because a partitioned table's unique index must include the
+    // partition key, so dedup is per-time-partition (a retry with a different
+    // `ts` won't collapse; the SDK replays the original `ts`). Rows without a
+    // requestId skip the index (NULL request_id is rejected by the WHERE
+    // clause), so the SDK's optional-requestId contract is preserved. Authored
+    // by hand in migration 0037; drizzle's uniqueIndex builder mirrors columns
+    // only.
     (t) => [
         primaryKey({ columns: [t.id, t.ts] }),
         index("usage_events_workspace_status_ts_idx").on(t.workspaceId, t.status, t.ts),
+        uniqueIndex("usage_events_workspace_request_uidx")
+            .on(t.workspaceId, t.requestId, t.ts)
+            .where(sql`${t.requestId} IS NOT NULL`),
     ],
 );
 
 // --- setup_errors ------------------------------------------------------------
 // Hourly counters of SDK setup failures, surfaced on the workspace dashboard
 // banner. Two distinct signals:
-//   - auth_revoked / ingest_invalid_body  → per-workspace (workspace_id set)
-//   - auth_unknown                        → global bucket (workspace_id NULL),
-//                                            admin-only observability.
+//   - ingest_invalid_body / sdk_unknown_provider → per-workspace
+//                                                  (workspace_id set, post-auth)
+//   - auth_unknown                               → global bucket (workspace_id
+//                                                  NULL), admin-only
+//                                                  observability. All auth
+//                                                  failures land here because
+//                                                  the offered key may carry
+//                                                  a forged workspace fragment.
+//   - auth_revoked                               → legacy category retained
+//                                                  for already-stored buckets
+//                                                  and for the dashboard label;
+//                                                  no longer produced.
 // Upserted via the composite unique index `(workspace_id, category,
 // bucket_hour)`. The index is declared NULLS NOT DISTINCT so the global bucket
 // can also be deduplicated. See migration 0015.
@@ -475,4 +545,13 @@ export const workspaceSpikeProtectionSettings = pgTable("workspace_spike_protect
         .notNull()
         .default("5"),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// --- pricing_sync_state -------------------------------------------------------
+// Heartbeat for the daily pricing-sync cron. Single-row table (id = 1) holding
+// the timestamp of the last fully-successful run. A stale value means Bursora
+// may be billing against out-of-date provider rates.
+export const pricingSyncState = pgTable("pricing_sync_state", {
+    id: integer("id").primaryKey(),
+    lastSyncedAt: timestamp("last_synced_at", { withTimezone: true }).notNull(),
 });

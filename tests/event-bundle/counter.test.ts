@@ -4,7 +4,6 @@
  *   - overage cents computation
  *   - hard-cap projection
  *   - monthKey formatting
- *   - parseMonthKey validation
  */
 
 import {
@@ -13,7 +12,6 @@ import {
     bannerLevel,
     monthKey,
     overageCentsAt,
-    parseMonthKey,
     wouldExceedHardCap,
 } from "@/lib/event-bundle/counter";
 import { describe, expect, test } from "bun:test";
@@ -229,33 +227,5 @@ describe("monthKey", () => {
 
     test("pads single-digit months", () => {
         expect<string>(monthKey(new Date("2025-03-01T00:00:00Z"))).toBe("2025-03");
-    });
-});
-
-describe("parseMonthKey", () => {
-    test("accepts a valid YYYY-MM string and round-trips through monthKey", () => {
-        const at = new Date("2025-07-04T00:00:00Z");
-        const key = monthKey(at);
-        expect(parseMonthKey(key)).toBe(key);
-        expect(parseMonthKey("2025-07")).toBe(key);
-    });
-
-    test("rejects out-of-range months", () => {
-        expect(() => parseMonthKey("2024-13")).toThrow();
-        expect(() => parseMonthKey("2024-00")).toThrow();
-    });
-
-    test("rejects non-numeric segments", () => {
-        expect(() => parseMonthKey("abcd-12")).toThrow();
-    });
-
-    test("rejects unpadded months", () => {
-        expect(() => parseMonthKey("2024-1")).toThrow();
-    });
-
-    test("rejects extra characters", () => {
-        expect(() => parseMonthKey("2024-01-01")).toThrow();
-        expect(() => parseMonthKey(" 2024-01")).toThrow();
-        expect(() => parseMonthKey("2024-01 ")).toThrow();
     });
 });

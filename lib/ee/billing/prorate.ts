@@ -49,16 +49,6 @@ function utcDayNumber(d: Date): number {
 }
 
 /**
- * Number of UTC days in the closed range [from, to]. Both ends inclusive
- * — a signup at the very end of the month covers one day, not zero.
- * Negative ranges return 0.
- */
-export function daysActiveInclusive(from: Date, to: Date): number {
-    const diff = utcDayNumber(to) - utcDayNumber(from);
-    return diff < 0 ? 0 : diff + 1;
-}
-
-/**
  * Whole UTC calendar days in the half-open range [from, to). Counts the day
  * of `from` and every day up to but not including the day of `to`. The
  * billing period end is the first-of-next-month at 00:00 UTC, so passing it

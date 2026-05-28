@@ -9,7 +9,7 @@
  *   - distinct args produce distinct keys
  */
 
-import { withRequestMemo } from "@/app/(dashboard)/workspace/[workspaceId]/_lib/per-request-cache";
+import { withRequestMemo } from "@/lib/dashboard/per-request-cache";
 import { describe, expect, test } from "bun:test";
 
 describe("withRequestMemo", () => {

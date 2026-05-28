@@ -2,7 +2,7 @@
  * Pro-rata math for partial-month billing windows.
  */
 
-import { daysActiveInclusive, daysInUtcMonth, prorateFraction, utcDayDiff } from "@/lib/ee/billing/prorate";
+import { daysInUtcMonth, prorateFraction, utcDayDiff } from "@/lib/ee/billing/prorate";
 import { describe, expect, test } from "bun:test";
 
 describe("prorateFraction", () => {
@@ -42,31 +42,6 @@ describe("daysInUtcMonth", () => {
 
     test("April has 30", () => {
         expect(daysInUtcMonth(new Date("2025-04-15T00:00:00Z"))).toBe(30);
-    });
-});
-
-describe("daysActiveInclusive", () => {
-    test("same day → 1", () => {
-        const d = new Date("2025-01-15T12:00:00Z");
-        expect(daysActiveInclusive(d, d)).toBe(1);
-    });
-
-    test("two consecutive days → 2", () => {
-        expect(
-            daysActiveInclusive(new Date("2025-01-15T23:00:00Z"), new Date("2025-01-16T00:00:00Z")),
-        ).toBe(2);
-    });
-
-    test("end before start → 0", () => {
-        expect(
-            daysActiveInclusive(new Date("2025-01-15T00:00:00Z"), new Date("2025-01-14T00:00:00Z")),
-        ).toBe(0);
-    });
-
-    test("a week → 7", () => {
-        expect(
-            daysActiveInclusive(new Date("2025-01-01T00:00:00Z"), new Date("2025-01-07T23:59:59Z")),
-        ).toBe(7);
     });
 });
 

@@ -507,11 +507,7 @@ export function mapLemonSqueezyEvent(
     // LS stamps `trial_ends_at` as an ISO 8601 string on subscription
     // objects with a trial period. Parse it into a Date so downstream
     // billing code can compare against `now` without re-parsing.
-    const trialEndsAtAttr = attributes.trial_ends_at;
-    const trialEndsAt =
-        typeof trialEndsAtAttr === "string" && trialEndsAtAttr.length > 0
-            ? new Date(trialEndsAtAttr)
-            : null;
+    const trialEndsAt = parseTrialEndsAt(attributes.trial_ends_at);
 
     return {
         id: eventId,
@@ -523,6 +519,17 @@ export function mapLemonSqueezyEvent(
         trialEndsAt,
         ...(invoiceId !== null ? { invoiceId } : {}),
     };
+}
+
+// LS stamps `trial_ends_at` as an ISO 8601 string on subscription objects
+// with a trial period. Parse into a Date so downstream billing can compare
+// against `now` without re-parsing. An unparseable value yields Invalid Date,
+// whose getTime() is NaN; is-billable-now's `NaN <= now` is false, which would
+// pin a trialing workspace as permanently non-billable. Reject it to null.
+function parseTrialEndsAt(attr: unknown): Date | null {
+    if (typeof attr !== "string" || attr.length === 0) return null;
+    const d = new Date(attr);
+    return Number.isNaN(d.getTime()) ? null : d;
 }
 
 function eventNameToWebhookType(eventName: string): WebhookEventType {

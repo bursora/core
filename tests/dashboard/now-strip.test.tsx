@@ -11,7 +11,7 @@ import { NowStrip } from "@/app/(dashboard)/workspace/[workspaceId]/_components/
 import {
     setDashboardStatsDepsForTesting,
     type DashboardStatsDeps,
-} from "@/app/(dashboard)/workspace/[workspaceId]/_lib/dashboard-stats";
+} from "@/lib/dashboard/dashboard-stats";
 import type { RawBudget } from "@/lib/budgeting/budget.repository";
 import { resolveWindow, type DashboardWindow, type WindowKey } from "@/lib/dashboard-window";
 import type { Alert, AlertRepository, AnomalyAlert, ListAlertsQuery } from "@/lib/detection";

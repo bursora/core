@@ -11,7 +11,7 @@ import { TopSpendersSnapshot } from "@/app/(dashboard)/workspace/[workspaceId]/_
 import {
     setDashboardStatsDepsForTesting,
     type DashboardStatsDeps,
-} from "@/app/(dashboard)/workspace/[workspaceId]/_lib/dashboard-stats";
+} from "@/lib/dashboard/dashboard-stats";
 import type { DashboardWindow } from "@/lib/dashboard-window";
 import type {
     MeteringReadRepository,

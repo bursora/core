@@ -14,7 +14,7 @@
 import {
     setDashboardStatsDepsForTesting,
     type DashboardStatsDeps,
-} from "@/app/(dashboard)/workspace/[workspaceId]/_lib/dashboard-stats";
+} from "@/lib/dashboard/dashboard-stats";
 import { getCustomerTrajectories, getModelTrajectories } from "@/lib/compose/trajectories";
 import type { DashboardWindow } from "@/lib/dashboard-window";
 import type {

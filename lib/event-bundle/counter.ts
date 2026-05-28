@@ -81,14 +81,6 @@ export function wouldExceedHardCap(input: {
     return projected >= capCents;
 }
 
-/**
- * Branded `YYYY-MM` string. Construct via `monthKey(date)` for an in-process
- * Date, or `parseMonthKey(input)` for untrusted external strings (DB rows,
- * query params, JSON payloads). Direct string literals do not satisfy the
- * brand; that's the whole point.
- */
-export type MonthKey = string & { readonly __monthKey: unique symbol };
-
 const MONTH_KEY_PATTERN = /^\d{4}-(0[1-9]|1[0-2])$/;
 
 /**
@@ -96,24 +88,12 @@ const MONTH_KEY_PATTERN = /^\d{4}-(0[1-9]|1[0-2])$/;
  * agnostic in this context. Throws on invalid Date; defensive only, since a
  * well-formed Date can never produce a bad key.
  */
-export function monthKey(at: Date): MonthKey {
+export function monthKey(at: Date): string {
     const y = at.getUTCFullYear();
     const m = (at.getUTCMonth() + 1).toString().padStart(2, "0");
     const key = `${y}-${m}`;
     if (!MONTH_KEY_PATTERN.test(key)) {
         throw new Error(`monthKey: produced invalid key "${key}" from Date input`);
     }
-    return key as MonthKey;
-}
-
-/**
- * Parse an untrusted external string into a `MonthKey`. Use at boundaries:
- * route params, JSON payloads, DB rows from older schemas. Throws on any
- * deviation from `YYYY-MM` with a real calendar month (01–12).
- */
-export function parseMonthKey(input: string): MonthKey {
-    if (!MONTH_KEY_PATTERN.test(input)) {
-        throw new Error(`parseMonthKey: invalid month key "${input}" (expected YYYY-MM)`);
-    }
-    return input as MonthKey;
+    return key;
 }

@@ -182,14 +182,18 @@ export function loadEnv(source: Record<string, string | undefined>): Env {
 
     const appUrl = getAlways("NEXT_PUBLIC_APP_URL");
     const defaultOrigins = Array.from(
-        new Set([
-            appUrl,
-            "http://localhost:3000",
-            "http://localhost:3001",
-            "http://127.0.0.1:3000",
-            "https://app-bursora.ngrok.app",
-            "https://bursora.ngrok.app",
-        ]),
+        new Set(
+            isCloud
+                ? [appUrl]
+                : [
+                      appUrl,
+                      "http://localhost:3000",
+                      "http://localhost:3001",
+                      "http://127.0.0.1:3000",
+                      "https://app-bursora.ngrok.app",
+                      "https://bursora.ngrok.app",
+                  ],
+        ),
     );
     const trustedOrigins = Object.freeze(
         parseTrustedOrigins(source.BETTER_AUTH_TRUSTED_ORIGINS, defaultOrigins),

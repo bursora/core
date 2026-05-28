@@ -7,7 +7,6 @@ import * as React from "react";
 
 import { cn } from "@/lib/utils";
 import { Button } from "./button";
-import { useCollapse, serializeCookie } from "./hooks/use-collapse";
 import { useIsMobile } from "./hooks/use-mobile";
 import { Input } from "./input";
 import { Separator } from "./separator";
@@ -16,6 +15,7 @@ import { Skeleton } from "./skeleton";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "./tooltip";
 
 const SIDEBAR_COOKIE_NAME = "sidebar_state";
+const SIDEBAR_COOKIE_MAX_AGE = 60 * 60 * 24 * 7;
 const SIDEBAR_WIDTH = "16rem";
 const SIDEBAR_WIDTH_MOBILE = "18rem";
 const SIDEBAR_WIDTH_ICON = "3rem";
@@ -60,22 +60,23 @@ function SidebarProvider({
 
     // This is the internal state of the sidebar.
     // We use openProp and setOpenProp for control from outside the component.
-    const collapse = useCollapse({ defaultOpen, persistKey: SIDEBAR_COOKIE_NAME });
-    const open = openProp ?? collapse.open;
+    const [internalOpen, setInternalOpen] = React.useState<boolean>(defaultOpen);
+    const open = openProp ?? internalOpen;
     const setOpen = React.useCallback(
         (value: boolean | ((value: boolean) => boolean)) => {
             const openState = typeof value === "function" ? value(open) : value;
             if (setOpenProp) {
                 setOpenProp(openState);
-                // Mirror controlled-mode writes to the cookie, matching the
-                // original shadcn behavior; the hook only writes when it owns
-                // local state.
-                document.cookie = serializeCookie(SIDEBAR_COOKIE_NAME, openState);
             } else {
-                collapse.set(openState);
+                setInternalOpen(openState);
+            }
+            // Persist the choice so it survives reloads, matching the shadcn
+            // baseline cookie format (`<key>=<bool>; path=/; max-age=<1 week>`).
+            if (typeof document !== "undefined") {
+                document.cookie = `${SIDEBAR_COOKIE_NAME}=${openState}; path=/; max-age=${SIDEBAR_COOKIE_MAX_AGE}`;
             }
         },
-        [setOpenProp, open, collapse],
+        [setOpenProp, open],
     );
 
     // Helper to toggle the sidebar.

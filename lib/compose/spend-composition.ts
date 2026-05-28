@@ -1,4 +1,4 @@
-import { withRequestMemo } from "@/app/(dashboard)/workspace/[workspaceId]/_lib/per-request-cache";
+import { withRequestMemo } from "@/lib/dashboard/per-request-cache";
 import { db, schema } from "@/lib/db";
 import {
     composeSpend,

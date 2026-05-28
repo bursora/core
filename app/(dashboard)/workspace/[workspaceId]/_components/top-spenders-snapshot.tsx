@@ -1,4 +1,4 @@
-import { getSpendInWindow } from "@/app/(dashboard)/workspace/[workspaceId]/_lib/dashboard-stats";
+import { getSpendInWindow } from "@/lib/dashboard/dashboard-stats";
 import { TopSpendersSnapshotView } from "@/components/ui/dashboard-views/top-spenders-snapshot-view";
 import type { DashboardWindow, WindowKey } from "@/lib/dashboard-window";
 import { DEFAULT_WINDOW_KEY } from "@/lib/dashboard-window";

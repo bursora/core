@@ -46,20 +46,23 @@ export async function applySpikeProtection(input: {
 
     const nowMs = deps.now().getTime();
 
+    // Postgres reads stay outside the redis failure boundary: a DB outage must
+    // bubble (500), not get relabeled as a spike deny. Both are read every
+    // request regardless of cooldown, matching the prior parallel fetch.
+    const [settings, baselineEventsPerMin] = await Promise.all([
+        deps.settings.findByWorkspaceId(input.workspaceId),
+        getCachedBaseline({
+            workspaceId: input.workspaceId,
+            nowMs,
+            source: deps.baseline,
+        }),
+    ]);
+
+    const merged = mergeSettings(settings, deps.enabled, deps.defaultMultiplier);
+    if (!merged.enabled) return { allowed: true };
+
     try {
-        const [settings, cooldown, baselineEventsPerMin] = await Promise.all([
-            deps.settings.findByWorkspaceId(input.workspaceId),
-            deps.state.getCooldown({ workspaceId: input.workspaceId }),
-            getCachedBaseline({
-                workspaceId: input.workspaceId,
-                nowMs,
-                source: deps.baseline,
-            }),
-        ]);
-
-        const merged = mergeSettings(settings, deps.enabled, deps.defaultMultiplier);
-        if (!merged.enabled) return { allowed: true };
-
+        const cooldown = await deps.state.getCooldown({ workspaceId: input.workspaceId });
         if (cooldown.untilMs > nowMs) {
             return deny(cooldown.untilMs - nowMs);
         }

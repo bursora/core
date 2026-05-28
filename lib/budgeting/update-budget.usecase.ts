@@ -36,7 +36,7 @@ export interface UpdateBudgetPatch {
 export async function updateBudgetUseCase(
     input: UpdateBudgetUseCaseInput,
 ): Promise<RawBudget | null> {
-    const existing = await loadOwnRow(input);
+    const existing = await input.budgets.findById(input.id, input.workspaceId);
     if (existing === null) return null;
 
     const patch = input.patch;
@@ -62,9 +62,4 @@ export async function updateBudgetUseCase(
     };
 
     return input.budgets.update(input.id, input.workspaceId, repoPatch);
-}
-
-async function loadOwnRow(input: UpdateBudgetUseCaseInput): Promise<RawBudget | null> {
-    const rows = await input.budgets.listByWorkspace(input.workspaceId);
-    return rows.find((r) => r.id === input.id) ?? null;
 }

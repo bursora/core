@@ -23,6 +23,7 @@ import { setupErrorLogger } from "../setup-errors/server";
 import type { ApiKeyLookup } from "./api-key";
 import { apiKeyHashPrefix } from "./api-key.crypto";
 import { lookupApiKey } from "./server";
+import { clientIpFromHeaders } from "@/lib/client-ip";
 
 export interface AuthFailureInfo {
     /** Eight-char SHA-256 prefix of the offered plaintext; null when the header was missing. */
@@ -48,7 +49,7 @@ export async function withBursoraKey(
         if (opts.onAuthFailure !== undefined) {
             void opts.onAuthFailure({
                 hashPrefix: null,
-                sourceIp: extractSourceIp(request),
+                sourceIp: clientIpFromHeaders(request.headers),
             });
         }
         return { ok: false, response: unauthorized() };
@@ -59,7 +60,7 @@ export async function withBursoraKey(
         if (opts.onAuthFailure !== undefined) {
             void opts.onAuthFailure({
                 hashPrefix: apiKeyHashPrefix(plaintext),
-                sourceIp: extractSourceIp(request),
+                sourceIp: clientIpFromHeaders(request.headers),
             });
         }
         return { ok: false, response: unauthorized() };
@@ -79,24 +80,6 @@ export function recordAuthFailure(info: AuthFailureInfo): Promise<void> {
         hashPrefix: info.hashPrefix,
         sourceIp: info.sourceIp,
     });
-}
-
-/**
- * Pulls a best-effort client IP from common proxy headers. `x-forwarded-for`
- * may carry a comma-separated chain (`client, proxy1, proxy2`); the first
- * entry is the original client. Falls back to `x-real-ip`. Returns null when
- * neither header is set — no header forging is rejected here; the value is
- * only ever used as a log/fingerprint correlate.
- */
-function extractSourceIp(request: Request): string | null {
-    const forwarded = request.headers.get("x-forwarded-for");
-    if (forwarded !== null) {
-        const first = forwarded.split(",", 1)[0]?.trim();
-        if (first !== undefined && first.length > 0) return first;
-    }
-    const real = request.headers.get("x-real-ip");
-    if (real !== null && real.trim().length > 0) return real.trim();
-    return null;
 }
 
 function unauthorized(): NextResponse {

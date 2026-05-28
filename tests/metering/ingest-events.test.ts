@@ -6,8 +6,10 @@
  *      pricing row effective at event ts.
  *   2. Workspace isolation: the workspaceId on every persisted row is the one
  *      derived from the api key — body-supplied workspaceId is ignored.
- *   3. Unknown provider/model (no pricing row) → throws UnknownPricingError
- *      with provider+model context; nothing persists (no silent zero-billing).
+ *   3. Unknown provider/model (no pricing row) is partitioned out: the priced
+ *      rows in the batch still persist, and the unpriced (provider, model)
+ *      pairs are reported back (deduped) — no silent zero-billing, no dropped
+ *      priced spend.
  *   4. Multiple events in one batch are inserted as a single batch call.
  *   5. Pricing lookup uses ts (not now) to honor versioned rates.
  *   6. Idempotency: replaying the same (workspace, requestId) does not insert
@@ -99,34 +101,27 @@ describe("ingestEventsUseCase", () => {
         expect(events.rows[0]?.workspaceId).not.toBe(WORKSPACE_B);
     });
 
-    test("unknown model → throws UnknownPricingError carrying provider+model, no rows persisted", async () => {
+    test("unknown model (whole batch unpriced) → reported as unpriced, nothing persisted, no throw", async () => {
         const events = new InMemoryUsageEventRepository();
         const pricing = new StubPricingRepository(); // no rows registered
 
-        let caught: unknown = null;
-        try {
-            await ingestEventsUseCase({
-                workspaceId: WORKSPACE_A,
-                events: [event({ provider: "openai", model: "gpt-7-unreleased" })],
-                eventsRepo: events,
-                pricingRepo: pricing,
-            });
-        } catch (err) {
-            caught = err;
-        }
+        const result = await ingestEventsUseCase({
+            workspaceId: WORKSPACE_A,
+            events: [event({ provider: "openai", model: "gpt-7-unreleased" })],
+            eventsRepo: events,
+            pricingRepo: pricing,
+        });
 
-        expect(caught).toBeInstanceOf(UnknownPricingError);
-        const err = caught as UnknownPricingError;
-        expect(err.provider).toBe("openai");
-        expect(err.model).toBe("gpt-7-unreleased");
-
-        // SAFE: no partial write. The batch must roll back so the customer
-        // does not see "some events accepted, some rejected" silently.
+        // Nothing was priceable, so nothing persists and nothing bills, but the
+        // gap is reported instead of throwing — no silent zero-billing.
+        expect(result.inserted).toBe(0);
+        expect(result.unpriced).toEqual([{ provider: "openai", model: "gpt-7-unreleased" }]);
         expect(events.rows.length).toBe(0);
+        // No rows to write → no insert call at all.
         expect(events.batchInsertCalls).toBe(0);
     });
 
-    test("unknown pricing in a mixed batch → entire batch rejected (no partial write)", async () => {
+    test("unknown pricing in a mixed batch → priced rows persist, unpriced reported", async () => {
         const events = new InMemoryUsageEventRepository();
         const pricing = new StubPricingRepository();
         pricing.addRow({
@@ -142,24 +137,59 @@ describe("ingestEventsUseCase", () => {
             effectiveTo: null,
         });
 
-        let caught: unknown = null;
-        try {
-            await ingestEventsUseCase({
-                workspaceId: WORKSPACE_A,
-                events: [
-                    event({ provider: "openai", model: "gpt-4o" }),
-                    event({ provider: "openai", model: "gpt-7-unreleased" }),
-                ],
-                eventsRepo: events,
-                pricingRepo: pricing,
-            });
-        } catch (err) {
-            caught = err;
-        }
+        const result = await ingestEventsUseCase({
+            workspaceId: WORKSPACE_A,
+            events: [
+                event({ provider: "openai", model: "gpt-4o", requestId: "priced-1" }),
+                event({ provider: "openai", model: "gpt-7-unreleased", requestId: "unpriced-1" }),
+            ],
+            eventsRepo: events,
+            pricingRepo: pricing,
+        });
 
-        expect(caught).toBeInstanceOf(UnknownPricingError);
-        expect(events.rows.length).toBe(0);
-        expect(events.batchInsertCalls).toBe(0);
+        // Known spend must land even though a sibling event was unpriced. One
+        // unpriced event must never drop the priced rows in the same batch.
+        expect(result.inserted).toBe(1);
+        expect(result.unpriced).toEqual([{ provider: "openai", model: "gpt-7-unreleased" }]);
+        expect(events.rows.length).toBe(1);
+        expect(events.rows[0]?.model).toBe("gpt-4o");
+        expect(events.batchInsertCalls).toBe(1);
+    });
+
+    test("repeated unpriced (provider, model) pairs are deduped in the report", async () => {
+        const events = new InMemoryUsageEventRepository();
+        const pricing = new StubPricingRepository();
+        pricing.addRow({
+            id: "row-1",
+            workspaceId: null,
+            provider: "openai",
+            model: "gpt-4o",
+            region: "global",
+            inputPer1mUsd: "2.5",
+            outputPer1mUsd: "10",
+            cachePer1mUsd: null,
+            effectiveFrom: new Date("2024-01-01T00:00:00Z"),
+            effectiveTo: null,
+        });
+
+        const result = await ingestEventsUseCase({
+            workspaceId: WORKSPACE_A,
+            events: [
+                event({ provider: "openai", model: "gpt-4o", requestId: "p-1" }),
+                event({ provider: "openai", model: "gpt-7-unreleased", requestId: "u-1" }),
+                event({ provider: "openai", model: "gpt-7-unreleased", requestId: "u-2" }),
+                event({ provider: "anthropic", model: "claude-x", requestId: "u-3" }),
+            ],
+            eventsRepo: events,
+            pricingRepo: pricing,
+        });
+
+        expect(result.inserted).toBe(1);
+        // gpt-7-unreleased appears twice but is reported once; order preserved.
+        expect(result.unpriced).toEqual([
+            { provider: "openai", model: "gpt-7-unreleased" },
+            { provider: "anthropic", model: "claude-x" },
+        ]);
     });
 
     test("uses pricing row effective AT event ts (not the latest)", async () => {
@@ -413,7 +443,7 @@ describe("ingestEventsUseCase", () => {
         expect(events.rows[0]?.costUsd).toBe("0.42000000");
     });
 
-    test("injected PricingResolver throwing UnknownPricingError aborts the batch", async () => {
+    test("injected PricingResolver throwing UnknownPricingError → event reported as unpriced, no rows", async () => {
         const events = new InMemoryUsageEventRepository();
         const pricing = new StubPricingRepository();
         const resolver: PricingResolver = {
@@ -425,11 +455,34 @@ describe("ingestEventsUseCase", () => {
             },
         };
 
+        const result = await ingestEventsUseCase({
+            workspaceId: WORKSPACE_A,
+            events: [event({ provider: "openai", model: "mystery-model" })],
+            eventsRepo: events,
+            pricingRepo: pricing,
+            pricingResolver: resolver,
+        });
+
+        expect(result.inserted).toBe(0);
+        expect(result.unpriced).toEqual([{ provider: "openai", model: "mystery-model" }]);
+        expect(events.rows.length).toBe(0);
+        expect(events.batchInsertCalls).toBe(0);
+    });
+
+    test("injected PricingResolver throwing a non-pricing error still propagates", async () => {
+        const events = new InMemoryUsageEventRepository();
+        const pricing = new StubPricingRepository();
+        const resolver: PricingResolver = {
+            async resolveCost() {
+                throw new Error("resolver exploded");
+            },
+        };
+
         let caught: unknown = null;
         try {
             await ingestEventsUseCase({
                 workspaceId: WORKSPACE_A,
-                events: [event({ provider: "openai", model: "mystery-model" })],
+                events: [event()],
                 eventsRepo: events,
                 pricingRepo: pricing,
                 pricingResolver: resolver,
@@ -438,10 +491,9 @@ describe("ingestEventsUseCase", () => {
             caught = err;
         }
 
-        expect(caught).toBeInstanceOf(UnknownPricingError);
-        const err = caught as UnknownPricingError;
-        expect(err.provider).toBe("openai");
-        expect(err.model).toBe("mystery-model");
+        // Only UnknownPricingError is partitioned; real failures must surface.
+        expect(caught).toBeInstanceOf(Error);
+        expect((caught as Error).message).toBe("resolver exploded");
         expect(events.rows.length).toBe(0);
         expect(events.batchInsertCalls).toBe(0);
     });

@@ -16,8 +16,9 @@
  *
  * Documented policy:
  *   - When pricingRow is null (missing rate), throw `UnknownPricingError`. The
- *     ingest path catches and returns 400 `pricing_unknown` to the SDK so
- *     unknown models surface to the customer instead of silently billing 0.
+ *     ingest path catches it per event and reports the unpriced (provider,
+ *     model) pair so unknown models surface to the customer instead of
+ *     silently billing 0; priced events in the same batch still persist.
  *   - When token counts are zero on a side, that side contributes zero.
  *   - When cacheTokens is set but cachePer1mUsd is null, cache contributes zero.
  */
@@ -152,8 +153,9 @@ describe("calculateCost", () => {
     });
 
     test("null pricing row → throws UnknownPricingError", () => {
-        // The ingest path catches and returns 400 `pricing_unknown` so unknown
-        // models surface to the customer instead of silently billing 0.
+        // The ingest path catches it and reports the unpriced (provider, model)
+        // pair so unknown models surface to the customer instead of silently
+        // billing 0; priced events in the same batch still persist.
         expect(() =>
             calculateCost({ promptTokens: 100, completionTokens: 50 }, null),
         ).toThrowError(UnknownPricingError);

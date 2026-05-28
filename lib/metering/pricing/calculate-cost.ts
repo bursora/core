@@ -12,9 +12,11 @@
  *
  * Policy decisions:
  *   - Missing pricing row (null) → throw `UnknownPricingError`. The ingest
- *     path catches the throw and returns 400 `pricing_unknown` to the SDK so
- *     the customer learns about unpriced models instead of silently billing
- *     zero. Previously this returned Money("0"); see issue #915.
+ *     path catches the throw, sets that event aside, and reports the unpriced
+ *     (provider, model) pair back to the SDK so the customer learns about
+ *     unpriced models instead of silently billing zero. The priced events in
+ *     the same batch still persist. Previously this returned Money("0"); see
+ *     issue #915.
  *   - Cache pricing absent on the row (cachePer1mUsd === null) → cache side
  *     contributes zero, even when cacheTokens > 0.
  *   - Negative or non-finite token counts are clamped to zero. The validator
@@ -39,13 +41,13 @@ export interface Usage {
 
 /**
  * Raised when no pricing row exists for an event's (provider, model, region,
- * ts) tuple. The ingest path catches and renders a 400 `pricing_unknown`
- * response so the SDK author (and the customer's ops) learn about the gap
- * instead of seeing a silent $0 charge.
+ * ts) tuple. The ingest path catches it per event, sets that event aside, and
+ * reports the unpriced (provider, model) pair back so the SDK author (and the
+ * customer's ops) learn about the gap instead of seeing a silent $0 charge —
+ * while the priced events in the same batch still persist.
  *
- * `calculateCost` raises the context-free form (it sees only a null row). The
- * ingest use case re-raises with the offending `provider`/`model` attached so
- * the route handler can echo them on the wire without re-deriving them.
+ * `calculateCost` raises the context-free form (it sees only a null row); the
+ * resolver re-raises with the offending `provider`/`model` attached.
  */
 export class UnknownPricingError extends Error {
     readonly provider: string | null;

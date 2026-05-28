@@ -9,17 +9,17 @@
 # loaded, not what runs.
 #
 # The OSS bundle legitimately contains:
-#   - Drizzle schema columns like `stripeCustomerId` (shared schema in
+#   - Drizzle schema columns like `provider_customer_id` (shared schema in
 #     lib/db/schema.ts, not EE code).
-#   - Env var names like STRIPE_SECRET_KEY (cloud-required list in
-#     lib/env.ts; just strings, not Stripe SDK).
-#   - A stub /api/webhooks/stripe route that returns 404.
+#   - Env var names like LEMONSQUEEZY_API_KEY (cloud-required list in
+#     lib/env.ts; just strings, not the Lemon Squeezy adapter).
+#   - A stub /api/webhooks/lemonsqueezy route that returns 404.
 #
 # The bundle MUST NOT contain:
 #   - EE use-case symbols (calculateMonthlyBill, *UseCase exports).
 #   - EE server actions (createCheckoutAction, requestRefundAction, ...).
 #   - EE components (BillingSection, RefundPanel).
-#   - The Stripe SDK itself.
+#   - The Lemon Squeezy payment adapter (LemonSqueezyApiAdapter).
 #
 # Usage:
 #   cd core && OSS_BUILD=true ... ./scripts/verify-oss-build.sh
@@ -50,21 +50,22 @@ fi
 # in a built .js chunk, the runtime guard or dynamic-import boundary failed.
 FORBIDDEN=(
     'calculateMonthlyBill'
-    'createCheckoutSessionUseCase'
+    'createCheckoutSession'
     'getBillingPortalUrlUseCase'
-    'handleStripeWebhookUseCase'
+    'handleWebhookUseCase'
+    'mapLemonSqueezyEvent'
     'nextBillEstimateUseCase'
-    'pushStripeInvoiceUseCase'
+    'reportUsageUseCase'
     'requestRefundUseCase'
     'rollupBillUseCase'
-    'StripeApiAdapter'
+    'LemonSqueezyApiAdapter'
     'BillingNotEnabledError'
     'createCheckoutAction'
     'openPortalAction'
     'requestRefundAction'
     'BillingSection'
     'RefundPanel'
-    'api.stripe.com'
+    'api.lemonsqueezy.com'
 )
 
 # Single alternation so one grep pass scans every chunk.

@@ -14,8 +14,9 @@
  *   - 401 on malformed plaintext (not bsk_<workspace>_<32hex>)
  *   - 400 on malformed JSON body
  *   - 400 on empty events array
- *   - 400 `pricing_unknown` (with provider+model echoed) on unknown model
- *     (issue #915); structured server log fires; no row persisted
+ *   - 202 with `unpriced` (provider+model) listed when a model has no pricing
+ *     row (issue #915); structured server log fires; priced siblings persist;
+ *     a fully-unpriced batch persists nothing but still reports the gap
  */
 
 import { InMemoryEventBundleCounterStore } from "@/lib/event-bundle/in-memory.adapter";
@@ -403,7 +404,7 @@ describe("POST /api/v1/events", () => {
         warn.mockRestore();
     });
 
-    test("unknown model → 400 pricing_unknown with provider+model echoed, no row persisted", async () => {
+    test("fully-unpriced batch → 202 listing unpriced provider+model, no row persisted", async () => {
         const harness = setupHarness();
         const body = JSON.stringify({
             events: [
@@ -422,15 +423,54 @@ describe("POST /api/v1/events", () => {
         const res = await POST(makeRequest(body, { "x-bursora-key": PLAINTEXT }));
         const json = await res.json();
 
-        // Issue #915: surface the unknown model so the customer's SDK / ops
-        // see the gap instead of seeing silent $0 charges in the dashboard.
-        expect(res.status).toBe(400);
+        // Issue #915: surface the unknown model so the customer's SDK / ops see
+        // the gap, but never via a 400 — a 400 makes the fire-and-forget SDK
+        // drop the report (it does not retry), losing any priced spend in the
+        // batch. Nothing was priceable here, so nothing persists.
+        expect(res.status).toBe(202);
         expect(json).toEqual({
-            error: "pricing_unknown",
-            provider: "openai",
-            model: "gpt-7-unreleased",
+            status: "accepted",
+            unpriced: [{ provider: "openai", model: "gpt-7-unreleased" }],
         });
         expect(harness.events.rows.length).toBe(0);
+    });
+
+    test("mixed batch → 202, priced row persists, unpriced reported, counter bumped by priced count", async () => {
+        const harness = setupHarness();
+        const body = JSON.stringify({
+            events: [
+                validEvent({ requestId: "priced-1" }),
+                {
+                    provider: "openai",
+                    model: "gpt-7-unreleased",
+                    region: "global",
+                    promptTokens: 100,
+                    completionTokens: 100,
+                    cacheTokens: 0,
+                    requestId: "unpriced-1",
+                    ts: "2025-05-10T12:00:00.000Z",
+                },
+            ],
+        });
+
+        const res = await POST(makeRequest(body, { "x-bursora-key": PLAINTEXT }));
+        const json = await res.json();
+
+        // Known spend lands; the unpriced sibling is reported, not fatal.
+        expect(res.status).toBe(202);
+        expect(json).toEqual({
+            status: "accepted",
+            unpriced: [{ provider: "openai", model: "gpt-7-unreleased" }],
+        });
+        expect(harness.events.rows.length).toBe(1);
+        expect(harness.events.rows[0]?.model).toBe("gpt-4o");
+
+        // Only the priced row advances the plan-bundle counter.
+        const counted = await harness.bundleCounter.readMonth({
+            workspaceId: WORKSPACE,
+            month: MONTH,
+        });
+        expect(counted).toBe(1);
     });
 
     test("unknown model → structured server log with sanitized provider+model only", async () => {

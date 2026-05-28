@@ -15,8 +15,8 @@
  * grouping the inline ingest path used to do by hand.
  *
  * On a missing pricing row the resolver raises `UnknownPricingError` carrying
- * the offending provider/model so the route handler can surface a 400
- * `pricing_unknown` response without re-deriving context (see issue #915).
+ * the offending provider/model so the ingest path can set that event aside and
+ * report it as `unpriced` while the priced events still persist (see issue #915).
  */
 
 import { calculateCost, UnknownPricingError, type Usage } from "./calculate-cost";

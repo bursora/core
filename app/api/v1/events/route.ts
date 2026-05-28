@@ -5,8 +5,10 @@
  * Body:    { "events": [ { provider, model, region?, promptTokens,
  *            completionTokens, cacheTokens?, ts, tenantId?, agentId?,
  *            workflowId?, latencyMs?, requestId? }, ... ] }
- * Resp:    202 accepted | 401 bad key | 400 malformed/empty batch |
- *          400 pricing_unknown (provider/model not priced; see issue #915) |
+ * Resp:    202 accepted (body lists any `unpriced` provider/model pairs whose
+ *          events were skipped for lack of a pricing row; the priced rows in
+ *          the same batch still persist, so known spend never drops — issue
+ *          #915) | 401 bad key | 400 malformed/empty batch |
  *          429 rate-limit, spike-protection, or event-bundle cap hit
  *
  * Cap order is per-API-key rate-limit first (one bad key shouldn't drag the
@@ -21,7 +23,6 @@ import { checkEventBundleHardCap, recordEventBundleUsage } from "@/lib/event-bun
 import { recordAuthFailure } from "@/lib/identity/with-bursora-key";
 import { withSdkAuthz } from "@/lib/identity/with-sdk-authz";
 import { logInvalidBody } from "@/lib/log-invalid-body";
-import { UnknownPricingError } from "@/lib/metering";
 import { ingestEvents } from "@/lib/metering/server";
 import { setupErrorLogger } from "@/lib/setup-errors/server";
 import { applySpikeProtection } from "@/lib/spike-protection/middleware";
@@ -83,48 +84,37 @@ export async function POST(request: Request): Promise<NextResponse> {
     const decision = await capping.apply(authz.apiKey.workspaceId, parsed.value.events.length);
     if (!decision.allowed) return capResponse(decision);
 
-    let summary: { inserted: number };
-    try {
-        summary = await ingestEvents({
+    const summary = await ingestEvents({
+        workspaceId: authz.apiKey.workspaceId,
+        events: parsed.value.events.map((e) => ({
+            provider: e.provider,
+            model: e.model,
+            region: e.region,
+            promptTokens: e.promptTokens,
+            completionTokens: e.completionTokens,
+            cacheTokens: e.cacheTokens,
+            ts: new Date(e.ts),
+            tenantId: e.tenantId ?? null,
+            agentId: e.agentId ?? null,
+            workflowId: e.workflowId ?? null,
+            latencyMs: e.latencyMs ?? null,
+            requestId: e.requestId ?? null,
+        })),
+    });
+
+    // Issue #915: surface unpriced (provider, model) pairs to the SDK author +
+    // customer ops instead of silently storing cost_usd = 0. The priced rows in
+    // the same batch already persisted, so known spend never drops. The
+    // structured log carries only provider/model — never the raw event payload,
+    // tenant ids, or token counts — so logs never leak customer data.
+    for (const { provider, model } of summary.unpriced) {
+        console.warn("v1.pricing_unknown", {
+            route: "/api/v1/events",
             workspaceId: authz.apiKey.workspaceId,
-            events: parsed.value.events.map((e) => ({
-                provider: e.provider,
-                model: e.model,
-                region: e.region,
-                promptTokens: e.promptTokens,
-                completionTokens: e.completionTokens,
-                cacheTokens: e.cacheTokens,
-                ts: new Date(e.ts),
-                tenantId: e.tenantId ?? null,
-                agentId: e.agentId ?? null,
-                workflowId: e.workflowId ?? null,
-                latencyMs: e.latencyMs ?? null,
-                requestId: e.requestId ?? null,
-            })),
+            apiKeyId: authz.apiKey.id,
+            provider,
+            model,
         });
-    } catch (err) {
-        if (err instanceof UnknownPricingError) {
-            // Issue #915: surface unknown models to the SDK author + customer
-            // ops instead of silently storing cost_usd = 0. The structured
-            // log carries only provider/model — never the raw event payload,
-            // tenant ids, or token counts — so logs never leak customer data.
-            console.warn("v1.pricing_unknown", {
-                route: "/api/v1/events",
-                workspaceId: authz.apiKey.workspaceId,
-                apiKeyId: authz.apiKey.id,
-                provider: err.provider,
-                model: err.model,
-            });
-            return NextResponse.json(
-                {
-                    error: "pricing_unknown",
-                    provider: err.provider,
-                    model: err.model,
-                },
-                { status: 400 },
-            );
-        }
-        throw err;
     }
 
     // Bill the bundle by rows actually written, not the requested count.
@@ -135,7 +125,11 @@ export async function POST(request: Request): Promise<NextResponse> {
         eventCount: summary.inserted,
     });
 
-    return NextResponse.json({ status: "accepted" }, { status: 202 });
+    const body: Record<string, unknown> = { status: "accepted" };
+    if (summary.unpriced.length > 0) {
+        body.unpriced = summary.unpriced;
+    }
+    return NextResponse.json(body, { status: 202 });
 }
 
 function capResponse(decision: CappingDecision): NextResponse {

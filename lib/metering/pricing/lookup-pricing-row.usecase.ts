@@ -7,8 +7,9 @@
  * candidate rows (workspace-scoped overrides + global rows) from the repo and
  * delegate selection to the pure helper.
  *
- * Returns null when no row applies — the metering use case translates this
- * into an `UnknownPricingError` so the route renders 400 `pricing_unknown`.
+ * Returns null when no row applies — the metering path translates this into an
+ * `UnknownPricingError` so the ingest use case sets the event aside and reports
+ * it as `unpriced`.
  */
 
 import { findPricingRow } from "./find-pricing-row";

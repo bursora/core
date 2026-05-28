@@ -79,8 +79,8 @@ describe("@/lib/metering calculateCost", () => {
     }
 
     test("null pricing row → throws UnknownPricingError", () => {
-        // Issue #915: ingest path catches and renders 400 `pricing_unknown`
-        // instead of silently storing cost_usd = 0.
+        // Issue #915: ingest path catches it and reports the unpriced
+        // (provider, model) pair instead of silently storing cost_usd = 0.
         expect(() =>
             calculateCost({ promptTokens: 1000, completionTokens: 500 }, null),
         ).toThrowError(UnknownPricingError);

@@ -6,9 +6,12 @@
  * `numeric(14,8)` precision is preserved end-to-end.
  *
  * Idempotency: the partial unique index
- *   `(workspace_id, request_id) WHERE request_id IS NOT NULL`
+ *   `(workspace_id, request_id, ts) WHERE request_id IS NOT NULL`
  * (migration 0037) plus `ON CONFLICT DO NOTHING` collapses retried deliveries
- * sharing the same `requestId` onto the row already persisted. Rows without
+ * sharing the same `requestId` onto the row already persisted. `ts` is part of
+ * the key because `usage_events` is partitioned by `ts`, so dedup is
+ * per-time-partition: a retry carrying a different `ts` lands as its own row.
+ * The SDK replays the original `ts`, so real retries still dedupe. Rows without
  * a `requestId` bypass the index and always insert — same as before.
  */
 
@@ -45,10 +48,17 @@ export class DrizzleUsageEventRepository implements UsageEventRepository {
                 })),
             )
             // Targets the partial unique index `usage_events_workspace_request_uidx`
-            // from migration 0037. The `where` clause matches the index's WHERE
-            // predicate so Postgres uses this index for arbiter resolution.
+            // from migration 0037. The arbiter columns and the `where` clause
+            // match the index exactly so Postgres resolves it. `ts` is in the
+            // arbiter because the partitioned table forces it into the unique
+            // key, so dedup is per-time-partition (a retry with a different `ts`
+            // won't dedupe).
             .onConflictDoNothing({
-                target: [schema.usageEvents.workspaceId, schema.usageEvents.requestId],
+                target: [
+                    schema.usageEvents.workspaceId,
+                    schema.usageEvents.requestId,
+                    schema.usageEvents.ts,
+                ],
                 where: sql`${schema.usageEvents.requestId} IS NOT NULL`,
             })
             // RETURNING after ON CONFLICT DO NOTHING yields only the rows that

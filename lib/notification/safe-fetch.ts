@@ -23,7 +23,30 @@ export class SafeFetchUrlError extends Error {
     }
 }
 
+export interface SafeTarget {
+    /** Original request hostname; used for the TLS SNI server name and Host header. */
+    readonly hostname: string;
+    /** A validated public IP to dial, pinned so the connection can't rebind to a private address. */
+    readonly pinnedIp: string;
+    /** Original URL port, or "" for the scheme default. */
+    readonly port: string;
+}
+
 export async function assertSafeUrl(url: string, resolveHost: ResolveHost): Promise<void> {
+    await resolveSafeTarget(url, resolveHost);
+}
+
+/**
+ * Validate `url` and resolve it to a single pinned public IP. Runs the same
+ * SSRF checks as the assertion form, but returns the IP to dial so the caller
+ * connects to that exact address instead of re-resolving the hostname — a
+ * low-TTL attacker could otherwise rebind the name to a private address in the
+ * window between this check and the connection (DNS rebinding / TOCTOU).
+ */
+export async function resolveSafeTarget(
+    url: string,
+    resolveHost: ResolveHost,
+): Promise<SafeTarget> {
     let parsed: URL;
     try {
         parsed = new URL(url);
@@ -38,7 +61,7 @@ export async function assertSafeUrl(url: string, resolveHost: ResolveHost): Prom
         if (isPrivateIp(hostname)) {
             throw new SafeFetchUrlError(`forbidden host ip: ${hostname}`);
         }
-        return;
+        return { hostname, pinnedIp: hostname, port: parsed.port };
     }
     let resolved: readonly string[];
     try {
@@ -48,7 +71,8 @@ export async function assertSafeUrl(url: string, resolveHost: ResolveHost): Prom
             `dns lookup failed for ${hostname}: ${err instanceof Error ? err.message : String(err)}`,
         );
     }
-    if (resolved.length === 0) {
+    const [pinnedIp] = resolved;
+    if (pinnedIp === undefined) {
         throw new SafeFetchUrlError(`dns lookup returned no records for ${hostname}`);
     }
     for (const ip of resolved) {
@@ -56,6 +80,7 @@ export async function assertSafeUrl(url: string, resolveHost: ResolveHost): Prom
             throw new SafeFetchUrlError(`hostname ${hostname} resolved to forbidden ip ${ip}`);
         }
     }
+    return { hostname, pinnedIp, port: parsed.port };
 }
 
 function normalizeHostname(hostname: string): string {

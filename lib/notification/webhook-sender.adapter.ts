@@ -9,11 +9,17 @@
  *
  * Safety properties enforced here:
  *
- *   - SSRF guard. The URL is validated by `assertSafeUrl` before any
+ *   - SSRF guard. The URL is validated by `resolveSafeTarget` before any
  *     network I/O. Loopback, private ranges, cloud metadata, and any
  *     hostname whose DNS lookup resolves to one of those addresses are
  *     refused. Channel URLs come from workspace members, so they're
  *     treated as untrusted input.
+ *
+ *   - IP pinning. `resolveSafeTarget` returns the validated public IP and
+ *     the request dials *that* address (URL host swapped for the IP), while
+ *     SNI and the Host header keep the original hostname. The hostname is
+ *     never re-resolved for the connection, so a low-TTL attacker can't
+ *     rebind it to 127.0.0.1 / 169.254.169.254 between the check and the dial.
  *
  *   - Manual redirects. `fetch` is invoked with `redirect: "manual"` so
  *     a target host can't bounce the request to an internal address
@@ -33,7 +39,8 @@
  */
 
 import { lookup } from "node:dns/promises";
-import { assertSafeUrl, type ResolveHost } from "./safe-fetch";
+import { isIPv6 } from "node:net";
+import { resolveSafeTarget, type ResolveHost, type SafeTarget } from "./safe-fetch";
 import type { WebhookSender } from "./webhook-sender";
 
 const TIMEOUT_MS = 5000;
@@ -42,7 +49,9 @@ const BASE_BACKOFF_MS = 1000;
 const MAX_BACKOFF_MS = 30_000;
 const DEFAULT_RETRIES = 3;
 
-export type FetchFn = (input: string, init: RequestInit) => Promise<Response>;
+/** Standard fetch init plus Bun's `tls` extension, used to pin SNI to the original host. */
+type FetchInit = RequestInit & { readonly tls?: { readonly serverName: string } };
+export type FetchFn = (input: string, init: FetchInit) => Promise<Response>;
 export type SetTimerFn = (ms: number, cb: () => void) => unknown;
 export type ClearTimerFn = (handle: unknown) => void;
 export type SleepFn = (ms: number) => Promise<void>;
@@ -68,7 +77,7 @@ export function createHttpWebhookSender(deps: CreateHttpWebhookSenderDeps = {}):
     const retries = deps.retries ?? DEFAULT_RETRIES;
     return {
         post: async (url: string, body: unknown): Promise<void> => {
-            await assertSafeUrl(url, resolveHost);
+            const target = await resolveSafeTarget(url, resolveHost);
             const payload = JSON.stringify(body);
             let lastError: unknown;
             for (let attempt = 0; attempt <= retries; attempt += 1) {
@@ -82,6 +91,7 @@ export function createHttpWebhookSender(deps: CreateHttpWebhookSenderDeps = {}):
                 try {
                     await postOnce({
                         url,
+                        target,
                         payload,
                         fetchImpl,
                         random,
@@ -100,6 +110,7 @@ export function createHttpWebhookSender(deps: CreateHttpWebhookSenderDeps = {}):
 
 interface PostOnceArgs {
     readonly url: string;
+    readonly target: SafeTarget;
     readonly payload: string;
     readonly fetchImpl: FetchFn;
     readonly random: () => number;
@@ -108,16 +119,26 @@ interface PostOnceArgs {
 }
 
 async function postOnce(args: PostOnceArgs): Promise<void> {
+    const original = new URL(args.url);
+    // Dial the validated IP, but keep the original hostname for the Host header
+    // and TLS SNI so vhost routing and certificate validation still work. The
+    // hostname is never re-resolved, which is what closes the rebinding window.
+    const hostHeader = original.host;
+    const pinnedHost = isIPv6(args.target.pinnedIp)
+        ? `[${args.target.pinnedIp}]`
+        : args.target.pinnedIp;
+    original.host = original.port ? `${pinnedHost}:${original.port}` : pinnedHost;
     const timeoutMs = jitter(TIMEOUT_MS, args.random);
     const controller = new AbortController();
     const timer = args.setTimer(timeoutMs, () => controller.abort());
     try {
-        const res = await args.fetchImpl(args.url, {
+        const res = await args.fetchImpl(original.toString(), {
             method: "POST",
-            headers: { "content-type": "application/json" },
+            headers: { "content-type": "application/json", host: hostHeader },
             body: args.payload,
             signal: controller.signal,
             redirect: "manual",
+            tls: { serverName: args.target.hostname },
         });
         if (!res.ok) {
             throw new Error(`webhook returned ${res.status}`);

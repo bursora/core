@@ -48,9 +48,31 @@ export async function updateBudgetUseCase(
         amountUsd: patch.amountUsd !== undefined ? patch.amountUsd : existing.amountUsd,
     };
 
+    // Validate the merged row, but only enforce issues on fields this patch
+    // actually changes. A legacy-invalid scopeType/scopeId pairing on the
+    // stored row must not veto an edit to an unrelated field. Scope is a pair:
+    // the pair-check reports on `scopeId`, so patching either scope field makes
+    // both scope paths relevant.
     const parsed = BudgetInputSchema.safeParse(merged);
     if (!parsed.success) {
-        throw ValidationError.fromZodError(parsed.error);
+        const scopeTouched = patch.scopeType !== undefined || patch.scopeId !== undefined;
+        const relevant = new Set<string>();
+        if (patch.amountUsd !== undefined) relevant.add("amountUsd");
+        if (patch.period !== undefined) relevant.add("period");
+        if (patch.mode !== undefined) relevant.add("mode");
+        if (scopeTouched) {
+            relevant.add("scopeType");
+            relevant.add("scopeId");
+        }
+        const blocking = parsed.error.issues.filter((issue) => {
+            const field = issue.path[0];
+            return typeof field === "string" && relevant.has(field);
+        });
+        const first = blocking[0];
+        if (first !== undefined) {
+            const field = typeof first.path[0] === "string" ? first.path[0] : "";
+            throw new ValidationError(field, first.message, blocking);
+        }
     }
 
     const repoPatch: UpdateBudgetInput = {

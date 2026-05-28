@@ -354,17 +354,21 @@ export const usageEvents = pgTable(
     // the lookup btree (workspace, tenant, agent, ts) can't serve without pinned
     // tenant_id / agent_id.
     //
-    // Partial unique index `(workspace_id, request_id) WHERE request_id IS NOT NULL`
-    // makes ingest idempotent per `requestId`: retried SDK deliveries land on the
-    // same row instead of double-billing the customer. Rows without a requestId
-    // skip the index (NULL request_id is rejected by the WHERE clause), so the
-    // SDK's optional-requestId contract is preserved. Authored by hand in
-    // migration 0037; drizzle's uniqueIndex builder mirrors columns only.
+    // Partial unique index `(workspace_id, request_id, ts) WHERE request_id IS
+    // NOT NULL` makes ingest idempotent per `requestId`: retried SDK deliveries
+    // land on the same row instead of double-billing the customer. `ts` is the
+    // trailing key because a partitioned table's unique index must include the
+    // partition key, so dedup is per-time-partition (a retry with a different
+    // `ts` won't collapse; the SDK replays the original `ts`). Rows without a
+    // requestId skip the index (NULL request_id is rejected by the WHERE
+    // clause), so the SDK's optional-requestId contract is preserved. Authored
+    // by hand in migration 0037; drizzle's uniqueIndex builder mirrors columns
+    // only.
     (t) => [
         primaryKey({ columns: [t.id, t.ts] }),
         index("usage_events_workspace_status_ts_idx").on(t.workspaceId, t.status, t.ts),
         uniqueIndex("usage_events_workspace_request_uidx")
-            .on(t.workspaceId, t.requestId)
+            .on(t.workspaceId, t.requestId, t.ts)
             .where(sql`${t.requestId} IS NOT NULL`),
     ],
 );

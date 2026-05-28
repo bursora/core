@@ -3,6 +3,11 @@
  * for one workspace over a half-open month window, converting USD to
  * cents via Postgres-side multiplication so we don't lose precision in JS.
  *
+ * Trial carve-out: usage accrued during a trial is free. When the workspace
+ * has a `trial_ends_at`, spend recorded before that boundary is excluded from
+ * the sum, so the conversion-month bill only counts usage after the trial
+ * converted. A workspace with no stored boundary has nothing to carve out.
+ *
  * `usage_events.cost_usd` is already pricing-override-adjusted at write
  * time, so the SUM here IS the override-adjusted total — the bill
  * calculator can multiply by 0.5% without any further accounting.
@@ -36,12 +41,22 @@ export class DrizzleTrackedSpendRepository implements TrackedSpendRepository {
         const [row] = await this.db
             .select({ total: sum(schema.usageEvents.costUsd) })
             .from(schema.usageEvents)
+            .innerJoin(
+                schema.workspaces,
+                eq(schema.workspaces.id, schema.usageEvents.workspaceId),
+            )
             .where(
                 and(
                     eq(schema.usageEvents.workspaceId, query.workspaceId),
                     gte(schema.usageEvents.ts, query.from),
                     lt(schema.usageEvents.ts, query.to),
                     eq(schema.usageEvents.status, "ok"),
+                    // Trial usage is free: drop spend recorded before the
+                    // workspace's trial boundary. No boundary → nothing to drop.
+                    or(
+                        isNull(schema.workspaces.trialEndsAt),
+                        gte(schema.usageEvents.ts, schema.workspaces.trialEndsAt),
+                    ),
                 ),
             );
         if (!row || row.total === null) return 0;

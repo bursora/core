@@ -34,7 +34,6 @@ export { listMembersUseCase } from "./list-members.usecase";
 export { lookupApiKeyUseCase } from "./lookup-api-key.usecase";
 export { renameApiKeyUseCase, type RenameApiKeyInput } from "./rename-api-key.usecase";
 export { renameWorkspaceUseCase, type RenameWorkspaceInput } from "./rename-workspace.usecase";
-export { resendInviteUseCase, type ResendInviteInput } from "./resend-invite.usecase";
 export { revokeApiKeyUseCase, type RevokeApiKeyInput } from "./revoke-api-key.usecase";
 export {
     setWorkspaceEnvironmentUseCase,

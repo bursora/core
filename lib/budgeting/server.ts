@@ -28,8 +28,6 @@ import {
     type BudgetCrossingTrigger,
     type RecordBlockedCall,
 } from "./decide-budget.usecase";
-import type { BudgetLock } from "./budget-lock";
-import { drizzleBudgetLock } from "./drizzle-budget-lock";
 import { DrizzleBudgetRepository } from "./drizzle-budget.repository";
 import { DrizzleSpendAggregator } from "./drizzle-spend.aggregator";
 import { periodWindow, type Period } from "./period";
@@ -45,12 +43,6 @@ export interface BudgetingDeps {
     readonly bus?: EventBus;
     readonly alerts?: AlertRepository;
     readonly recordBlocked?: RecordBlockedCall;
-    /**
-     * Pessimistic lock for block-mode budget decisions. Optional so test
-     * harnesses can run without serialization; production wiring always
-     * sets the Drizzle `SELECT ... FOR UPDATE` impl.
-     */
-    readonly lock?: BudgetLock;
 }
 
 let testOverride: BudgetingDeps | null = null;
@@ -76,7 +68,6 @@ export function budgetingDeps(): BudgetingDeps {
         bus: eventBus(),
         alerts: drizzleAlertRepository(db()),
         recordBlocked: defaultRecordBlocked,
-        lock: drizzleBudgetLock(db()),
         ...(ttl === undefined ? {} : { ttlSeconds: ttl }),
     };
 }
@@ -156,7 +147,6 @@ export async function decideBudget(input: {
         budgets: deps.budgets,
         spend: deps.spend,
         ...(deps.recordBlocked === undefined ? {} : { recordBlocked: deps.recordBlocked }),
-        ...(deps.lock === undefined ? {} : { lock: deps.lock }),
         ...(deps.ttlSeconds === undefined ? {} : { ttlSeconds: deps.ttlSeconds }),
     });
 

@@ -23,9 +23,8 @@ import { ALERT_RAISED_TOPIC } from "../event-bus";
 import { errMessage } from "../error-message";
 import type { BudgetCrossingRecord } from "../detection/alert.repository";
 import type { Budget, Decision } from "./budget";
-import type { BudgetLock } from "./budget-lock";
 import type { BudgetRepository } from "./budget.repository";
-import type { BudgetTrigger, EvaluateBudgetOptions, EvaluateOutcome } from "./evaluate-budget";
+import type { BudgetTrigger, EvaluateBudgetOptions } from "./evaluate-budget";
 import { evaluateBudget } from "./evaluate-budget";
 import { defaultPeriodResolver, type PeriodResolver } from "./period";
 import type { SpendAggregator } from "./spend-aggregator";
@@ -65,13 +64,6 @@ export interface DecideBudgetInput {
     readonly ttlSeconds?: number;
     readonly recordBlocked?: RecordBlockedCall;
     readonly periodResolver?: PeriodResolver;
-    /**
-     * Optional pessimistic lock for block-mode budgets. When provided, the
-     * spend read + evaluation step runs under per-budget locks for every
-     * block-mode row matching the request. Notify and throttle budgets stay
-     * lock-free so high-throughput alert workloads are unaffected.
-     */
-    readonly lock?: BudgetLock;
 }
 
 /**
@@ -115,39 +107,35 @@ export async function decideBudgetUseCase(input: DecideBudgetInput): Promise<Dec
         window: resolver.resolveWindow(row.period, input.now),
     }));
 
-    // Block-mode budgets serialize concurrent decisions via per-budget locks
-    // to prevent overshoot at the cap. Notify/throttle budgets stay lock-free.
-    const blockIds = raw.filter((row) => row.mode === "block").map((row) => row.id);
-    const { resolved, evalOutcome } = await runWithLock(input, blockIds, async () => {
-        const spends = await Promise.all(
-            windows.map(({ row, window }) =>
-                input.spend.getSpendForScopePeriod({
-                    workspaceId: input.workspaceId,
-                    scopeType: row.scopeType,
-                    scopeId: row.scopeId,
-                    from: window.from,
-                    to: window.to,
-                }),
-            ),
-        );
+    // Read-only decision: nothing mutates spend here, so the spend read +
+    // evaluation needs no lock. Real cost lands on a separate report-usage
+    // request that never takes a lock; serializing this preflight path bought
+    // latency without preventing overshoot.
+    const spends = await Promise.all(
+        windows.map(({ row, window }) =>
+            input.spend.getSpendForScopePeriod({
+                workspaceId: input.workspaceId,
+                scopeType: row.scopeType,
+                scopeId: row.scopeId,
+                from: window.from,
+                to: window.to,
+            }),
+        ),
+    );
 
-        const resolvedRows: Budget[] = [];
-        const spendMap = new Map<string, number>();
-        windows.forEach(({ row, window }, i) => {
-            const used = spends[i];
-            if (used === undefined) {
-                throw new Error("invariant: spends length must match windows length");
-            }
-            spendMap.set(spendKey(row.scopeType, row.scopeId, window.from), used);
-            resolvedRows.push({ ...row, periodFrom: window.from, periodTo: window.to });
-        });
-
-        const snapshot = { get: (key: string) => spendMap.get(key) ?? 0 };
-        return {
-            resolved: resolvedRows,
-            evalOutcome: evaluateBudget(snapshot, resolvedRows, evalOpts(input)),
-        };
+    const resolved: Budget[] = [];
+    const spendMap = new Map<string, number>();
+    windows.forEach(({ row, window }, i) => {
+        const used = spends[i];
+        if (used === undefined) {
+            throw new Error("invariant: spends length must match windows length");
+        }
+        spendMap.set(spendKey(row.scopeType, row.scopeId, window.from), used);
+        resolved.push({ ...row, periodFrom: window.from, periodTo: window.to });
     });
+
+    const snapshot = { get: (key: string) => spendMap.get(key) ?? 0 };
+    const evalOutcome = evaluateBudget(snapshot, resolved, evalOpts(input));
 
     if (evalOutcome.trigger === undefined) {
         return { decision: evalOutcome.decision };
@@ -186,20 +174,6 @@ export async function decideBudgetUseCase(input: DecideBudgetInput): Promise<Dec
         decision: evalOutcome.decision,
         trigger: buildTrigger(input, trigger, triggerBudget, evalOutcome.decision.reason),
     };
-}
-
-interface RunWithLockResult {
-    readonly resolved: Budget[];
-    readonly evalOutcome: EvaluateOutcome;
-}
-
-function runWithLock(
-    input: DecideBudgetInput,
-    blockIds: readonly string[],
-    fn: () => Promise<RunWithLockResult>,
-): Promise<RunWithLockResult> {
-    if (input.lock === undefined) return fn();
-    return input.lock.withBlockBudgetLocks(input.workspaceId, blockIds, fn);
 }
 
 function buildTrigger(

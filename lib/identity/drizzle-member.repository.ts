@@ -140,29 +140,6 @@ export class DrizzleInviteRepository implements InviteRepository {
         return row ? toInvite(row) : null;
     }
 
-    async rotateToken(input: {
-        workspaceId: string;
-        email: string;
-        newToken: string;
-        newExpiresAt: Date;
-    }): Promise<Invite | null> {
-        // Single UPDATE so a forwarded link stops resolving the instant the
-        // fresh email goes out. The PK swap is safe — no FK targets
-        // `workspace_invites.token`.
-        const [row] = await this.db
-            .update(schema.workspaceInvites)
-            .set({ token: input.newToken, expiresAt: input.newExpiresAt })
-            .where(
-                and(
-                    eq(schema.workspaceInvites.workspaceId, input.workspaceId),
-                    eq(schema.workspaceInvites.email, input.email),
-                    isNull(schema.workspaceInvites.acceptedAt),
-                ),
-            )
-            .returning();
-        return row ? toInvite(row) : null;
-    }
-
     async deletePending(input: { workspaceId: string; email: string }): Promise<number> {
         const rows = await this.db
             .delete(schema.workspaceInvites)

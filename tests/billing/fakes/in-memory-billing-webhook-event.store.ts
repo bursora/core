@@ -9,6 +9,10 @@ export class InMemoryBillingWebhookEventStore implements BillingWebhookEventStor
         return true;
     }
 
+    async deleteByEventId(eventId: string): Promise<void> {
+        this.rows.delete(eventId);
+    }
+
     async pruneOlderThan(cutoff: Date): Promise<number> {
         let deleted = 0;
         for (const [eventId, processedAt] of this.rows) {

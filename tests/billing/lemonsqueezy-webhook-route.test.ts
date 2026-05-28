@@ -124,6 +124,7 @@ describe("/api/webhooks/lemonsqueezy", () => {
             async recordIfNew() {
                 throw boom;
             },
+            async deleteByEventId() {},
             async pruneOlderThan() {
                 return 0;
             },

@@ -3,7 +3,6 @@ import {
     InviteCapExceededError,
     inviteMemberUseCase,
     MAX_PENDING_INVITES_PER_WORKSPACE,
-    resendInviteUseCase,
 } from "@/lib/identity";
 import { describe, expect, test } from "bun:test";
 import { CapturingMailer } from "./fakes/capturing-mailer";
@@ -255,98 +254,6 @@ describe("invite + accept flow", () => {
         const pending = await invites.listPendingByWorkspace(WORKSPACE);
         expect(pending).toHaveLength(MAX_PENDING_INVITES_PER_WORKSPACE);
         expect(mailer.messages).toHaveLength(0);
-    });
-
-    test("resendInvite rotates the token: old link 404s, new link accepts", async () => {
-        const invites = new InMemoryInviteRepository();
-        const members = new InMemoryMemberRepository();
-        const mailer = new CapturingMailer();
-
-        await members.addMember({
-            workspaceId: WORKSPACE,
-            userId: OWNER,
-            role: "owner",
-        });
-
-        const original = await inviteMemberUseCase({
-            workspaceId: WORKSPACE,
-            email: "teammate@acme.test",
-            invitedBy: OWNER,
-            role: "member",
-            invites,
-            mailer,
-            acceptUrl: (t) => `/invite/${t}`,
-        });
-
-        const resent = await resendInviteUseCase({
-            workspaceId: WORKSPACE,
-            email: "teammate@acme.test",
-            actorUserId: OWNER,
-            invites,
-            members,
-            mailer,
-            acceptUrl: (t) => `/invite/${t}`,
-        });
-
-        expect(resent.token).not.toBe(original.token);
-
-        // Old token is dead.
-        await expect(
-            acceptInviteUseCase({
-                token: original.token,
-                userId: INVITED_USER,
-                invites,
-                members,
-            }),
-        ).rejects.toThrow();
-
-        // New token works.
-        const accepted = await acceptInviteUseCase({
-            token: resent.token,
-            userId: INVITED_USER,
-            invites,
-            members,
-        });
-        expect(accepted.membership.workspaceId).toBe(WORKSPACE);
-    });
-
-    test("resendInvite rejects when the actor is not a workspace owner", async () => {
-        const invites = new InMemoryInviteRepository();
-        const members = new InMemoryMemberRepository();
-        const mailer = new CapturingMailer();
-
-        await members.addMember({
-            workspaceId: WORKSPACE,
-            userId: OWNER,
-            role: "owner",
-        });
-        await members.addMember({
-            workspaceId: WORKSPACE,
-            userId: "regular-member",
-            role: "member",
-        });
-
-        await inviteMemberUseCase({
-            workspaceId: WORKSPACE,
-            email: "teammate@acme.test",
-            invitedBy: OWNER,
-            role: "member",
-            invites,
-            mailer,
-            acceptUrl: (t) => `/invite/${t}`,
-        });
-
-        await expect(
-            resendInviteUseCase({
-                workspaceId: WORKSPACE,
-                email: "teammate@acme.test",
-                actorUserId: "regular-member",
-                invites,
-                members,
-                mailer,
-                acceptUrl: (t) => `/invite/${t}`,
-            }),
-        ).rejects.toThrow(/owner/i);
     });
 
     test("inviteMember ignores accepted invites when applying the cap", async () => {

@@ -240,6 +240,37 @@ describe("handleWebhookUseCase", () => {
         expect(replay.deduped).toBe(true);
     });
 
+    test("a side-effect failure rolls back the idempotency row so the retry re-runs", async () => {
+        const workspaces = new InMemoryWorkspaceBillingRepository();
+        seedActive(workspaces, "cus_99", "sub_99");
+        const webhookEvents = new InMemoryBillingWebhookEventStore();
+        const event: WebhookEvent = {
+            id: "evt_retry_me",
+            type: "subscription.updated",
+            customerId: "cus_99",
+            subscriptionId: "sub_99",
+            status: "past_due",
+        };
+
+        // First delivery: the side effect throws. The handler must propagate
+        // (so the route 500s) AND drop the idempotency row it just recorded.
+        workspaces.update = async () => {
+            throw new Error("db down");
+        };
+        await expect(runWebhook(event, workspaces, webhookEvents)).rejects.toThrow("db down");
+        expect(webhookEvents.has("evt_retry_me")).toBe(false);
+
+        // Provider retry: a healthy workspace repo applies the event for real
+        // instead of finding it recorded-as-handled and skipping it.
+        const healthy = new InMemoryWorkspaceBillingRepository();
+        seedActive(healthy, "cus_99", "sub_99");
+        const retry = await runWebhook(event, healthy, webhookEvents);
+
+        expect(retry.verified).toBe(true);
+        expect(retry.deduped ?? false).toBe(false);
+        expect((await healthy.findById(WORKSPACE_ID))?.subscriptionStatus).toBe("past_due");
+    });
+
     test("subscription event with unknown customer is a verified no-op", async () => {
         const workspaces = new InMemoryWorkspaceBillingRepository();
         seedUnsubscribed(workspaces);

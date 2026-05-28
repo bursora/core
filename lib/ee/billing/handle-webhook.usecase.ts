@@ -78,28 +78,42 @@ export async function handleWebhookUseCase(
         return { verified: true, deduped: true };
     }
 
-    switch (event.type) {
-        case "subscription.activated":
-            await onSubscriptionActivated(event, input.workspaces);
-            break;
-        case "subscription.updated":
-            await onSubscriptionStatusChange(event, input.workspaces);
-            break;
-        case "subscription.canceled":
-        case "subscription.expired":
-            await onSubscriptionCanceled(event, input.workspaces);
-            break;
-        case "payment.succeeded":
-            await onPaymentSucceeded(event, input.workspaces);
-            break;
-        case "payment.failed":
-            await onPaymentFailed(event, input.workspaces);
-            break;
-        case "order.refunded":
-            await onOrderRefunded(event, input.workspaces);
-            break;
-        case "unknown":
-            break;
+    // The idempotency row is recorded; if any side effect throws, roll it back
+    // so the route 500s, the provider retries, and the retry re-runs the event
+    // instead of finding it recorded-as-handled and skipping it forever.
+    try {
+        switch (event.type) {
+            case "subscription.activated":
+                await onSubscriptionActivated(event, input.workspaces);
+                break;
+            case "subscription.updated":
+                await onSubscriptionStatusChange(event, input.workspaces);
+                break;
+            case "subscription.canceled":
+            case "subscription.expired":
+                await onSubscriptionCanceled(event, input.workspaces);
+                break;
+            case "payment.succeeded":
+                await onPaymentSucceeded(event, input.workspaces);
+                break;
+            case "payment.failed":
+                await onPaymentFailed(event, input.workspaces);
+                break;
+            case "order.refunded":
+                await onOrderRefunded(event, input.workspaces);
+                break;
+            case "unknown":
+                break;
+        }
+    } catch (err) {
+        await input.webhookEvents.deleteByEventId(event.id).catch((rollbackErr: unknown) => {
+            console.error("billing.webhook.rollback_failed", {
+                event: "billing.webhook.rollback_failed",
+                eventId: event.id,
+                message: rollbackErr instanceof Error ? rollbackErr.message : String(rollbackErr),
+            });
+        });
+        throw err;
     }
 
     return { verified: true };

@@ -109,31 +109,6 @@ export class InMemoryInviteRepository implements InviteRepository {
         return removed;
     }
 
-    async rotateToken(input: {
-        workspaceId: string;
-        email: string;
-        newToken: string;
-        newExpiresAt: Date;
-    }): Promise<Invite | null> {
-        for (const [oldToken, row] of this.rows) {
-            if (
-                row.workspaceId === input.workspaceId &&
-                row.email === input.email &&
-                row.acceptedAt === null
-            ) {
-                this.rows.delete(oldToken);
-                const rotated: Invite = {
-                    ...row,
-                    token: input.newToken,
-                    expiresAt: input.newExpiresAt,
-                };
-                this.rows.set(input.newToken, rotated);
-                return rotated;
-            }
-        }
-        return null;
-    }
-
     async listPendingByWorkspace(workspaceId: string): Promise<readonly Invite[]> {
         return [...this.rows.values()]
             .filter((r) => r.workspaceId === workspaceId && r.acceptedAt === null)

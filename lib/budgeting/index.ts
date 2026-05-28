@@ -14,7 +14,6 @@ export {
     type DecideBudgetInput,
     type DecideBudgetResult,
 } from "./decide-budget.usecase";
-export type { BudgetLock } from "./budget-lock";
 export type { BudgetingDeps } from "./server";
 export type { SpendAggregator, SpendAggregatorQuery } from "./spend-aggregator";
 

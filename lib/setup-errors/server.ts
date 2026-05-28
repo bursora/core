@@ -227,6 +227,30 @@ export async function recordSetupError(input: RecordSetupErrorInput): Promise<vo
     }
 }
 
+/**
+ * Single observability seam for setup-error reporting. Call sites depend on
+ * the interface, not the concrete recorder, so tests can swap in a recording
+ * fake via {@link setSetupErrorLoggerForTesting} and production code stays
+ * pointed at the persistent rollup.
+ */
+export interface SetupErrorLogger {
+    log(input: RecordSetupErrorInput): Promise<void>;
+}
+
+const defaultSetupErrorLogger: SetupErrorLogger = {
+    log: recordSetupError,
+};
+
+let setupErrorLoggerOverride: SetupErrorLogger | null = null;
+
+export function setSetupErrorLoggerForTesting(logger: SetupErrorLogger | null): void {
+    setupErrorLoggerOverride = logger;
+}
+
+export function setupErrorLogger(): SetupErrorLogger {
+    return setupErrorLoggerOverride ?? defaultSetupErrorLogger;
+}
+
 export interface SetupErrorSummary {
     readonly count: number;
     readonly lastSeenAt: Date;

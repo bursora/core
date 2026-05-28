@@ -2,121 +2,104 @@
  * ingestEvents — orchestrator for the metering write path.
  *
  * Per event:
- *   1. Look up the pricing row effective at `event.ts` for the caller's
- *      workspace via the pricing application boundary.
- *   2. Compute cost via the pure `calculateCost` deep module.
- *   3. Tag every row with the `workspaceId` derived from the api key — never
+ *   1. Ask the `PricingResolver` for the cost in effect at `event.ts` for the
+ *      caller's workspace. The resolver collapses the previous lookup-row /
+ *      find-row / calculate-cost trio behind a one-method seam so tests can
+ *      inject a hardcoded resolver and the orchestration stays out of this
+ *      file. The default Drizzle resolver memoizes lookups by
+ *      (provider, model, region, day) so the per-event call pattern still
+ *      coalesces into one repo hit per unique tuple.
+ *   2. Tag every row with the `workspaceId` derived from the api key — never
  *      from the request body.
- *   4. Persist the batch in a single repository call.
+ *   3. Persist the batch in a single repository call.
  *
- * Missing pricing rows do not abort the write — cost_usd is set to "0.00000000"
- * and a warning is logged. This keeps the ingest path resilient when a caller
- * sends events for a model the daily pricing cron has not yet scraped.
+ * Missing pricing rows surface as `UnknownPricingError` from the resolver.
+ * The route handler renders that as a 400 `pricing_unknown` response so the
+ * SDK author and the customer's ops see the gap; silently storing
+ * cost_usd = 0 would hide real spend until the bill landed (see issue #915).
  */
 
-import { calculateCost } from "./pricing/calculate-cost";
-import { lookup as lookupPricingRow } from "./pricing/lookup";
+import { UnknownPricingError } from "./pricing/calculate-cost";
+import {
+    createDrizzlePricingResolver,
+    type PricingResolver,
+} from "./pricing/pricing-resolver";
 import type { PricingRepository } from "./pricing/pricing-row";
 import type { UsageEventInput, UsageEventRow } from "./usage-event";
 import type { UsageEventRepository } from "./usage-event.repository";
-
-export interface IngestLogger {
-    warn(message: string, meta?: Record<string, unknown>): void;
-}
 
 export interface IngestEventsInput {
     readonly workspaceId: string;
     readonly events: readonly UsageEventInput[];
     readonly eventsRepo: UsageEventRepository;
     readonly pricingRepo: PricingRepository;
-    readonly logger?: IngestLogger;
+    /**
+     * Optional override for the pricing decision. Defaults to a Drizzle-backed
+     * resolver wired from `pricingRepo`. Tests inject a hardcoded resolver to
+     * avoid touching pricing infrastructure.
+     */
+    readonly pricingResolver?: PricingResolver;
 }
 
 export interface IngestSummary {
     readonly inserted: number;
 }
 
-const DEFAULT_LOGGER: IngestLogger = {
-    warn: (message, meta) => console.warn(message, meta ?? {}),
-};
-
 export async function ingestEventsUseCase(input: IngestEventsInput): Promise<IngestSummary> {
     if (input.events.length === 0) {
         return { inserted: 0 };
     }
 
-    const logger = input.logger ?? DEFAULT_LOGGER;
+    const resolver =
+        input.pricingResolver ??
+        createDrizzlePricingResolver({ pricingRepo: input.pricingRepo });
 
-    // Group events by (provider, model, region, ts-bucket) so a 100-event batch
-    // touching 3 unique models issues 3 lookups, not 100. ts is bucketed to the
-    // calendar day in UTC since pricing rows have day-granularity effective
-    // ranges; events on the same day always resolve to the same row.
-    const lookupKey = (e: UsageEventInput): string =>
-        `${e.provider}${e.model}${e.region ?? ""}${tsBucket(e.ts)}`;
-
-    const uniqueKeys = new Map<string, UsageEventInput>();
-    for (const event of input.events) {
-        const key = lookupKey(event);
-        if (!uniqueKeys.has(key)) {
-            uniqueKeys.set(key, event);
-        }
-    }
-
-    const keys = [...uniqueKeys.keys()];
-    const samples = [...uniqueKeys.values()];
-    const lookups = await Promise.all(
-        samples.map((event) =>
-            lookupPricingRow({
-                provider: event.provider,
-                model: event.model,
-                region: event.region,
-                ts: event.ts,
-                workspaceId: input.workspaceId,
-                pricing: input.pricingRepo,
-            }),
-        ),
+    const rows: UsageEventRow[] = await Promise.all(
+        input.events.map(async (event) => {
+            try {
+                const cost = await resolver.resolveCost({
+                    workspaceId: input.workspaceId,
+                    usage: {
+                        promptTokens: event.promptTokens,
+                        completionTokens: event.completionTokens,
+                        cacheTokens: event.cacheTokens,
+                    },
+                    provider: event.provider,
+                    model: event.model,
+                    region: event.region,
+                    ts: event.ts,
+                });
+                return {
+                    workspaceId: input.workspaceId,
+                    tenantId: event.tenantId,
+                    agentId: event.agentId,
+                    workflowId: event.workflowId,
+                    provider: event.provider,
+                    model: event.model,
+                    promptTokens: event.promptTokens,
+                    completionTokens: event.completionTokens,
+                    cacheTokens: event.cacheTokens,
+                    latencyMs: event.latencyMs,
+                    costUsd: cost.usd,
+                    requestId: event.requestId,
+                    ts: event.ts,
+                };
+            } catch (err) {
+                if (err instanceof UnknownPricingError) {
+                    throw new UnknownPricingError({
+                        provider: event.provider,
+                        model: event.model,
+                    });
+                }
+                throw err;
+            }
+        }),
     );
-    const pricingByKey = new Map(keys.map((k, i) => [k, lookups[i] ?? null]));
 
-    const rows: UsageEventRow[] = input.events.map((event) => {
-        const row = pricingByKey.get(lookupKey(event)) ?? null;
-        if (row === null) {
-            logger.warn("metering.pricing_missing", {
-                workspaceId: input.workspaceId,
-                provider: event.provider,
-                model: event.model,
-                region: event.region,
-                ts: event.ts.toISOString(),
-            });
-        }
-        const cost = calculateCost(
-            {
-                promptTokens: event.promptTokens,
-                completionTokens: event.completionTokens,
-                cacheTokens: event.cacheTokens,
-            },
-            row,
-        );
-        return {
-            workspaceId: input.workspaceId,
-            tenantId: event.tenantId,
-            agentId: event.agentId,
-            workflowId: event.workflowId,
-            provider: event.provider,
-            model: event.model,
-            promptTokens: event.promptTokens,
-            completionTokens: event.completionTokens,
-            cacheTokens: event.cacheTokens,
-            latencyMs: event.latencyMs,
-            costUsd: cost.usd,
-            requestId: event.requestId,
-            ts: event.ts,
-        };
-    });
+    // `inserted` is rows actually written. Retried `requestId`s dedup at the
+    // unique index and are excluded, so the caller bills the bundle by real
+    // writes, not the requested count (issue #1002).
+    const inserted = await input.eventsRepo.insertBatch(rows);
 
-    await input.eventsRepo.insertBatch(rows);
-
-    return { inserted: rows.length };
+    return { inserted };
 }
-
-const tsBucket = (ts: Date): string => ts.toISOString().slice(0, 10);

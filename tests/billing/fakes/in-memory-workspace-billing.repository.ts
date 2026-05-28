@@ -12,6 +12,7 @@ interface BillingRow {
     refundEligibleUntil: Date | null;
     lastInvoiceRef: string | null;
     lastBilledMonth: string | null;
+    trialEndsAt: Date | null;
 }
 
 export class InMemoryWorkspaceBillingRepository implements WorkspaceBillingRepository {
@@ -27,6 +28,7 @@ export class InMemoryWorkspaceBillingRepository implements WorkspaceBillingRepos
             refundEligibleUntil: row.refundEligibleUntil ?? null,
             lastInvoiceRef: row.lastInvoiceRef ?? null,
             lastBilledMonth: row.lastBilledMonth ?? null,
+            trialEndsAt: row.trialEndsAt ?? null,
         });
     }
 
@@ -58,6 +60,7 @@ export class InMemoryWorkspaceBillingRepository implements WorkspaceBillingRepos
         refundEligibleUntil?: Date | null;
         lastInvoiceRef?: string | null;
         lastBilledMonth?: string | null;
+        trialEndsAt?: Date | null;
     }): Promise<void> {
         const existing = this.rows.get(input.workspaceId);
         if (!existing) {
@@ -89,6 +92,8 @@ export class InMemoryWorkspaceBillingRepository implements WorkspaceBillingRepos
                 input.lastBilledMonth === undefined
                     ? existing.lastBilledMonth
                     : input.lastBilledMonth,
+            trialEndsAt:
+                input.trialEndsAt === undefined ? existing.trialEndsAt : input.trialEndsAt,
         });
     }
 }
@@ -103,5 +108,6 @@ function toRecord(row: BillingRow): WorkspaceBillingRecord {
         refundEligibleUntil: row.refundEligibleUntil,
         lastInvoiceRef: row.lastInvoiceRef,
         lastBilledMonth: row.lastBilledMonth,
+        trialEndsAt: row.trialEndsAt,
     };
 }

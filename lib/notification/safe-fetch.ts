@@ -33,7 +33,7 @@ export async function assertSafeUrl(url: string, resolveHost: ResolveHost): Prom
     if (!ALLOWED_SCHEMES.has(parsed.protocol)) {
         throw new SafeFetchUrlError(`forbidden scheme: ${parsed.protocol}`);
     }
-    const hostname = stripBrackets(parsed.hostname);
+    const hostname = normalizeHostname(parsed.hostname);
     if (isIPv4(hostname) || isIPv6(hostname)) {
         if (isPrivateIp(hostname)) {
             throw new SafeFetchUrlError(`forbidden host ip: ${hostname}`);
@@ -58,11 +58,16 @@ export async function assertSafeUrl(url: string, resolveHost: ResolveHost): Prom
     }
 }
 
-function stripBrackets(hostname: string): string {
-    if (hostname.startsWith("[") && hostname.endsWith("]")) {
-        return hostname.slice(1, -1);
-    }
-    return hostname;
+function normalizeHostname(hostname: string): string {
+    // Strip an IPv6 literal's brackets and a single trailing dot (a valid FQDN
+    // form per RFC 1034) in one place. The trailing dot resolves to the same
+    // host but can dodge exact-hostname WAF/firewall rules, so it never reaches
+    // resolution or IP classification.
+    const unbracketed =
+        hostname.startsWith("[") && hostname.endsWith("]")
+            ? hostname.slice(1, -1)
+            : hostname;
+    return unbracketed.replace(/\.$/, "");
 }
 
 export function isPrivateIp(ip: string): boolean {

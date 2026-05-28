@@ -14,7 +14,6 @@ import "server-only";
 
 import { db } from "@/lib/db";
 import { createPricingOverride } from "../metering/pricing/create-pricing-override.usecase";
-import { deletePricingOverride } from "../metering/pricing/delete-pricing-override.usecase";
 import { drizzlePricingRepository } from "../metering/pricing/drizzle-pricing.repository";
 import {
     listEffectivePricing,
@@ -61,7 +60,7 @@ export async function listEffectivePricingForWorkspace(
 }
 
 export async function deletePricingOverrideForWorkspace(args: { workspaceId: string; id: string }) {
-    return deletePricingOverride({ pricing: pricing(), ...args });
+    return pricing().deleteOverride({ id: args.id, workspaceId: args.workspaceId });
 }
 
 export interface UpdatePricingOverrideArgs extends CreatePricingOverrideArgs {

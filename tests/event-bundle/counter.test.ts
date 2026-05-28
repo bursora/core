@@ -161,6 +161,64 @@ describe("wouldExceedHardCap", () => {
         });
         expect(result).toBe(true);
     });
+
+    test("blocks when projected overage exactly equals the cap", () => {
+        // 5000 events of overage = 150 cents exactly. Cap = 150 cents.
+        // The cap is the maximum spend, not maximum-plus-one — the workspace
+        // is at the cap, the next batch must be rejected.
+        const result = wouldExceedHardCap({
+            priorCount: BUNDLE_EVENTS_PER_MONTH,
+            nextEventCount: 5_000,
+            hardCapUsdCents: 150,
+        });
+        expect(result).toBe(true);
+    });
+
+    test("floors a fractional cap so it never rounds upward into more spend", () => {
+        // Defense in depth: the schema stores integer cents, but the type
+        // signature is `number`. A fractional cap of 150.9 must be treated
+        // as 150 (the stricter limit), not 151 — so projected 150 trips.
+        const result = wouldExceedHardCap({
+            priorCount: BUNDLE_EVENTS_PER_MONTH,
+            nextEventCount: 5_000,
+            hardCapUsdCents: 150.9,
+        });
+        expect(result).toBe(true);
+    });
+
+    test("safety property: when not blocked, projected cost stays at or below cap", () => {
+        // Property: for 1000 uniform-distributed triples, if wouldExceed
+        // returns false, then the integer-cent cost after the batch is
+        // at or below the cap. No event can slip a workspace over its limit.
+        // Deterministic mulberry32 PRNG so the test is reproducible.
+        let state = 0xc0ffee;
+        const rand = (): number => {
+            state = (state + 0x6d2b79f5) >>> 0;
+            let t = state;
+            t = Math.imul(t ^ (t >>> 15), t | 1);
+            t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+            return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+        };
+        const randInt = (maxExclusive: number): number => Math.floor(rand() * maxExclusive);
+
+        for (let i = 0; i < 1_000; i += 1) {
+            const priorCount = randInt(BUNDLE_EVENTS_PER_MONTH * 2);
+            const nextEventCount = randInt(100_000) + 1;
+            // Caps range from $0.01 (1c) to $10,000 (1,000,000c), matching
+            // the validated UI range.
+            const hardCapUsdCents = randInt(1_000_000) + 1;
+
+            const blocked = wouldExceedHardCap({
+                priorCount,
+                nextEventCount,
+                hardCapUsdCents,
+            });
+            if (blocked) continue;
+
+            const actualCost = overageCentsAt(priorCount + nextEventCount);
+            expect(actualCost).toBeLessThanOrEqual(hardCapUsdCents);
+        }
+    });
 });
 
 describe("monthKey", () => {

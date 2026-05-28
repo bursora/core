@@ -235,3 +235,13 @@ export function env(): Env {
     }
     return cached;
 }
+
+/**
+ * Drop the memoized env so the next `env()` call re-reads `process.env`.
+ * Test-only: cloud-mode tests mutate `process.env` and must reset, otherwise
+ * the cached cloud env leaks into later self-host tests in the same in-process
+ * run.
+ */
+export function resetEnvCacheForTesting(): void {
+    cached = null;
+}

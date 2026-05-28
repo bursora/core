@@ -58,8 +58,13 @@ export function overageCentsAt(eventsCount: number): number {
 
 /**
  * Returns true when an additional `nextEventCount` events would push accrued
- * overage past the workspace's hard cap. Pre-write check — the caller uses
- * this to decide whether to reject the batch before the DB write.
+ * overage to or past the workspace's hard cap. Pre-write check — the caller
+ * uses this to decide whether to reject the batch before the DB write.
+ *
+ * Both `projected` and `hardCapUsdCents` are integer cents. The boundary
+ * defensively floors the cap so a fractional input (the type says
+ * `number`, the schema says integer, but defense in depth) can never round
+ * upward and silently let a workspace slip past its limit.
  *
  * Null cap → always false (no cap configured).
  */
@@ -69,8 +74,11 @@ export function wouldExceedHardCap(input: {
     readonly hardCapUsdCents: number | null;
 }): boolean {
     if (input.hardCapUsdCents === null) return false;
+    const capCents = Math.floor(input.hardCapUsdCents);
     const projected = overageCentsAt(input.priorCount + input.nextEventCount);
-    return projected > input.hardCapUsdCents;
+    // Why: >= so a workspace that would exactly hit the cap is blocked rather
+    // than allowed (cap is the maximum spend, not maximum-plus-one).
+    return projected >= capCents;
 }
 
 /**

@@ -6,16 +6,20 @@
  *      pricing row effective at event ts.
  *   2. Workspace isolation: the workspaceId on every persisted row is the one
  *      derived from the api key — body-supplied workspaceId is ignored.
- *   3. Region defaults to "global" when omitted on an event.
- *   4. Unknown provider/model (no pricing row) → cost_usd = "0.00000000",
- *      event still persisted, warning logged.
- *   5. Multiple events in one batch are inserted as a single batch call.
- *   6. Pricing lookup uses ts (not now) to honor versioned rates.
+ *   3. Unknown provider/model (no pricing row) → throws UnknownPricingError
+ *      with provider+model context; nothing persists (no silent zero-billing).
+ *   4. Multiple events in one batch are inserted as a single batch call.
+ *   5. Pricing lookup uses ts (not now) to honor versioned rates.
+ *   6. Idempotency: replaying the same (workspace, requestId) does not insert
+ *      a duplicate row (issue #914).
  */
 
 import type { UsageEventInput } from "@/lib/metering";
 import { ingestEventsUseCase } from "@/lib/metering";
-import { describe, expect, mock, test } from "bun:test";
+import { UnknownPricingError } from "@/lib/metering/pricing/calculate-cost";
+import { money } from "@/lib/metering/pricing/money";
+import type { PricingResolver } from "@/lib/metering/pricing/pricing-resolver";
+import { describe, expect, test } from "bun:test";
 import { InMemoryUsageEventRepository } from "./fakes/in-memory-usage-event.repository";
 import { StubPricingRepository } from "./fakes/stub-pricing.repository";
 
@@ -95,23 +99,67 @@ describe("ingestEventsUseCase", () => {
         expect(events.rows[0]?.workspaceId).not.toBe(WORKSPACE_B);
     });
 
-    test("unknown model → cost_usd = 0 and warning logged, event still persisted", async () => {
+    test("unknown model → throws UnknownPricingError carrying provider+model, no rows persisted", async () => {
         const events = new InMemoryUsageEventRepository();
         const pricing = new StubPricingRepository(); // no rows registered
 
-        const warn = mock(() => {});
+        let caught: unknown = null;
+        try {
+            await ingestEventsUseCase({
+                workspaceId: WORKSPACE_A,
+                events: [event({ provider: "openai", model: "gpt-7-unreleased" })],
+                eventsRepo: events,
+                pricingRepo: pricing,
+            });
+        } catch (err) {
+            caught = err;
+        }
 
-        const result = await ingestEventsUseCase({
-            workspaceId: WORKSPACE_A,
-            events: [event({ provider: "unknown", model: "mystery-9000" })],
-            eventsRepo: events,
-            pricingRepo: pricing,
-            logger: { warn },
+        expect(caught).toBeInstanceOf(UnknownPricingError);
+        const err = caught as UnknownPricingError;
+        expect(err.provider).toBe("openai");
+        expect(err.model).toBe("gpt-7-unreleased");
+
+        // SAFE: no partial write. The batch must roll back so the customer
+        // does not see "some events accepted, some rejected" silently.
+        expect(events.rows.length).toBe(0);
+        expect(events.batchInsertCalls).toBe(0);
+    });
+
+    test("unknown pricing in a mixed batch → entire batch rejected (no partial write)", async () => {
+        const events = new InMemoryUsageEventRepository();
+        const pricing = new StubPricingRepository();
+        pricing.addRow({
+            id: "row-1",
+            workspaceId: null,
+            provider: "openai",
+            model: "gpt-4o",
+            region: "global",
+            inputPer1mUsd: "2.5",
+            outputPer1mUsd: "10",
+            cachePer1mUsd: null,
+            effectiveFrom: new Date("2024-01-01T00:00:00Z"),
+            effectiveTo: null,
         });
 
-        expect(result.inserted).toBe(1);
-        expect(events.rows[0]?.costUsd).toBe("0.00000000");
-        expect(warn).toHaveBeenCalled();
+        let caught: unknown = null;
+        try {
+            await ingestEventsUseCase({
+                workspaceId: WORKSPACE_A,
+                events: [
+                    event({ provider: "openai", model: "gpt-4o" }),
+                    event({ provider: "openai", model: "gpt-7-unreleased" }),
+                ],
+                eventsRepo: events,
+                pricingRepo: pricing,
+            });
+        } catch (err) {
+            caught = err;
+        }
+
+        expect(caught).toBeInstanceOf(UnknownPricingError);
+        expect(events.rows.length).toBe(0);
+        expect(events.batchInsertCalls).toBe(0);
     });
 
     test("uses pricing row effective AT event ts (not the latest)", async () => {
@@ -193,5 +241,242 @@ describe("ingestEventsUseCase", () => {
 
         expect(result.inserted).toBe(0);
         expect(events.batchInsertCalls).toBe(0);
+    });
+
+    test("same (workspace, requestId) replayed → second call does not insert a duplicate", async () => {
+        const events = new InMemoryUsageEventRepository();
+        const pricing = new StubPricingRepository();
+        pricing.addRow({
+            id: "row-1",
+            workspaceId: null,
+            provider: "openai",
+            model: "gpt-4o",
+            region: "global",
+            inputPer1mUsd: "2.5",
+            outputPer1mUsd: "10",
+            cachePer1mUsd: null,
+            effectiveFrom: new Date("2024-01-01T00:00:00Z"),
+            effectiveTo: null,
+        });
+
+        const replayed = event({ requestId: "req-abc" });
+
+        await ingestEventsUseCase({
+            workspaceId: WORKSPACE_A,
+            events: [replayed],
+            eventsRepo: events,
+            pricingRepo: pricing,
+        });
+        await ingestEventsUseCase({
+            workspaceId: WORKSPACE_A,
+            events: [replayed],
+            eventsRepo: events,
+            pricingRepo: pricing,
+        });
+
+        // SAFE-not-sorry: do not double-bill. Only one row, regardless of how
+        // many times the SDK retries with the same requestId.
+        expect(events.rows.length).toBe(1);
+    });
+
+    test("replayed requestId → inserted count reflects rows actually written, not input length", async () => {
+        const events = new InMemoryUsageEventRepository();
+        const pricing = new StubPricingRepository();
+        pricing.addRow({
+            id: "row-1",
+            workspaceId: null,
+            provider: "openai",
+            model: "gpt-4o",
+            region: "global",
+            inputPer1mUsd: "2.5",
+            outputPer1mUsd: "10",
+            cachePer1mUsd: null,
+            effectiveFrom: new Date("2024-01-01T00:00:00Z"),
+            effectiveTo: null,
+        });
+
+        const replayed = event({ requestId: "req-abc" });
+
+        const first = await ingestEventsUseCase({
+            workspaceId: WORKSPACE_A,
+            events: [replayed],
+            eventsRepo: events,
+            pricingRepo: pricing,
+        });
+        const second = await ingestEventsUseCase({
+            workspaceId: WORKSPACE_A,
+            events: [replayed],
+            eventsRepo: events,
+            pricingRepo: pricing,
+        });
+
+        // First delivery persists; the retry dedups. The bundle counter is
+        // driven by `inserted`, so the replay must report 0 (issue #1002).
+        expect(first.inserted).toBe(1);
+        expect(second.inserted).toBe(0);
+    });
+
+    test("mixed batch [new, new, duplicate] → inserted count is 2", async () => {
+        const events = new InMemoryUsageEventRepository();
+        const pricing = new StubPricingRepository();
+        pricing.addRow({
+            id: "row-1",
+            workspaceId: null,
+            provider: "openai",
+            model: "gpt-4o",
+            region: "global",
+            inputPer1mUsd: "2.5",
+            outputPer1mUsd: "10",
+            cachePer1mUsd: null,
+            effectiveFrom: new Date("2024-01-01T00:00:00Z"),
+            effectiveTo: null,
+        });
+
+        // Seed the row that the duplicate in the next batch will collide with.
+        await ingestEventsUseCase({
+            workspaceId: WORKSPACE_A,
+            events: [event({ requestId: "dup" })],
+            eventsRepo: events,
+            pricingRepo: pricing,
+        });
+
+        const result = await ingestEventsUseCase({
+            workspaceId: WORKSPACE_A,
+            events: [
+                event({ requestId: "new-1" }),
+                event({ requestId: "new-2" }),
+                event({ requestId: "dup" }),
+            ],
+            eventsRepo: events,
+            pricingRepo: pricing,
+        });
+
+        expect(result.inserted).toBe(2);
+        expect(events.rows.length).toBe(3);
+    });
+
+    test("null requestId rows are never deduped — both inserts land", async () => {
+        const events = new InMemoryUsageEventRepository();
+        const pricing = new StubPricingRepository();
+        pricing.addRow({
+            id: "row-1",
+            workspaceId: null,
+            provider: "openai",
+            model: "gpt-4o",
+            region: "global",
+            inputPer1mUsd: "2.5",
+            outputPer1mUsd: "10",
+            cachePer1mUsd: null,
+            effectiveFrom: new Date("2024-01-01T00:00:00Z"),
+            effectiveTo: null,
+        });
+
+        await ingestEventsUseCase({
+            workspaceId: WORKSPACE_A,
+            events: [event({ requestId: null })],
+            eventsRepo: events,
+            pricingRepo: pricing,
+        });
+        await ingestEventsUseCase({
+            workspaceId: WORKSPACE_A,
+            events: [event({ requestId: null })],
+            eventsRepo: events,
+            pricingRepo: pricing,
+        });
+
+        // Pre-existing SDK behavior: requestId is optional. Rows without one
+        // can not be deduped — each delivery records its own row.
+        expect(events.rows.length).toBe(2);
+    });
+
+    test("injected PricingResolver decides cost — no pricing repo touched", async () => {
+        const events = new InMemoryUsageEventRepository();
+        const pricing = new StubPricingRepository(); // intentionally empty
+        const resolver: PricingResolver = {
+            async resolveCost() {
+                return money(0.42);
+            },
+        };
+
+        const result = await ingestEventsUseCase({
+            workspaceId: WORKSPACE_A,
+            events: [event()],
+            eventsRepo: events,
+            pricingRepo: pricing,
+            pricingResolver: resolver,
+        });
+
+        // The injected resolver short-circuits lookup+find+calculate. Empty
+        // StubPricingRepository would have produced UnknownPricingError if
+        // ingestEvents had fallen through to the trio.
+        expect(result.inserted).toBe(1);
+        expect(events.rows[0]?.costUsd).toBe("0.42000000");
+    });
+
+    test("injected PricingResolver throwing UnknownPricingError aborts the batch", async () => {
+        const events = new InMemoryUsageEventRepository();
+        const pricing = new StubPricingRepository();
+        const resolver: PricingResolver = {
+            async resolveCost(input) {
+                throw new UnknownPricingError({
+                    provider: input.provider,
+                    model: input.model,
+                });
+            },
+        };
+
+        let caught: unknown = null;
+        try {
+            await ingestEventsUseCase({
+                workspaceId: WORKSPACE_A,
+                events: [event({ provider: "openai", model: "mystery-model" })],
+                eventsRepo: events,
+                pricingRepo: pricing,
+                pricingResolver: resolver,
+            });
+        } catch (err) {
+            caught = err;
+        }
+
+        expect(caught).toBeInstanceOf(UnknownPricingError);
+        const err = caught as UnknownPricingError;
+        expect(err.provider).toBe("openai");
+        expect(err.model).toBe("mystery-model");
+        expect(events.rows.length).toBe(0);
+        expect(events.batchInsertCalls).toBe(0);
+    });
+
+    test("same requestId in different workspaces does NOT dedupe", async () => {
+        const events = new InMemoryUsageEventRepository();
+        const pricing = new StubPricingRepository();
+        pricing.addRow({
+            id: "row-1",
+            workspaceId: null,
+            provider: "openai",
+            model: "gpt-4o",
+            region: "global",
+            inputPer1mUsd: "2.5",
+            outputPer1mUsd: "10",
+            cachePer1mUsd: null,
+            effectiveFrom: new Date("2024-01-01T00:00:00Z"),
+            effectiveTo: null,
+        });
+
+        await ingestEventsUseCase({
+            workspaceId: WORKSPACE_A,
+            events: [event({ requestId: "req-abc" })],
+            eventsRepo: events,
+            pricingRepo: pricing,
+        });
+        await ingestEventsUseCase({
+            workspaceId: WORKSPACE_B,
+            events: [event({ requestId: "req-abc" })],
+            eventsRepo: events,
+            pricingRepo: pricing,
+        });
+
+        // Tenant isolation: the unique index is partial on (workspace, requestId),
+        // so two distinct workspaces never collide.
+        expect(events.rows.length).toBe(2);
     });
 });

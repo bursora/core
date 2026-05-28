@@ -19,8 +19,8 @@
  */
 
 import type { BudgetMode, ScopeType } from "./budget";
-import type { Period } from "./period";
-import { periodWindow } from "./period";
+import type { Period, PeriodResolver } from "./period";
+import { defaultPeriodResolver } from "./period";
 
 export type EtaKind = "today" | "eta" | "safe";
 
@@ -44,15 +44,12 @@ export interface WhatsBreakingInput {
     /** Workspace-global $/day burn from `getProjectedEom`. */
     readonly dailyRate: number;
     readonly now: Date;
-}
-
-export interface WhatsBreakingRowSource {
-    readonly kind: "budget";
-    readonly budgetId: string;
+    /** Optional injection seam; defaults to UTC period math. */
+    readonly periodResolver?: PeriodResolver;
 }
 
 export interface WhatsBreakingRow {
-    readonly source: WhatsBreakingRowSource;
+    readonly budgetId: string;
     readonly scopeType: ScopeType;
     readonly scopeId: string | null;
     readonly period: Period;
@@ -70,7 +67,8 @@ export interface WhatsBreakingRow {
 const MS_PER_DAY = 86_400_000;
 
 export function computeWhatsBreaking(input: WhatsBreakingInput): readonly WhatsBreakingRow[] {
-    const rows = input.budgets.map((b) => projectBudget(b, input.dailyRate, input.now));
+    const resolver = input.periodResolver ?? defaultPeriodResolver;
+    const rows = input.budgets.map((b) => projectBudget(b, input.dailyRate, input.now, resolver));
     return [...rows].sort(byUrgency);
 }
 
@@ -78,8 +76,9 @@ function projectBudget(
     b: WhatsBreakingInput["budgets"][number],
     dailyRate: number,
     now: Date,
+    resolver: PeriodResolver,
 ): WhatsBreakingRow {
-    const { to: periodEnd } = periodWindow(b.period, now);
+    const { to: periodEnd } = resolver.resolveWindow(b.period, now);
     const eta = classifyEta({
         remaining: b.limit - b.spent,
         dailyRate,
@@ -87,7 +86,7 @@ function projectBudget(
         periodEnd,
     });
     return {
-        source: { kind: "budget", budgetId: b.id },
+        budgetId: b.id,
         scopeType: b.scopeType,
         scopeId: b.scopeId,
         period: b.period,

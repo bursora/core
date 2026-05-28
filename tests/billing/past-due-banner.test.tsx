@@ -11,14 +11,23 @@
  * id and prompt the user to use the existing Manage billing button.
  */
 
-import { PastDueBanner } from "@/lib/ee/components/past-due-banner";
 import { describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
+import { installSelfHostEnv } from "../support/with-self-host-env";
+
+installSelfHostEnv();
 
 const WORKSPACE_ID = "11111111-2222-3333-4444-555555555555";
 
+// Imported inside each test, after installSelfHostEnv's beforeEach has set the
+// self-host baseline. The EE component's transitive `env()` (via lib/auth)
+// runs eagerly on first import, so the env must exist before that import.
+const loadBanner = async () =>
+    (await import("@/lib/ee/components/past-due-banner")).PastDueBanner;
+
 describe("PastDueBanner", () => {
-    test("renders a warning alert flagging the failed payment", () => {
+    test("renders a warning alert flagging the failed payment", async () => {
+        const PastDueBanner = await loadBanner();
         const html = renderToStaticMarkup(<PastDueBanner workspaceId={WORKSPACE_ID} />);
 
         expect(html).toContain("Payment failed");
@@ -27,7 +36,8 @@ describe("PastDueBanner", () => {
         expect(html).toContain("bg-warning");
     });
 
-    test("links to the billing portal action with the workspace id", () => {
+    test("links to the billing portal action with the workspace id", async () => {
+        const PastDueBanner = await loadBanner();
         const html = renderToStaticMarkup(<PastDueBanner workspaceId={WORKSPACE_ID} />);
 
         expect(html).toContain(`value="${WORKSPACE_ID}"`);

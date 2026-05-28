@@ -8,6 +8,7 @@ import type {
     RefundAllOrdersResult,
     ReportUsageInput,
     ReportUsageResult,
+    VerifyCredentialsResult,
     WebhookEvent,
 } from "@/lib/ee/billing";
 
@@ -95,5 +96,17 @@ export class FakePaymentProviderAdapter implements PaymentProviderAdapter {
         if (this.cancelSubscriptionShouldThrow) {
             throw new Error("cancelSubscription forced failure");
         }
+    }
+
+    public verifyCredentialsCalls = 0;
+    public verifyCredentialsResult: VerifyCredentialsResult = { ok: true };
+    public verifyCredentialsShouldThrow = false;
+
+    async verifyCredentials(): Promise<VerifyCredentialsResult> {
+        this.verifyCredentialsCalls += 1;
+        if (this.verifyCredentialsShouldThrow) {
+            throw new Error("verifyCredentials forced failure");
+        }
+        return this.verifyCredentialsResult;
     }
 }

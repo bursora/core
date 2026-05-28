@@ -11,7 +11,7 @@
  */
 
 import type { BillingWebhookEventStore } from "./billing-webhook-event.store";
-import type { CheckoutSessionInput, PaymentProviderAdapter } from "./payment-provider.adapter";
+import type { PaymentProviderAdapter } from "./payment-provider.adapter";
 import type { TrackedSpendRepository } from "./tracked-spend.repository";
 import type {
     EventBundleRollupRepository,
@@ -28,6 +28,7 @@ export type {
     RefundAllOrdersResult,
     ReportUsageInput,
     ReportUsageResult,
+    VerifyCredentialsResult,
     VerifyEventInput,
     WebhookEvent,
     WebhookEventType,
@@ -41,15 +42,6 @@ export interface BillingDeps {
     readonly eventBundleRollup: EventBundleRollupRepository;
     readonly variantIdTeam: string;
     readonly appUrl: string;
-}
-
-export interface CreateCheckoutSessionUseCaseInput extends CheckoutSessionInput {
-    readonly provider: PaymentProviderAdapter;
-}
-
-export interface CreateCheckoutSessionUseCaseResult {
-    readonly id: string;
-    readonly url: string;
 }
 
 export interface GetBillingPortalUrlUseCaseInput {

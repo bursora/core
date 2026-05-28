@@ -8,7 +8,6 @@
 
 import { usageEvents } from "@/lib/db/schema";
 import {
-    countEventsForWorkspaceUseCase,
     getSpendSeriesUseCase,
     getTopSpendersUseCase,
     ingestEventsUseCase,
@@ -138,10 +137,7 @@ describe("@/lib/metering public API", () => {
         expect(top.length).toBeGreaterThanOrEqual(1);
         expect(top[0]!.costUsd).toBe("1.00000000");
 
-        const count = await countEventsForWorkspaceUseCase({
-            workspaceId: WORKSPACE,
-            repo,
-        });
+        const count = await repo.countEvents({ workspaceId: WORKSPACE });
         expect(count).toBe(2);
     });
 

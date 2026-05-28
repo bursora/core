@@ -12,7 +12,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 const WORKSPACE = "11111111-2222-3333-4444-555555555555";
 
 const fakeRow = (over: Partial<WhatsBreakingRow> = {}): WhatsBreakingRow => ({
-    source: { kind: "budget", budgetId: "b1" },
+    budgetId: "b1",
     scopeType: "workspace",
     scopeId: null,
     period: "monthly",
@@ -73,7 +73,7 @@ describe("WhatsBreakingPanel ETA pluralization", () => {
 
         const rowHours = fakeRow({ etaKind: "eta", etaDays: 3 / 24 });
         const rowDays = fakeRow({
-            source: { kind: "budget", budgetId: "b2" },
+            budgetId: "b2",
             etaKind: "eta",
             etaDays: 5,
         });

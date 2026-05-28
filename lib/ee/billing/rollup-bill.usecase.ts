@@ -23,7 +23,7 @@
 
 import { overageCentsAt } from "@/lib/event-bundle/counter";
 import { CAP_CENTS, FLOOR_CENTS, clampPercentage, rawPercentageCents } from "./calculate-bill";
-import { daysActiveInclusive, daysInUtcMonth, prorateFraction } from "./prorate";
+import { daysInUtcMonth, prorateFraction, utcDayDiff } from "./prorate";
 import { reportUsageUseCase } from "./report-usage.usecase";
 import {
     type BillCalculationResult,
@@ -156,8 +156,13 @@ function computeBillWithProration(args: {
     if (args.subscribedAt >= args.period.end) {
         return { percentageCents: 0, overageCents: 0, totalCents: 0 };
     }
+    // The period is half-open [start, end): `end` is the first-of-next-month
+    // at 00:00 UTC. `utcDayDiff` counts whole UTC days from the signup day up
+    // to (not including) `end`, so a signup on the 31st of a 31-day month is
+    // one active day and a signup on the 1st is the full month — no boundary
+    // fudging, and DST in any zone can't shift the count.
     const fraction = prorateFraction({
-        daysActive: daysActiveInclusive(args.subscribedAt, new Date(args.period.end.getTime() - 1)),
+        daysActive: utcDayDiff(args.subscribedAt, args.period.end),
         daysInMonth: daysInUtcMonth(args.period.start),
     });
     const floor = Math.round(FLOOR_CENTS * fraction);

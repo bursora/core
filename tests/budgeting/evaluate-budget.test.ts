@@ -445,6 +445,56 @@ describe("evaluateBudget ttl_s", () => {
     });
 });
 
+describe("evaluateBudget precision (#926)", () => {
+    /**
+     * `amountUsd` is `numeric(12,4)` in the budgets table; before #926 the
+     * limit was parsed via `Number.parseFloat`, which loses precision at the
+     * 4-decimal boundary. Switching to Big keeps the limit exact and the
+     * comparison consistent. These tests pin behaviour at the boundaries
+     * float misrepresents so a future revert to float arithmetic regresses
+     * loudly instead of quietly mis-billing.
+     */
+
+    test("amountUsd at the numeric(12,4) sub-cent boundary: spend == limit ⇒ over", () => {
+        // The smallest representable amount in numeric(12,4): 0.0001 USD.
+        // Equal-is-over per the documented at-budget rule (>=).
+        const b = budget({ amountUsd: "0.0001", mode: "block" });
+        const { decision: d } = evaluateBudget(spendOf([[b, 0.0001]]), [b]);
+        expect(d.allow).toBe(false);
+        expect(d.mode).toBe("block");
+    });
+
+    test("amountUsd at numeric(12,4) max: 99_999_999.9999 USD compares without drift", () => {
+        // Largest decimal value the column can store. Float `parseFloat`
+        // round-trips this exactly via shortest-roundtrip, but Big preserves
+        // the column shape regardless of how the JS literal renders.
+        const b = budget({ amountUsd: "99999999.9999", mode: "block" });
+        const { decision: under } = evaluateBudget(spendOf([[b, 99999999.9998]]), [b]);
+        expect(under.allow).toBe(true);
+        const { decision: over } = evaluateBudget(spendOf([[b, 99999999.9999]]), [b]);
+        expect(over.allow).toBe(false);
+    });
+
+    test("amountUsd of 0.3 vs spend 0.3 ⇒ over (the 0.1+0.2 trap; equal-is-over preserved)", () => {
+        // Big("0.3") is exactly 0.3 in decimal. Float `parseFloat("0.3")`
+        // produces a value that is not exactly 0.3 (IEEE 754). The contract
+        // must hold either way: at-budget exactly trips.
+        const b = budget({ amountUsd: "0.3", mode: "block" });
+        const { decision: d } = evaluateBudget(spendOf([[b, 0.3]]), [b]);
+        expect(d.allow).toBe(false);
+        expect(d.mode).toBe("block");
+    });
+
+    test("invariance: under-budget remainingUsd still uses limit - used arithmetic", () => {
+        // After the Big refactor, the public Decision still emits numeric
+        // remainingUsd. For a clean 100 / 25 split the remainder is exactly
+        // 75 USD.
+        const b = budget({ amountUsd: "100.0000", mode: "block" });
+        const { decision: d } = evaluateBudget(spendOf([[b, 25]]), [b]);
+        expect(d.remainingUsd).toBe(75);
+    });
+});
+
 describe("evaluateBudget trigger", () => {
     test("absent when under all budgets", () => {
         const b = budget({ amountUsd: "100", mode: "block" });

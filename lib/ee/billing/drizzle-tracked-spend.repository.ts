@@ -7,20 +7,27 @@
  * time, so the SUM here IS the override-adjusted total — the bill
  * calculator can multiply by 0.5% without any further accounting.
  *
- * Active workspaces are those with `provider_customer_id IS NOT NULL` and
- * `subscription_status IN ('active', 'trialing', 'past_due')`. `unpaid`
- * is excluded — the billing provider already retried and gave up. The
- * rollup cron does not push a second invoice on top of an unpaid one.
+ * Billable workspaces are those with `provider_customer_id IS NOT NULL`
+ * and either:
+ *   - `subscription_status IN ('active', 'past_due')`, or
+ *   - `subscription_status = 'trialing'` with `trial_ends_at IS NULL`
+ *     (legacy trial without a stored end) or `trial_ends_at <= now()`
+ *     (trial expired). A trial still in progress is NOT billable.
+ *
+ * `unpaid`, `canceled`, `expired`, `incomplete*` are excluded — the
+ * billing provider already gave up (`unpaid`) or the customer never
+ * activated; the rollup cron does not push a second invoice on top.
+ *
+ * The decision logic is mirrored from `isWorkspaceBillableNow` so the
+ * SQL filter and the in-memory test fake agree.
  */
 
 import "server-only";
 
 import type { Db } from "@/lib/db";
 import { schema } from "@/lib/db";
-import { and, eq, gte, inArray, isNotNull, lt, sql, sum } from "drizzle-orm";
+import { and, eq, gte, inArray, isNotNull, isNull, lt, lte, or, sql, sum } from "drizzle-orm";
 import type { MonthlySpendQuery, TrackedSpendRepository } from "./tracked-spend.repository";
-
-const ACTIVE_STATUSES = ["active", "trialing", "past_due"] as const;
 
 export class DrizzleTrackedSpendRepository implements TrackedSpendRepository {
     constructor(private readonly db: Db) {}
@@ -46,13 +53,20 @@ export class DrizzleTrackedSpendRepository implements TrackedSpendRepository {
     }
 
     async listActiveCloudWorkspaceIds(): Promise<readonly string[]> {
+        const { trialEndsAt, subscriptionStatus } = schema.workspaces;
         const rows = await this.db
             .select({ id: schema.workspaces.id })
             .from(schema.workspaces)
             .where(
                 and(
                     isNotNull(schema.workspaces.providerCustomerId),
-                    inArray(schema.workspaces.subscriptionStatus, [...ACTIVE_STATUSES]),
+                    or(
+                        inArray(subscriptionStatus, ["active", "past_due"]),
+                        and(
+                            eq(subscriptionStatus, "trialing"),
+                            or(isNull(trialEndsAt), lte(trialEndsAt, sql`now()`)),
+                        ),
+                    ),
                 ),
             )
             .orderBy(sql`${schema.workspaces.id} asc`);

@@ -3,17 +3,6 @@ import "server-only";
 import type { z } from "zod";
 
 /**
- * One-line summary of a Zod validation issue, safe for server logs. Drops the
- * raw `input` Zod attaches to each issue — that's customer payload and must
- * never leak into application logs.
- */
-export interface SanitizedIssue {
-    readonly path: string;
-    readonly code: string;
-    readonly message: string;
-}
-
-/**
  * Structured `console.warn` for invalid-body Zod failures on the public v1 SDK
  * routes. The client gets back the generic `{ error: "invalid_body" }`; this
  * log is what tells the SDK author (and on-call) which field tripped which
@@ -30,14 +19,12 @@ export function logInvalidBody(args: {
         route: args.route,
         workspaceId: args.workspaceId,
         apiKeyId: args.apiKeyId,
-        issues: sanitizeIssues(args.issues),
+        // Drop the raw `input` Zod attaches to each issue — that's customer
+        // payload and must never leak into application logs.
+        issues: args.issues.map((issue) => ({
+            path: issue.path.map(String).join("."),
+            code: issue.code ?? "unknown",
+            message: issue.message,
+        })),
     });
-}
-
-function sanitizeIssues(issues: readonly z.core.$ZodIssue[]): readonly SanitizedIssue[] {
-    return issues.map((issue) => ({
-        path: issue.path.map(String).join("."),
-        code: issue.code ?? "unknown",
-        message: issue.message,
-    }));
 }

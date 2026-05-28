@@ -246,6 +246,20 @@
             "when": 1700000036000,
             "tag": "0036_api_key_audit_log",
             "breakpoints": true
+        },
+        {
+            "idx": 37,
+            "version": "7",
+            "when": 1700000037000,
+            "tag": "0037_usage_events_request_id_unique",
+            "breakpoints": true
+        },
+        {
+            "idx": 38,
+            "version": "7",
+            "when": 1700000038000,
+            "tag": "0038_workspaces_trial_ends_at",
+            "breakpoints": true
         }
     ]
 }

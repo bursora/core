@@ -15,16 +15,23 @@ import { and, count, eq, gte, inArray, lt, min, sql, sum } from "drizzle-orm";
 import "server-only";
 import type { AlertRepository } from "../detection/alert.repository";
 import { drizzleAlertRepository } from "../detection/drizzle-alert.repository";
+import { errMessage } from "../error-message";
 import type { EventBus } from "../event-bus";
+import { ALERT_RAISED_TOPIC } from "../event-bus";
 import { eventBus } from "../in-memory-event-bus";
 import { ensureNotificationBootstrap } from "../notification/bootstrap";
 import type { BudgetMode, Decision, ScopeType } from "./budget";
 import type { BudgetListFilter, BudgetRepository, RawBudget } from "./budget.repository";
 import { createBudgetUseCase } from "./create-budget.usecase";
-import { decideBudgetUseCase, type RecordBlockedCall } from "./decide-budget.usecase";
+import {
+    decideBudgetUseCase,
+    type BudgetCrossingTrigger,
+    type RecordBlockedCall,
+} from "./decide-budget.usecase";
+import type { BudgetLock } from "./budget-lock";
+import { drizzleBudgetLock } from "./drizzle-budget-lock";
 import { DrizzleBudgetRepository } from "./drizzle-budget.repository";
 import { DrizzleSpendAggregator } from "./drizzle-spend.aggregator";
-import { listBudgetsUseCase } from "./list-budgets.usecase";
 import { periodWindow, type Period } from "./period";
 import { recordBlockedWithRetry, type BlockedRowPayload } from "./record-blocked-with-retry";
 import type { SpendAggregator } from "./spend-aggregator";
@@ -38,6 +45,12 @@ export interface BudgetingDeps {
     readonly bus?: EventBus;
     readonly alerts?: AlertRepository;
     readonly recordBlocked?: RecordBlockedCall;
+    /**
+     * Pessimistic lock for block-mode budget decisions. Optional so test
+     * harnesses can run without serialization; production wiring always
+     * sets the Drizzle `SELECT ... FOR UPDATE` impl.
+     */
+    readonly lock?: BudgetLock;
 }
 
 let testOverride: BudgetingDeps | null = null;
@@ -63,6 +76,7 @@ export function budgetingDeps(): BudgetingDeps {
         bus: eventBus(),
         alerts: drizzleAlertRepository(db()),
         recordBlocked: defaultRecordBlocked,
+        lock: drizzleBudgetLock(db()),
         ...(ttl === undefined ? {} : { ttlSeconds: ttl }),
     };
 }
@@ -131,7 +145,7 @@ export async function decideBudget(input: {
     intendedModel?: string | null;
 }): Promise<Decision> {
     const deps = budgetingDeps();
-    return decideBudgetUseCase({
+    const result = await decideBudgetUseCase({
         workspaceId: input.workspaceId,
         tenantId: input.tenantId,
         agentId: input.agentId,
@@ -141,11 +155,51 @@ export async function decideBudget(input: {
         now: deps.now(),
         budgets: deps.budgets,
         spend: deps.spend,
-        ...(deps.bus === undefined ? {} : { bus: deps.bus }),
-        ...(deps.alerts === undefined ? {} : { alerts: deps.alerts }),
         ...(deps.recordBlocked === undefined ? {} : { recordBlocked: deps.recordBlocked }),
+        ...(deps.lock === undefined ? {} : { lock: deps.lock }),
         ...(deps.ttlSeconds === undefined ? {} : { ttlSeconds: deps.ttlSeconds }),
     });
+
+    if (result.trigger !== undefined) {
+        await dispatchBudgetCrossing(result.trigger, deps);
+    }
+
+    return result.decision;
+}
+
+/**
+ * Records the crossing into the alert repository, then — on a fresh insert —
+ * publishes a `BudgetAlertRaisedEvent` on the event bus so the notification
+ * fan-out runs. Errors are logged and swallowed so a publish/record failure
+ * never bubbles into the SDK preflight response.
+ */
+async function dispatchBudgetCrossing(
+    trigger: BudgetCrossingTrigger,
+    deps: BudgetingDeps,
+): Promise<void> {
+    if (deps.alerts === undefined) return;
+
+    try {
+        const result = await deps.alerts.recordBudgetCrossing(trigger.crossing);
+        if (!result.inserted || result.id === null || deps.bus === undefined) return;
+
+        const event = trigger.buildEvent(result.id);
+        // Fire-and-forget: dispatch handler awaits webhook POSTs + SMTP, which
+        // can take seconds. The SDK pre-call decision must not block on them.
+        void deps.bus.publish(ALERT_RAISED_TOPIC, event).catch((err) => {
+            console.warn("budget_alert.publish_failed", {
+                workspaceId: trigger.crossing.workspaceId,
+                budgetId: trigger.crossing.budgetId,
+                error: errMessage(err),
+            });
+        });
+    } catch (err) {
+        console.warn("budget_alert.record_failed", {
+            workspaceId: trigger.crossing.workspaceId,
+            budgetId: trigger.crossing.budgetId,
+            error: errMessage(err),
+        });
+    }
 }
 
 const dashboardRepo = () => new DrizzleBudgetRepository(db());
@@ -154,11 +208,9 @@ export async function listBudgets(
     workspaceId: string,
     filter?: BudgetListFilter,
 ): Promise<readonly RawBudget[]> {
-    return listBudgetsUseCase({
-        workspaceId,
-        budgets: dashboardRepo(),
-        ...(filter !== undefined ? { filter } : {}),
-    });
+    return filter === undefined
+        ? dashboardRepo().listByWorkspace(workspaceId)
+        : dashboardRepo().listByWorkspace(workspaceId, filter);
 }
 
 export async function getBudget(workspaceId: string, id: string): Promise<RawBudget | null> {

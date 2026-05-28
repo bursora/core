@@ -6,22 +6,24 @@
  *            completionTokens, cacheTokens?, ts, tenantId?, agentId?,
  *            workflowId?, latencyMs?, requestId? }, ... ] }
  * Resp:    202 accepted | 401 bad key | 400 malformed/empty batch |
- *          429 rate-limit or spike-protection cap hit |
- *          202 events_capped (cloud event-bundle hard cap; event not recorded)
+ *          400 pricing_unknown (provider/model not priced; see issue #915) |
+ *          429 rate-limit, spike-protection, or event-bundle cap hit
  *
  * Cap order is per-API-key rate-limit first (one bad key shouldn't drag the
- * workspace into spike protection), then per-workspace spike protection
- * against the 7-day baseline, then the cloud event-bundle hard cap. The
- * 429s carry `X-Bursora-Cap-Hit` (rate | spike); the bundle 202 carries
- * `X-Bursora-Cap-Hit: events`.
+ * workspace into spike protection), then the unified capping middleware
+ * which runs spike protection followed by the event-bundle hard cap. All
+ * 429s carry `X-Bursora-Cap-Hit`: `rate` (rate limit), `spike` (spike
+ * protection), or `events` (event-bundle cap).
  */
 
+import { createCappingMiddleware, type CappingDecision } from "@/lib/capping/middleware";
 import { checkEventBundleHardCap, recordEventBundleUsage } from "@/lib/event-bundle/middleware";
-import { recordAuthFailure, withBursoraKey } from "@/lib/identity/with-bursora-key";
+import { recordAuthFailure } from "@/lib/identity/with-bursora-key";
+import { withSdkAuthz } from "@/lib/identity/with-sdk-authz";
 import { logInvalidBody } from "@/lib/log-invalid-body";
+import { UnknownPricingError } from "@/lib/metering";
 import { ingestEvents } from "@/lib/metering/server";
-import { applyRateLimit } from "@/lib/rate-limit/middleware";
-import { recordSetupError } from "@/lib/setup-errors/server";
+import { setupErrorLogger } from "@/lib/setup-errors/server";
 import { applySpikeProtection } from "@/lib/spike-protection/middleware";
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -51,12 +53,14 @@ const bodySchema = z.object({
     events: z.array(eventSchema).min(1),
 });
 
-export async function POST(request: Request): Promise<NextResponse> {
-    const auth = await withBursoraKey(request, { onAuthFailure: recordAuthFailure });
-    if (!auth.ok) return auth.response;
+const capping = createCappingMiddleware({
+    spike: (workspaceId, eventCount) => applySpikeProtection({ workspaceId, eventCount }),
+    bundle: (workspaceId, eventCount) => checkEventBundleHardCap({ workspaceId, eventCount }),
+});
 
-    const rateLimit = await applyRateLimit(auth.apiKey.id);
-    if (rateLimit.response !== null) return rateLimit.response;
+export async function POST(request: Request): Promise<NextResponse> {
+    const authz = await withSdkAuthz(request, { onAuthFailure: recordAuthFailure });
+    if (!authz.allowed) return authz.response;
 
     const rawBody = await request.text();
     const parsed = parseBody(rawBody);
@@ -64,54 +68,93 @@ export async function POST(request: Request): Promise<NextResponse> {
         if (parsed.reason === "invalid_body") {
             logInvalidBody({
                 route: "/api/v1/events",
-                workspaceId: auth.apiKey.workspaceId,
-                apiKeyId: auth.apiKey.id,
+                workspaceId: authz.apiKey.workspaceId,
+                apiKeyId: authz.apiKey.id,
                 issues: parsed.issues,
             });
         }
-        void recordSetupError({
+        void setupErrorLogger().log({
             kind: "ingest_invalid_body",
-            workspaceId: auth.apiKey.workspaceId,
+            workspaceId: authz.apiKey.workspaceId,
         });
         return NextResponse.json({ error: parsed.reason }, { status: 400 });
     }
 
-    const spike = await applySpikeProtection({
-        workspaceId: auth.apiKey.workspaceId,
-        eventCount: parsed.value.events.length,
-    });
-    if (spike.response !== null) return spike.response;
+    const decision = await capping.apply(authz.apiKey.workspaceId, parsed.value.events.length);
+    if (!decision.allowed) return capResponse(decision);
 
-    const bundle = await checkEventBundleHardCap({
-        workspaceId: auth.apiKey.workspaceId,
-        eventCount: parsed.value.events.length,
-    });
-    if (bundle.response !== null) return bundle.response;
+    let summary: { inserted: number };
+    try {
+        summary = await ingestEvents({
+            workspaceId: authz.apiKey.workspaceId,
+            events: parsed.value.events.map((e) => ({
+                provider: e.provider,
+                model: e.model,
+                region: e.region,
+                promptTokens: e.promptTokens,
+                completionTokens: e.completionTokens,
+                cacheTokens: e.cacheTokens,
+                ts: new Date(e.ts),
+                tenantId: e.tenantId ?? null,
+                agentId: e.agentId ?? null,
+                workflowId: e.workflowId ?? null,
+                latencyMs: e.latencyMs ?? null,
+                requestId: e.requestId ?? null,
+            })),
+        });
+    } catch (err) {
+        if (err instanceof UnknownPricingError) {
+            // Issue #915: surface unknown models to the SDK author + customer
+            // ops instead of silently storing cost_usd = 0. The structured
+            // log carries only provider/model — never the raw event payload,
+            // tenant ids, or token counts — so logs never leak customer data.
+            console.warn("v1.pricing_unknown", {
+                route: "/api/v1/events",
+                workspaceId: authz.apiKey.workspaceId,
+                apiKeyId: authz.apiKey.id,
+                provider: err.provider,
+                model: err.model,
+            });
+            return NextResponse.json(
+                {
+                    error: "pricing_unknown",
+                    provider: err.provider,
+                    model: err.model,
+                },
+                { status: 400 },
+            );
+        }
+        throw err;
+    }
 
-    await ingestEvents({
-        workspaceId: auth.apiKey.workspaceId,
-        events: parsed.value.events.map((e) => ({
-            provider: e.provider,
-            model: e.model,
-            region: e.region,
-            promptTokens: e.promptTokens,
-            completionTokens: e.completionTokens,
-            cacheTokens: e.cacheTokens,
-            ts: new Date(e.ts),
-            tenantId: e.tenantId ?? null,
-            agentId: e.agentId ?? null,
-            workflowId: e.workflowId ?? null,
-            latencyMs: e.latencyMs ?? null,
-            requestId: e.requestId ?? null,
-        })),
-    });
-
+    // Bill the bundle by rows actually written, not the requested count.
+    // Retried deliveries dedup at the unique index; counting them would
+    // over-bill the customer toward their plan bundle (issue #1002).
     await recordEventBundleUsage({
-        workspaceId: auth.apiKey.workspaceId,
-        eventCount: parsed.value.events.length,
+        workspaceId: authz.apiKey.workspaceId,
+        eventCount: summary.inserted,
     });
 
     return NextResponse.json({ status: "accepted" }, { status: 202 });
+}
+
+function capResponse(decision: CappingDecision): NextResponse {
+    const reason = decision.reason ?? "spike";
+    const body: Record<string, unknown> = {
+        error: reason === "spike" ? "spike_protection_triggered" : "events_capped",
+    };
+    if (decision.retryAfterMs !== undefined) {
+        body.retry_after_ms = decision.retryAfterMs;
+    }
+    const response = NextResponse.json(body, { status: 429 });
+    response.headers.set("X-Bursora-Cap-Hit", reason === "spike" ? "spike" : "events");
+    if (decision.retryAfterMs !== undefined) {
+        response.headers.set(
+            "Retry-After",
+            String(Math.max(1, Math.ceil(decision.retryAfterMs / 1000))),
+        );
+    }
+    return response;
 }
 
 type ParseResult =

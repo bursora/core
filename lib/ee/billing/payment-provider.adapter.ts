@@ -35,6 +35,14 @@ export interface WebhookEvent {
     readonly status?: string | null;
     /** Set on payment.* events. Provider invoice id. */
     readonly invoiceId?: string | null;
+    /**
+     * Provider-issued trial end date for subscriptions on a trial.
+     * Lemon Squeezy projects this from `data.attributes.trial_ends_at`.
+     * Null when the subscription has no trial window. The webhook handler
+     * persists it on `subscription.activated`; the spend aggregator uses
+     * it to gate billing for `trialing` workspaces.
+     */
+    readonly trialEndsAt?: Date | null;
 }
 
 export interface CheckoutSessionInput {
@@ -97,6 +105,20 @@ export interface RefundAllOrdersResult {
 }
 
 /**
+ * Outcome of a boot-time credential probe. `ok` means the configured key
+ * authenticated against the provider. `unauthorized` means the provider
+ * rejected the key (rotated, revoked, or wrong-environment) — distinct from
+ * a transient/network failure, which the adapter surfaces as a thrown error
+ * so ops can tell a dead key apart from a flaky upstream.
+ */
+export type VerifyCredentialsResult =
+    | { readonly ok: true }
+    | {
+          readonly ok: false;
+          readonly reason: "unauthorized";
+      };
+
+/**
  * Port for talking to the upstream payment provider. The application layer
  * depends on this; the infrastructure layer implements it against a real
  * provider SDK. Tests use an in-memory fake.
@@ -140,4 +162,12 @@ export interface PaymentProviderAdapter {
      * Idempotent: already-canceled subscriptions are treated as a no-op.
      */
     cancelSubscription(input: { subscriptionId: string }): Promise<void>;
+    /**
+     * Make one cheap authenticated call to confirm the configured API key
+     * works. Returns `{ ok: true }` on success and
+     * `{ ok: false, reason: "unauthorized" }` when the provider rejects the
+     * key. Throws on transient/non-auth failures so callers can distinguish
+     * a dead key from a flaky upstream. Used by the boot-time health check.
+     */
+    verifyCredentials(): Promise<VerifyCredentialsResult>;
 }

@@ -12,8 +12,8 @@ import {
     getProjectedEom,
     getSpendMtd,
 } from "@/app/(dashboard)/workspace/[workspaceId]/_lib/dashboard-stats";
+import { withRequestMemo } from "@/app/(dashboard)/workspace/[workspaceId]/_lib/per-request-cache";
 import { computeWhatsBreaking, type WhatsBreakingRow } from "@/lib/budgeting";
-import { withRequestMemo } from "./per-request-cache";
 
 const HEADROOM_FETCH_LIMIT = 50;
 

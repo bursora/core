@@ -1,26 +1,30 @@
 /**
- * Tests for the decideBudget orchestrator (application layer).
+ * Tests for the decideBudget use case (application layer).
  *
  * The use case:
  *   1. Loads matching budgets via the BudgetRepository.
  *   2. For each budget, computes the period window.
  *   3. Asks the SpendAggregator port for the spend in that window.
  *   4. Builds a Spend snapshot and calls evaluateBudget.
- *   5. On over-budget crossing, records the crossing into the alert
- *      repository (idempotent per workspace+budget+period) and publishes a
- *      `BudgetAlertRaisedEvent` on the event bus when the row was inserted.
+ *   5. Returns `{ decision, trigger? }`. On an over-budget crossing the
+ *      trigger carries the crossing record to persist plus a builder that
+ *      produces the publishable event once the alert row id is known.
  *
- * No DB. No Redis. Fakes the repo + aggregator + bus + alerts ports.
+ * The composition root (`server.ts`) owns the side effects: it persists the
+ * crossing via the alert repository and publishes the event on the bus. The
+ * use case itself never touches alerts or the bus.
+ *
+ * No DB. No Redis. Fakes the repo + aggregator ports.
  */
 
-import type { BudgetRepository, RawBudget, SpendAggregator } from "@/lib/budgeting";
-import { decideBudgetUseCase } from "@/lib/budgeting";
 import type {
-    AlertRepository,
-    BudgetCrossingRecord,
-    RecordBudgetCrossingResult,
-} from "@/lib/detection";
-import type { AlertRaisedEvent, BudgetAlertRaisedEvent, EventBus } from "@/lib/event-bus";
+    BudgetLock,
+    BudgetRepository,
+    PeriodResolver,
+    RawBudget,
+    SpendAggregator,
+} from "@/lib/budgeting";
+import { decideBudgetUseCase } from "@/lib/budgeting";
 import { ALERT_RAISED_TOPIC } from "@/lib/event-bus";
 import { describe, expect, test } from "bun:test";
 
@@ -71,36 +75,6 @@ class FakeAggregator implements SpendAggregator {
         });
         const key = `${input.scopeType}:${input.scopeId ?? ""}:${input.from.toISOString()}`;
         return this.spendByKey[key] ?? 0;
-    }
-}
-
-class FakeBus implements EventBus {
-    readonly published: Array<{ topic: string; event: AlertRaisedEvent }> = [];
-    async publish<E>(topic: string, event: E): Promise<void> {
-        this.published.push({ topic, event: event as AlertRaisedEvent });
-    }
-    subscribe(): void {
-        // not exercised
-    }
-}
-
-const DEFAULT_ALERT_ID = "dddddddd-dddd-dddd-dddd-dddddddddddd";
-
-class FakeAlerts implements AlertRepository {
-    readonly crossings: BudgetCrossingRecord[] = [];
-    constructor(private readonly nextResults: readonly RecordBudgetCrossingResult[] = []) {}
-    async insertBatch(): Promise<readonly never[]> {
-        return [];
-    }
-    async listForWorkspace(): Promise<readonly never[]> {
-        return [];
-    }
-    async recordBudgetCrossing(
-        crossing: BudgetCrossingRecord,
-    ): Promise<RecordBudgetCrossingResult> {
-        this.crossings.push(crossing);
-        const idx = this.crossings.length - 1;
-        return this.nextResults[idx] ?? { inserted: true, id: DEFAULT_ALERT_ID };
     }
 }
 
@@ -251,7 +225,7 @@ describe("decideBudgetUseCase blocked-row write", () => {
         const recorder = new FakeRecordBlocked();
         recorder.failNextCall();
 
-        const decision = await decideBudgetUseCase({
+        const { decision } = await decideBudgetUseCase({
             workspaceId: WORKSPACE,
             tenantId: null,
             agentId: null,
@@ -266,8 +240,8 @@ describe("decideBudgetUseCase blocked-row write", () => {
     });
 });
 
-describe("decideBudgetUseCase notification side effect", () => {
-    test("under-budget: no crossing recorded, no event published", async () => {
+describe("decideBudgetUseCase trigger payload", () => {
+    test("under-budget: no trigger returned", async () => {
         const repo = new FakeBudgetRepo([
             {
                 id: "b-ws",
@@ -282,10 +256,8 @@ describe("decideBudgetUseCase notification side effect", () => {
         const agg = new FakeAggregator({
             "workspace::2025-05-10T00:00:00.000Z": 25,
         });
-        const bus = new FakeBus();
-        const alerts = new FakeAlerts();
 
-        const decision = await decideBudgetUseCase({
+        const result = await decideBudgetUseCase({
             workspaceId: WORKSPACE,
             tenantId: null,
             agentId: null,
@@ -293,20 +265,14 @@ describe("decideBudgetUseCase notification side effect", () => {
             now: new Date("2025-05-10T12:00:00.000Z"),
             budgets: repo,
             spend: agg,
-            bus,
-            alerts,
         });
 
-        expect(decision.allow).toBe(true);
-        expect(alerts.crossings.length).toBe(0);
-        expect(bus.published.length).toBe(0);
+        expect(result.decision.allow).toBe(true);
+        expect(result.trigger).toBeUndefined();
     });
 
-    test("no matching budgets: no event published", async () => {
-        const bus = new FakeBus();
-        const alerts = new FakeAlerts();
-
-        await decideBudgetUseCase({
+    test("no matching budgets: no trigger returned", async () => {
+        const result = await decideBudgetUseCase({
             workspaceId: WORKSPACE,
             tenantId: null,
             agentId: null,
@@ -314,15 +280,12 @@ describe("decideBudgetUseCase notification side effect", () => {
             now: new Date("2025-05-10T12:00:00.000Z"),
             budgets: new FakeBudgetRepo([]),
             spend: new FakeAggregator({}),
-            bus,
-            alerts,
         });
 
-        expect(bus.published.length).toBe(0);
-        expect(alerts.crossings.length).toBe(0);
+        expect(result.trigger).toBeUndefined();
     });
 
-    test("over-budget block: records crossing and publishes BudgetAlertRaisedEvent", async () => {
+    test("over-budget block: trigger carries the crossing record", async () => {
         const repo = new FakeBudgetRepo([
             {
                 id: "b-tenant",
@@ -337,10 +300,8 @@ describe("decideBudgetUseCase notification side effect", () => {
         const agg = new FakeAggregator({
             "tenant:acme:2025-05-01T00:00:00.000Z": 75,
         });
-        const bus = new FakeBus();
-        const alerts = new FakeAlerts();
 
-        const decision = await decideBudgetUseCase({
+        const result = await decideBudgetUseCase({
             workspaceId: WORKSPACE,
             tenantId: "acme",
             agentId: null,
@@ -348,30 +309,54 @@ describe("decideBudgetUseCase notification side effect", () => {
             now: new Date("2025-05-10T12:00:00.000Z"),
             budgets: repo,
             spend: agg,
-            bus,
-            alerts,
         });
 
-        expect(decision.allow).toBe(false);
-        expect(alerts.crossings.length).toBe(1);
-        const crossing = alerts.crossings[0]!;
+        expect(result.decision.allow).toBe(false);
+        expect(result.trigger).toBeDefined();
+        const { crossing } = result.trigger!;
         expect(crossing.workspaceId).toBe(WORKSPACE);
         expect(crossing.budgetId).toBe("b-tenant");
         expect(crossing.periodFrom.toISOString()).toBe("2025-05-01T00:00:00.000Z");
         expect(crossing.pctOver).toBe(50);
         expect(crossing.severity).toBe("critical");
-        expect(crossing.payload.reason).toBe(decision.reason);
+        expect(crossing.payload.reason).toBe(result.decision.reason);
         expect(crossing.payload.scopeType).toBe("tenant");
         expect(crossing.payload.scopeId).toBe("acme");
         expect(crossing.payload.used).toBe(75);
         expect(crossing.payload.limit).toBe(50);
+    });
 
-        // Bus publish is fire-and-forget; await microtasks before asserting.
-        await new Promise((resolve) => setImmediate(resolve));
-        expect(bus.published.length).toBe(1);
-        expect(bus.published[0]?.topic).toBe(ALERT_RAISED_TOPIC);
-        const event = bus.published[0]?.event as BudgetAlertRaisedEvent;
+    test("over-budget block: buildEvent produces a topic-stamped BudgetAlertRaisedEvent", async () => {
+        const repo = new FakeBudgetRepo([
+            {
+                id: "b-tenant",
+                workspaceId: WORKSPACE,
+                scopeType: "tenant",
+                scopeId: "acme",
+                period: "monthly",
+                amountUsd: "50",
+                mode: "block",
+            },
+        ]);
+        const agg = new FakeAggregator({
+            "tenant:acme:2025-05-01T00:00:00.000Z": 75,
+        });
+
+        const result = await decideBudgetUseCase({
+            workspaceId: WORKSPACE,
+            tenantId: "acme",
+            agentId: null,
+            workflowId: null,
+            now: new Date("2025-05-10T12:00:00.000Z"),
+            budgets: repo,
+            spend: agg,
+        });
+
+        const alertId = "11111111-aaaa-bbbb-cccc-222222222222";
+        const event = result.trigger!.buildEvent(alertId);
+        expect(event.topic).toBe(ALERT_RAISED_TOPIC);
         expect(event.kind).toBe("budget");
+        expect(event.alertId).toBe(alertId);
         expect(event.budgetId).toBe("b-tenant");
         expect(event.scopeType).toBe("tenant");
         expect(event.scopeId).toBe("acme");
@@ -383,7 +368,7 @@ describe("decideBudgetUseCase notification side effect", () => {
         expect(event.period).toBe("monthly");
     });
 
-    test("over throttle budget: severity is warning, event still fires", async () => {
+    test("over throttle budget: severity is warning, trigger still returned", async () => {
         const repo = new FakeBudgetRepo([
             {
                 id: "b-throttle",
@@ -398,10 +383,8 @@ describe("decideBudgetUseCase notification side effect", () => {
         const agg = new FakeAggregator({
             "workspace::2025-05-10T00:00:00.000Z": 25,
         });
-        const bus = new FakeBus();
-        const alerts = new FakeAlerts();
 
-        await decideBudgetUseCase({
+        const result = await decideBudgetUseCase({
             workspaceId: WORKSPACE,
             tenantId: null,
             agentId: null,
@@ -409,18 +392,16 @@ describe("decideBudgetUseCase notification side effect", () => {
             now: new Date("2025-05-10T12:00:00.000Z"),
             budgets: repo,
             spend: agg,
-            bus,
-            alerts,
         });
 
-        await new Promise((resolve) => setImmediate(resolve));
-        expect(bus.published.length).toBe(1);
-        const event = bus.published[0]?.event as BudgetAlertRaisedEvent;
+        expect(result.trigger).toBeDefined();
+        expect(result.trigger!.crossing.severity).toBe("warning");
+        const event = result.trigger!.buildEvent("any-id");
         expect(event.mode).toBe("throttle");
         expect(event.severity).toBe("warning");
     });
 
-    test("over notify budget: severity is warning, event still fires", async () => {
+    test("over notify budget: severity is warning, trigger still returned", async () => {
         const repo = new FakeBudgetRepo([
             {
                 id: "b-notify",
@@ -435,10 +416,8 @@ describe("decideBudgetUseCase notification side effect", () => {
         const agg = new FakeAggregator({
             "workspace::2025-05-10T00:00:00.000Z": 25,
         });
-        const bus = new FakeBus();
-        const alerts = new FakeAlerts();
 
-        await decideBudgetUseCase({
+        const result = await decideBudgetUseCase({
             workspaceId: WORKSPACE,
             tenantId: null,
             agentId: null,
@@ -446,115 +425,13 @@ describe("decideBudgetUseCase notification side effect", () => {
             now: new Date("2025-05-10T12:00:00.000Z"),
             budgets: repo,
             spend: agg,
-            bus,
-            alerts,
         });
 
-        await new Promise((resolve) => setImmediate(resolve));
-        expect(bus.published.length).toBe(1);
-        const event = bus.published[0]?.event as BudgetAlertRaisedEvent;
+        expect(result.trigger).toBeDefined();
+        expect(result.trigger!.crossing.severity).toBe("warning");
+        const event = result.trigger!.buildEvent("any-id");
         expect(event.mode).toBe("notify");
         expect(event.severity).toBe("warning");
-    });
-
-    test("event.alertId equals the id returned by recordBudgetCrossing", async () => {
-        const repo = new FakeBudgetRepo([
-            {
-                id: "b-tenant",
-                workspaceId: WORKSPACE,
-                scopeType: "tenant",
-                scopeId: "acme",
-                period: "monthly",
-                amountUsd: "50",
-                mode: "block",
-            },
-        ]);
-        const agg = new FakeAggregator({
-            "tenant:acme:2025-05-01T00:00:00.000Z": 75,
-        });
-        const bus = new FakeBus();
-        const alertId = "11111111-aaaa-bbbb-cccc-222222222222";
-        const alerts = new FakeAlerts([{ inserted: true, id: alertId }]);
-
-        await decideBudgetUseCase({
-            workspaceId: WORKSPACE,
-            tenantId: "acme",
-            agentId: null,
-            workflowId: null,
-            now: new Date("2025-05-10T12:00:00.000Z"),
-            budgets: repo,
-            spend: agg,
-            bus,
-            alerts,
-        });
-
-        await new Promise((resolve) => setImmediate(resolve));
-        expect(bus.published.length).toBe(1);
-        const event = bus.published[0]?.event as BudgetAlertRaisedEvent;
-        expect(event.alertId).toBe(alertId);
-    });
-
-    test("dedupe: crossing already recorded → no event published", async () => {
-        const repo = new FakeBudgetRepo([
-            {
-                id: "b-block",
-                workspaceId: WORKSPACE,
-                scopeType: "workspace",
-                scopeId: null,
-                period: "daily",
-                amountUsd: "10",
-                mode: "block",
-            },
-        ]);
-        const agg = new FakeAggregator({
-            "workspace::2025-05-10T00:00:00.000Z": 25,
-        });
-        const bus = new FakeBus();
-        const alerts = new FakeAlerts([{ inserted: false, id: null }]);
-
-        await decideBudgetUseCase({
-            workspaceId: WORKSPACE,
-            tenantId: null,
-            agentId: null,
-            workflowId: null,
-            now: new Date("2025-05-10T12:00:00.000Z"),
-            budgets: repo,
-            spend: agg,
-            bus,
-            alerts,
-        });
-
-        expect(alerts.crossings.length).toBe(1);
-        expect(bus.published.length).toBe(0);
-    });
-
-    test("works without bus/alerts deps (legacy callers)", async () => {
-        const repo = new FakeBudgetRepo([
-            {
-                id: "b",
-                workspaceId: WORKSPACE,
-                scopeType: "workspace",
-                scopeId: null,
-                period: "daily",
-                amountUsd: "10",
-                mode: "block",
-            },
-        ]);
-        const agg = new FakeAggregator({
-            "workspace::2025-05-10T00:00:00.000Z": 25,
-        });
-
-        const decision = await decideBudgetUseCase({
-            workspaceId: WORKSPACE,
-            tenantId: null,
-            agentId: null,
-            workflowId: null,
-            now: new Date("2025-05-10T12:00:00.000Z"),
-            budgets: repo,
-            spend: agg,
-        });
-
-        expect(decision.allow).toBe(false);
     });
 });
 
@@ -575,7 +452,7 @@ describe("decideBudgetUseCase decision path (unchanged)", () => {
             "workspace::2025-05-10T00:00:00.000Z": 25,
         });
 
-        const decision = await decideBudgetUseCase({
+        const { decision } = await decideBudgetUseCase({
             workspaceId: WORKSPACE,
             tenantId: null,
             agentId: null,
@@ -616,7 +493,7 @@ describe("decideBudgetUseCase decision path (unchanged)", () => {
             "tenant:acme:2025-05-01T00:00:00.000Z": 25,
         });
 
-        const decision = await decideBudgetUseCase({
+        const { decision } = await decideBudgetUseCase({
             workspaceId: WORKSPACE,
             tenantId: "acme",
             agentId: null,
@@ -631,7 +508,7 @@ describe("decideBudgetUseCase decision path (unchanged)", () => {
     });
 
     test("no matching budgets → allow=true, mode=notify, reason='no_budget'", async () => {
-        const decision = await decideBudgetUseCase({
+        const { decision } = await decideBudgetUseCase({
             workspaceId: WORKSPACE,
             tenantId: null,
             agentId: null,
@@ -647,7 +524,7 @@ describe("decideBudgetUseCase decision path (unchanged)", () => {
     });
 
     test("respects custom ttl via opts.ttlSeconds", async () => {
-        const decision = await decideBudgetUseCase({
+        const { decision } = await decideBudgetUseCase({
             workspaceId: WORKSPACE,
             tenantId: null,
             agentId: null,
@@ -659,5 +536,354 @@ describe("decideBudgetUseCase decision path (unchanged)", () => {
         });
 
         expect(decision.ttl_s).toBe(5);
+    });
+});
+
+describe("decideBudgetUseCase periodResolver injection", () => {
+    test("injected PeriodResolver controls the window passed to the aggregator (ignores real now)", async () => {
+        const repo = new FakeBudgetRepo([
+            {
+                id: "b-ws",
+                workspaceId: WORKSPACE,
+                scopeType: "workspace",
+                scopeId: null,
+                period: "daily",
+                amountUsd: "100",
+                mode: "block",
+            },
+        ]);
+        const fixedFrom = new Date("2030-01-15T00:00:00.000Z");
+        const fixedTo = new Date("2030-01-16T00:00:00.000Z");
+        const fakeResolver: PeriodResolver = {
+            resolveWindow: () => ({ from: fixedFrom, to: fixedTo }),
+        };
+        // Seed the aggregator at the fake window's key only — the real
+        // periodWindow on `now` would yield a 2025-05-10 key and miss it.
+        const agg = new FakeAggregator({
+            "workspace::2030-01-15T00:00:00.000Z": 25,
+        });
+
+        const { decision } = await decideBudgetUseCase({
+            workspaceId: WORKSPACE,
+            tenantId: null,
+            agentId: null,
+            workflowId: null,
+            now: new Date("2025-05-10T12:00:00.000Z"),
+            budgets: repo,
+            spend: agg,
+            periodResolver: fakeResolver,
+        });
+
+        expect(agg.calls.length).toBe(1);
+        expect(agg.calls[0]?.from).toEqual(fixedFrom);
+        expect(agg.calls[0]?.to).toEqual(fixedTo);
+        expect(decision.allow).toBe(true);
+        expect(decision.resetAt).toBe(fixedTo.toISOString());
+    });
+});
+
+/**
+ * In-memory BudgetLock that serializes calls per (workspace, budgetId) via
+ * an awaitable mutex. Records the order of acquire/release so tests can
+ * assert that concurrent block-mode decisions actually serialize and
+ * non-block decisions don't.
+ */
+class FakeBudgetLock implements BudgetLock {
+    readonly events: string[] = [];
+    private readonly holders = new Map<string, Promise<void>>();
+    async withBlockBudgetLocks<T>(
+        workspaceId: string,
+        budgetIds: readonly string[],
+        fn: () => Promise<T>,
+    ): Promise<T> {
+        if (budgetIds.length === 0) {
+            this.events.push(`run:none`);
+            return fn();
+        }
+        const sorted = [...budgetIds].sort();
+        const keys = sorted.map((id) => `${workspaceId}:${id}`);
+        // Acquire in deterministic order; release in reverse on completion.
+        const releases: Array<() => void> = [];
+        for (const key of keys) {
+            const prev = this.holders.get(key) ?? Promise.resolve();
+            let release!: () => void;
+            const current = new Promise<void>((resolve) => {
+                release = resolve;
+            });
+            this.holders.set(
+                key,
+                prev.then(() => current),
+            );
+            await prev;
+            this.events.push(`acquire:${key}`);
+            releases.push(() => {
+                this.events.push(`release:${key}`);
+                release();
+            });
+        }
+        try {
+            this.events.push(`run:${sorted.join(",")}`);
+            return await fn();
+        } finally {
+            for (const release of releases.reverse()) release();
+        }
+    }
+}
+
+describe("decideBudgetUseCase block-mode concurrency lock", () => {
+    test("block-mode budgets acquire the lock around spend read and evaluation", async () => {
+        const repo = new FakeBudgetRepo([
+            {
+                id: "b-block",
+                workspaceId: WORKSPACE,
+                scopeType: "workspace",
+                scopeId: null,
+                period: "daily",
+                amountUsd: "100",
+                mode: "block",
+            },
+        ]);
+        const agg = new FakeAggregator({
+            "workspace::2025-05-10T00:00:00.000Z": 25,
+        });
+        const lock = new FakeBudgetLock();
+
+        await decideBudgetUseCase({
+            workspaceId: WORKSPACE,
+            tenantId: null,
+            agentId: null,
+            workflowId: null,
+            now: new Date("2025-05-10T12:00:00.000Z"),
+            budgets: repo,
+            spend: agg,
+            lock,
+        });
+
+        expect(lock.events).toEqual([
+            `acquire:${WORKSPACE}:b-block`,
+            `run:b-block`,
+            `release:${WORKSPACE}:b-block`,
+        ]);
+    });
+
+    test("notify/throttle budgets do NOT acquire the lock (no-op path)", async () => {
+        const repo = new FakeBudgetRepo([
+            {
+                id: "b-notify",
+                workspaceId: WORKSPACE,
+                scopeType: "workspace",
+                scopeId: null,
+                period: "daily",
+                amountUsd: "100",
+                mode: "notify",
+            },
+            {
+                id: "b-throttle",
+                workspaceId: WORKSPACE,
+                scopeType: "tenant",
+                scopeId: "acme",
+                period: "monthly",
+                amountUsd: "100",
+                mode: "throttle",
+            },
+        ]);
+        const agg = new FakeAggregator({});
+        const lock = new FakeBudgetLock();
+
+        await decideBudgetUseCase({
+            workspaceId: WORKSPACE,
+            tenantId: "acme",
+            agentId: null,
+            workflowId: null,
+            now: new Date("2025-05-10T12:00:00.000Z"),
+            budgets: repo,
+            spend: agg,
+            lock,
+        });
+
+        expect(lock.events).toEqual(["run:none"]);
+    });
+
+    test("two concurrent block-mode decisions on the same budget serialize", async () => {
+        const repo = new FakeBudgetRepo([
+            {
+                id: "b-block",
+                workspaceId: WORKSPACE,
+                scopeType: "workspace",
+                scopeId: null,
+                period: "daily",
+                amountUsd: "100",
+                mode: "block",
+            },
+        ]);
+        const agg = new FakeAggregator({
+            "workspace::2025-05-10T00:00:00.000Z": 25,
+        });
+        const lock = new FakeBudgetLock();
+
+        const a = decideBudgetUseCase({
+            workspaceId: WORKSPACE,
+            tenantId: null,
+            agentId: null,
+            workflowId: null,
+            now: new Date("2025-05-10T12:00:00.000Z"),
+            budgets: repo,
+            spend: agg,
+            lock,
+        });
+        const b = decideBudgetUseCase({
+            workspaceId: WORKSPACE,
+            tenantId: null,
+            agentId: null,
+            workflowId: null,
+            now: new Date("2025-05-10T12:00:00.000Z"),
+            budgets: repo,
+            spend: agg,
+            lock,
+        });
+
+        await Promise.all([a, b]);
+
+        // Exactly one acquire/run/release sequence then another — never
+        // interleaved (`acquire,acquire,run,run,…` would indicate the lock
+        // failed to serialize).
+        expect(lock.events).toEqual([
+            `acquire:${WORKSPACE}:b-block`,
+            `run:b-block`,
+            `release:${WORKSPACE}:b-block`,
+            `acquire:${WORKSPACE}:b-block`,
+            `run:b-block`,
+            `release:${WORKSPACE}:b-block`,
+        ]);
+    });
+
+    test("mixed block + notify budgets: only block id locks", async () => {
+        const repo = new FakeBudgetRepo([
+            {
+                id: "b-block",
+                workspaceId: WORKSPACE,
+                scopeType: "workspace",
+                scopeId: null,
+                period: "daily",
+                amountUsd: "100",
+                mode: "block",
+            },
+            {
+                id: "b-notify",
+                workspaceId: WORKSPACE,
+                scopeType: "tenant",
+                scopeId: "acme",
+                period: "monthly",
+                amountUsd: "100",
+                mode: "notify",
+            },
+        ]);
+        const agg = new FakeAggregator({});
+        const lock = new FakeBudgetLock();
+
+        await decideBudgetUseCase({
+            workspaceId: WORKSPACE,
+            tenantId: "acme",
+            agentId: null,
+            workflowId: null,
+            now: new Date("2025-05-10T12:00:00.000Z"),
+            budgets: repo,
+            spend: agg,
+            lock,
+        });
+
+        expect(lock.events).toEqual([
+            `acquire:${WORKSPACE}:b-block`,
+            `run:b-block`,
+            `release:${WORKSPACE}:b-block`,
+        ]);
+    });
+
+    test("boundary overshoot: lock serializes so SDK2 reads the spend that SDK1 committed", async () => {
+        // $95 of $100 cap; lock holds → first decideBudget reads $95 (allow),
+        // commits $10 of spend (simulated via the mutable aggregator), releases
+        // lock; second decideBudget then reads $105 (block). Without the lock,
+        // both would have read $95 and both allowed, overshooting the cap.
+        const repo = new FakeBudgetRepo([
+            {
+                id: "b-block",
+                workspaceId: WORKSPACE,
+                scopeType: "workspace",
+                scopeId: null,
+                period: "daily",
+                amountUsd: "100",
+                mode: "block",
+            },
+        ]);
+        let spendUsd = 95;
+        const agg: SpendAggregator = {
+            async getSpendForScopePeriod() {
+                return spendUsd;
+            },
+        };
+
+        // Inject a hook into the lock so we can commit spend inside the
+        // critical section, simulating the post-call usage_events write that
+        // production does asynchronously between SDK pre-flights.
+        const lock: BudgetLock = {
+            async withBlockBudgetLocks(_workspaceId, _ids, fn) {
+                const result = await fn();
+                spendUsd += 10;
+                return result;
+            },
+        };
+
+        const first = await decideBudgetUseCase({
+            workspaceId: WORKSPACE,
+            tenantId: null,
+            agentId: null,
+            workflowId: null,
+            now: new Date("2025-05-10T12:00:00.000Z"),
+            budgets: repo,
+            spend: agg,
+            lock,
+        });
+        const second = await decideBudgetUseCase({
+            workspaceId: WORKSPACE,
+            tenantId: null,
+            agentId: null,
+            workflowId: null,
+            now: new Date("2025-05-10T12:00:00.000Z"),
+            budgets: repo,
+            spend: agg,
+            lock,
+        });
+
+        expect(first.decision.allow).toBe(true);
+        expect(second.decision.allow).toBe(false);
+    });
+
+    test("no lock dep provided: use case still works (lock is optional)", async () => {
+        const repo = new FakeBudgetRepo([
+            {
+                id: "b-block",
+                workspaceId: WORKSPACE,
+                scopeType: "workspace",
+                scopeId: null,
+                period: "daily",
+                amountUsd: "100",
+                mode: "block",
+            },
+        ]);
+        const agg = new FakeAggregator({
+            "workspace::2025-05-10T00:00:00.000Z": 25,
+        });
+
+        const { decision } = await decideBudgetUseCase({
+            workspaceId: WORKSPACE,
+            tenantId: null,
+            agentId: null,
+            workflowId: null,
+            now: new Date("2025-05-10T12:00:00.000Z"),
+            budgets: repo,
+            spend: agg,
+        });
+
+        expect(decision.allow).toBe(true);
     });
 });

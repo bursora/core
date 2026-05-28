@@ -2,7 +2,7 @@ import "server-only";
 
 import type { Db } from "@/lib/db";
 import { schema } from "@/lib/db";
-import { and, count, desc, eq, isNull } from "drizzle-orm";
+import { and, count, desc, eq, gt, isNull } from "drizzle-orm";
 import type { Invite, MemberRole, WorkspaceMember } from "./member";
 import type { InviteRepository, MemberListRow, MemberRepository } from "./member.repository";
 
@@ -122,12 +122,40 @@ export class DrizzleInviteRepository implements InviteRepository {
         // Atomic compare-and-swap. The WHERE acceptedAt IS NULL clause is
         // evaluated inside the UPDATE, so concurrent transactions race on
         // the row-level lock; only one observes the row as unclaimed.
+        //
+        // The `expires_at > acceptedAt` predicate folds the expiry check into
+        // the same UPDATE. Without it, an invite could pass the pre-check in
+        // `acceptInviteUseCase` and then claim seconds after the deadline.
         const [row] = await this.db
             .update(schema.workspaceInvites)
             .set({ acceptedAt })
             .where(
                 and(
                     eq(schema.workspaceInvites.token, token),
+                    isNull(schema.workspaceInvites.acceptedAt),
+                    gt(schema.workspaceInvites.expiresAt, acceptedAt),
+                ),
+            )
+            .returning();
+        return row ? toInvite(row) : null;
+    }
+
+    async rotateToken(input: {
+        workspaceId: string;
+        email: string;
+        newToken: string;
+        newExpiresAt: Date;
+    }): Promise<Invite | null> {
+        // Single UPDATE so a forwarded link stops resolving the instant the
+        // fresh email goes out. The PK swap is safe — no FK targets
+        // `workspace_invites.token`.
+        const [row] = await this.db
+            .update(schema.workspaceInvites)
+            .set({ token: input.newToken, expiresAt: input.newExpiresAt })
+            .where(
+                and(
+                    eq(schema.workspaceInvites.workspaceId, input.workspaceId),
+                    eq(schema.workspaceInvites.email, input.email),
                     isNull(schema.workspaceInvites.acceptedAt),
                 ),
             )

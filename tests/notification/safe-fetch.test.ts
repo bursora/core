@@ -230,4 +230,28 @@ describe("assertSafeUrl", () => {
             assertSafeUrl("http://nx.example.com/", resolveThrow),
         ).rejects.toBeInstanceOf(SafeFetchUrlError);
     });
+
+    test("trailing-dot host resolving to a private IP rejected", async () => {
+        // `internal-api.local.` is a valid trailing-dot FQDN. The dot must be
+        // stripped before resolution so the resolved private IP is caught and
+        // the dotted form can't bypass exact-hostname firewall rules.
+        const resolveToPrivate = async (): Promise<readonly string[]> => ["10.0.0.1"];
+        await expect(
+            assertSafeUrl("https://internal-api.local./hook", resolveToPrivate),
+        ).rejects.toBeInstanceOf(SafeFetchUrlError);
+    });
+
+    test("trailing-dot host is normalized to its non-dotted form before resolution", async () => {
+        // The resolver must receive the canonical (dot-stripped) hostname so a
+        // trailing-dot variant cannot dodge exact-hostname WAF/firewall rules.
+        const seen: string[] = [];
+        const captureHost = async (hostname: string): Promise<readonly string[]> => {
+            seen.push(hostname);
+            return ["8.8.8.8"];
+        };
+        await expect(
+            assertSafeUrl("https://hooks.example.com./abc", captureHost),
+        ).resolves.toBeUndefined();
+        expect(seen).toEqual(["hooks.example.com"]);
+    });
 });

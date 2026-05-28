@@ -6,12 +6,7 @@
  */
 
 import type { UsageEventRow } from "@/lib/metering";
-import {
-    countEventsForWorkspaceUseCase,
-    getSpendSeriesUseCase,
-    getTopSpendersUseCase,
-    listDistinctMeteringValuesBulkUseCase,
-} from "@/lib/metering";
+import { getSpendSeriesUseCase, getTopSpendersUseCase } from "@/lib/metering";
 import { describe, expect, test } from "bun:test";
 import { InMemoryMeteringReadRepository } from "./fakes/in-memory-metering-read.repository";
 
@@ -94,39 +89,5 @@ describe("metering use cases — status filter", () => {
         expect(result.length).toBe(1);
         expect(result[0]?.costUsd).toBe("0.20000000");
         expect(result[0]?.callCount).toBe(1);
-    });
-
-    test("countEventsForWorkspaceUseCase passes status='blocked' through to repo", async () => {
-        const repo = new InMemoryMeteringReadRepository();
-        repo.add(event({ status: "ok" }));
-        repo.add(event({ status: "ok" }));
-        repo.add(event({ status: "blocked" }));
-
-        const count = await countEventsForWorkspaceUseCase({
-            workspaceId: WORKSPACE_A,
-            repo,
-            status: "blocked",
-        });
-
-        expect(count).toBe(1);
-    });
-
-    test("listDistinctMeteringValuesBulkUseCase passes status through to repo", async () => {
-        const repo = new InMemoryMeteringReadRepository();
-        repo.add(event({ tenantId: "tenant-A", status: "ok" }));
-        repo.add(event({ tenantId: "tenant-B", status: "blocked" }));
-
-        const out = await listDistinctMeteringValuesBulkUseCase({
-            workspaceId: WORKSPACE_A,
-            scopes: ["tenant"],
-            now: to,
-            repo,
-            status: "both",
-        });
-
-        expect(out.tenant).toEqual([
-            { value: "tenant-A", count: 1 },
-            { value: "tenant-B", count: 1 },
-        ]);
     });
 });

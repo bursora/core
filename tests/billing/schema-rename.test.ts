@@ -27,6 +27,7 @@ describe("billing schema rename", () => {
         expect(names).toContain("provider_customer_id");
         expect(names).toContain("provider_subscription_id");
         expect(names).toContain("last_invoice_ref");
+        expect(names).toContain("trial_ends_at");
     });
 
     test("workspaces Drizzle object exposes provider-neutral JS field names", () => {
@@ -53,20 +54,25 @@ describe("billing schema rename", () => {
             refundEligibleUntil: null,
             lastInvoiceRef: "in_1",
             lastBilledMonth: "2025-01",
+            trialEndsAt: null,
         };
         expect(record.providerCustomerId).toBe("cus_1");
         expect(record.providerSubscriptionId).toBe("sub_1");
         expect(record.lastInvoiceRef).toBe("in_1");
+        expect(record.trialEndsAt).toBeNull();
 
+        const trialEnd = new Date("2025-03-15T00:00:00Z");
         const update: WorkspaceBillingUpdate = {
             workspaceId: "ws_1",
             providerCustomerId: "cus_2",
             providerSubscriptionId: "sub_2",
             lastInvoiceRef: "in_2",
+            trialEndsAt: trialEnd,
         };
         expect(update.providerCustomerId).toBe("cus_2");
         expect(update.providerSubscriptionId).toBe("sub_2");
         expect(update.lastInvoiceRef).toBe("in_2");
+        expect(update.trialEndsAt).toBe(trialEnd);
     });
 
     test("repository lookup methods follow the provider-neutral naming", () => {

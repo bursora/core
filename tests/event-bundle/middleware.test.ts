@@ -3,7 +3,7 @@
  *   - disabled (self-host) → both halves no-op
  *   - no hard cap → pre-write check allows
  *   - hard cap not yet reached → pre-write check allows
- *   - hard cap would be exceeded → pre-write check returns 202 + cap header
+ *   - hard cap would be exceeded → pre-write check returns deny + bundle reason
  *   - record bumps the hot counter AND the cold rollup with absolute values
  *   - record skips on zero events
  */
@@ -72,31 +72,31 @@ describe("checkEventBundleHardCap", () => {
                 settings: fakeSettings({ hardCapUsdCents: 1 }),
             }),
         );
-        const result = await checkEventBundleHardCap({
+        const decision = await checkEventBundleHardCap({
             workspaceId: WORKSPACE,
             eventCount: 1_000_000,
         });
-        expect(result.response).toBeNull();
+        expect(decision.allowed).toBe(true);
     });
 
     test("no hard cap row → allow", async () => {
         setEventBundleDepsForTesting(baseDeps());
-        const result = await checkEventBundleHardCap({
+        const decision = await checkEventBundleHardCap({
             workspaceId: WORKSPACE,
             eventCount: 10_000_000,
         });
-        expect(result.response).toBeNull();
+        expect(decision.allowed).toBe(true);
     });
 
     test("null hard cap on existing row → allow", async () => {
         setEventBundleDepsForTesting(
             baseDeps({ settings: fakeSettings({ hardCapUsdCents: null }) }),
         );
-        const result = await checkEventBundleHardCap({
+        const decision = await checkEventBundleHardCap({
             workspaceId: WORKSPACE,
             eventCount: 10_000_000,
         });
-        expect(result.response).toBeNull();
+        expect(decision.allowed).toBe(true);
     });
 
     test("under cap → allow", async () => {
@@ -114,14 +114,14 @@ describe("checkEventBundleHardCap", () => {
             }),
         );
 
-        const result = await checkEventBundleHardCap({
+        const decision = await checkEventBundleHardCap({
             workspaceId: WORKSPACE,
             eventCount: 1_000,
         });
-        expect(result.response).toBeNull();
+        expect(decision.allowed).toBe(true);
     });
 
-    test("would exceed cap → 202 with events cap header", async () => {
+    test("would exceed cap → deny with bundle reason", async () => {
         const counter = new InMemoryEventBundleCounterStore();
         // Already at bundle + 5000 → already 150 cents accrued, well past $1 cap.
         await counter.seedMonth({
@@ -136,17 +136,12 @@ describe("checkEventBundleHardCap", () => {
             }),
         );
 
-        const result = await checkEventBundleHardCap({
+        const decision = await checkEventBundleHardCap({
             workspaceId: WORKSPACE,
             eventCount: 1,
         });
-        expect(result.response).not.toBeNull();
-        expect(result.response?.status).toBe(202);
-        expect(result.response?.headers.get("X-Bursora-Cap-Hit")).toBe("events");
-
-        const body = await result.response?.json();
-        expect(body.status).toBe("events_capped");
-        expect(body.limit_usd).toBe(1);
+        expect(decision.allowed).toBe(false);
+        expect(decision.reason).toBe("bundle");
     });
 });
 

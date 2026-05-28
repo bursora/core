@@ -80,20 +80,22 @@ export const verification = pgTable("verification", {
 
 // --- workspaces ---------------------------------------------------------------
 // `provider_customer_id`, `provider_subscription_id`, `subscription_status`,
-// `subscribed_at`, `refund_eligible_until`, `last_invoice_ref`, and
-// `last_billed_month` are billing-owned columns that live on the workspace
-// row to keep the webhook handler's write a single UPDATE. All are
-// nullable: cloud workspaces that have never opened Checkout and every
-// self-host workspace leave them empty. `subscription_status` mirrors the
-// upstream provider's subscription state verbatim (e.g. `active`, `past_due`,
-// `canceled`).
+// `subscribed_at`, `refund_eligible_until`, `last_invoice_ref`,
+// `last_billed_month`, and `trial_ends_at` are billing-owned columns that
+// live on the workspace row to keep the webhook handler's write a single
+// UPDATE. All are nullable: cloud workspaces that have never opened
+// Checkout and every self-host workspace leave them empty.
+// `subscription_status` mirrors the upstream provider's subscription
+// state verbatim (e.g. `active`, `past_due`, `canceled`, `trialing`).
 //
 // `subscribed_at` is set the first time Checkout completes; the rollup
 // cron uses it to pro-rate the first invoice. `refund_eligible_until` is
 // signup + 30 days — used by the UI to surface the money-back window.
 // `last_invoice_ref` carries the most recent invoice the rollup pushed
 // (deep-link target). `last_billed_month` (YYYY-MM) lets the cron skip
-// months it already invoiced after a retry.
+// months it already invoiced after a retry. `trial_ends_at` carries the
+// provider-issued trial expiry for `trialing` subscriptions so the spend
+// aggregator knows whether the trial window is still open.
 export const workspaces = pgTable(
     "workspaces",
     {
@@ -107,6 +109,7 @@ export const workspaces = pgTable(
         refundEligibleUntil: timestamp("refund_eligible_until", { withTimezone: true }),
         lastInvoiceRef: text("last_invoice_ref"),
         lastBilledMonth: text("last_billed_month"),
+        trialEndsAt: timestamp("trial_ends_at", { withTimezone: true }),
         createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     },
     (t) => [
@@ -350,9 +353,19 @@ export const usageEvents = pgTable(
     // key in the PK. Workspace+status+ts index covers dashboard aggregates that
     // the lookup btree (workspace, tenant, agent, ts) can't serve without pinned
     // tenant_id / agent_id.
+    //
+    // Partial unique index `(workspace_id, request_id) WHERE request_id IS NOT NULL`
+    // makes ingest idempotent per `requestId`: retried SDK deliveries land on the
+    // same row instead of double-billing the customer. Rows without a requestId
+    // skip the index (NULL request_id is rejected by the WHERE clause), so the
+    // SDK's optional-requestId contract is preserved. Authored by hand in
+    // migration 0037; drizzle's uniqueIndex builder mirrors columns only.
     (t) => [
         primaryKey({ columns: [t.id, t.ts] }),
         index("usage_events_workspace_status_ts_idx").on(t.workspaceId, t.status, t.ts),
+        uniqueIndex("usage_events_workspace_request_uidx")
+            .on(t.workspaceId, t.requestId)
+            .where(sql`${t.requestId} IS NOT NULL`),
     ],
 );
 

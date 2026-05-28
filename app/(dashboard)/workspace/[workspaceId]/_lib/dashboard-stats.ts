@@ -11,8 +11,8 @@ import type { DashboardWindow } from "@/lib/dashboard-window";
 import { db, schema } from "@/lib/db";
 import { listAlerts } from "@/lib/detection";
 import type { MeteringFilters } from "@/lib/metering/metering-read.repository";
-import { usageEventsFilterConditions } from "@/lib/metering/usage-events-filters";
-import { and, count, eq, gte, lt, sum } from "drizzle-orm";
+import { buildMeteringWhereClause } from "@/lib/metering/usage-events-filters";
+import { and, count, gte, lt, sum } from "drizzle-orm";
 import { withRequestMemo } from "./per-request-cache";
 
 /** Subset of MeteringFilters that maps onto alert scope tags. */
@@ -83,10 +83,12 @@ const productionDeps = (): DashboardStatsDeps => ({
             .from(schema.usageEvents)
             .where(
                 and(
-                    eq(schema.usageEvents.workspaceId, workspaceId),
+                    ...buildMeteringWhereClause({
+                        workspaceId,
+                        status: "ok",
+                        ...(filters !== undefined ? { filters } : {}),
+                    }),
                     gte(schema.usageEvents.ts, since),
-                    eq(schema.usageEvents.status, "ok"),
-                    ...usageEventsFilterConditions(filters),
                 ),
             );
         return rows[0]?.total ?? "0.00000000";
@@ -97,11 +99,13 @@ const productionDeps = (): DashboardStatsDeps => ({
             .from(schema.usageEvents)
             .where(
                 and(
-                    eq(schema.usageEvents.workspaceId, workspaceId),
+                    ...buildMeteringWhereClause({
+                        workspaceId,
+                        status: "ok",
+                        ...(filters !== undefined ? { filters } : {}),
+                    }),
                     gte(schema.usageEvents.ts, since),
                     lt(schema.usageEvents.ts, until),
-                    eq(schema.usageEvents.status, "ok"),
-                    ...usageEventsFilterConditions(filters),
                 ),
             );
         return rows[0]?.total ?? "0.00000000";
@@ -112,10 +116,12 @@ const productionDeps = (): DashboardStatsDeps => ({
             .from(schema.usageEvents)
             .where(
                 and(
-                    eq(schema.usageEvents.workspaceId, workspaceId),
+                    ...buildMeteringWhereClause({
+                        workspaceId,
+                        status: "ok",
+                        ...(filters !== undefined ? { filters } : {}),
+                    }),
                     gte(schema.usageEvents.ts, since),
-                    eq(schema.usageEvents.status, "ok"),
-                    ...usageEventsFilterConditions(filters),
                 ),
             );
         return rows[0]?.total ?? 0;
@@ -126,11 +132,13 @@ const productionDeps = (): DashboardStatsDeps => ({
             .from(schema.usageEvents)
             .where(
                 and(
-                    eq(schema.usageEvents.workspaceId, workspaceId),
+                    ...buildMeteringWhereClause({
+                        workspaceId,
+                        status: "ok",
+                        ...(filters !== undefined ? { filters } : {}),
+                    }),
                     gte(schema.usageEvents.ts, since),
                     lt(schema.usageEvents.ts, until),
-                    eq(schema.usageEvents.status, "ok"),
-                    ...usageEventsFilterConditions(filters),
                 ),
             );
         return rows[0]?.total ?? 0;

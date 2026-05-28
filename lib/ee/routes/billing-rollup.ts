@@ -12,7 +12,7 @@
 
 import { assertCronAuthorized } from "@/lib/cron-auth";
 import { NextResponse } from "next/server";
-import { runBillingRollup } from "../billing/server";
+import { checkBillingCredentials, runBillingRollup } from "../billing/server";
 
 export const dynamic = "force-dynamic";
 
@@ -22,6 +22,11 @@ export async function GET(request: Request): Promise<NextResponse> {
     } catch (res) {
         return res as NextResponse;
     }
+
+    // Boot-time (memoized) probe: confirm the LS key still authenticates
+    // before spending it on usage records. A rotated key throws here and
+    // fails the cron loud instead of silently dropping the month's invoice.
+    await checkBillingCredentials();
 
     const summary = await runBillingRollup(new Date());
 

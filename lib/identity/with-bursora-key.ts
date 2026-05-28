@@ -19,7 +19,7 @@
 import "server-only";
 
 import { NextResponse } from "next/server";
-import { recordSetupError } from "../setup-errors/server";
+import { setupErrorLogger } from "../setup-errors/server";
 import type { ApiKeyLookup } from "./api-key";
 import { apiKeyHashPrefix } from "./api-key.crypto";
 import { lookupApiKey } from "./server";
@@ -74,7 +74,7 @@ export async function withBursoraKey(
  * the offered key may carry a forged workspace fragment.
  */
 export function recordAuthFailure(info: AuthFailureInfo): Promise<void> {
-    return recordSetupError({
+    return setupErrorLogger().log({
         kind: "auth_failure",
         hashPrefix: info.hashPrefix,
         sourceIp: info.sourceIp,

@@ -1,3 +1,4 @@
+import { withRequestMemo } from "@/app/(dashboard)/workspace/[workspaceId]/_lib/per-request-cache";
 import { db, schema } from "@/lib/db";
 import {
     composeSpend,
@@ -6,7 +7,6 @@ import {
 } from "@/lib/spend-composition/compute";
 import { and, eq, gte, isNotNull, lt, sum } from "drizzle-orm";
 import "server-only";
-import { withRequestMemo } from "./per-request-cache";
 
 const TOP_N = 3;
 

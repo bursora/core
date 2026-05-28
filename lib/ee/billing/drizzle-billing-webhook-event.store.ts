@@ -2,6 +2,7 @@ import "server-only";
 
 import type { Db } from "@/lib/db";
 import { schema } from "@/lib/db";
+import { lt } from "drizzle-orm";
 import type { BillingWebhookEventStore } from "./billing-webhook-event.store";
 
 export class DrizzleBillingWebhookEventStore implements BillingWebhookEventStore {
@@ -14,5 +15,13 @@ export class DrizzleBillingWebhookEventStore implements BillingWebhookEventStore
             .onConflictDoNothing({ target: schema.billingWebhookEvents.eventId })
             .returning({ eventId: schema.billingWebhookEvents.eventId });
         return inserted.length > 0;
+    }
+
+    async pruneOlderThan(cutoff: Date): Promise<number> {
+        const deleted = await this.db
+            .delete(schema.billingWebhookEvents)
+            .where(lt(schema.billingWebhookEvents.processedAt, cutoff))
+            .returning({ eventId: schema.billingWebhookEvents.eventId });
+        return deleted.length;
     }
 }

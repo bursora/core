@@ -2,10 +2,7 @@
 // Hidden entirely when nothing crosses threshold. Customer trajectories fill
 // first (sorted by ETA ascending), then model trajectories.
 
-import type {
-    CustomerTrajectory,
-    ModelTrajectory,
-} from "@/app/(dashboard)/workspace/[workspaceId]/_lib/trajectories";
+import type { CustomerTrajectory, ModelTrajectory } from "@/lib/compose/trajectories";
 import { Button } from "@/components/ui/button";
 import { DashboardSection } from "@/components/ui/workspace/dashboard-section";
 import { formatDate, formatWholePercent } from "@/lib/format";

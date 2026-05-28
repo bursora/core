@@ -48,6 +48,20 @@ export interface InviteRepository {
      */
     claim(token: string, acceptedAt: Date): Promise<Invite | null>;
 
+    /**
+     * Rotates the token + `expiresAt` on a pending invite identified by
+     * `(workspaceId, email)`. Returns the new row on success, `null` if no
+     * pending invite exists. Used by `resendInviteUseCase` to invalidate a
+     * forwarded or intercepted link the moment a fresh email goes out — the
+     * old token disappears from the row and stops resolving via `findByToken`.
+     */
+    rotateToken(input: {
+        workspaceId: string;
+        email: string;
+        newToken: string;
+        newExpiresAt: Date;
+    }): Promise<Invite | null>;
+
     listPendingByWorkspace(workspaceId: string): Promise<readonly Invite[]>;
 
     /**

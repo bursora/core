@@ -16,6 +16,9 @@ import { StubPricingRepository } from "@/tests/metering/fakes/stub-pricing.repos
 import { InMemoryNotificationsRepository } from "@/tests/notifications/fakes/in-memory-notifications.repository";
 import { InMemorySetupErrorRepository } from "@/tests/setup-errors/fakes/in-memory-setup-error.repository";
 import { afterEach, beforeAll, describe, expect, mock, test } from "bun:test";
+import { installSelfHostEnv } from "../support/with-self-host-env";
+
+installSelfHostEnv();
 
 const WORKSPACE = "11111111-2222-3333-4444-555555555555";
 const API_KEY_ID = "00000000-1111-2222-3333-444444444444";

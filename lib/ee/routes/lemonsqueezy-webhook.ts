@@ -34,8 +34,15 @@ export async function POST(request: Request): Promise<NextResponse> {
             return NextResponse.json({ error: "invalid_signature" }, { status: 400 });
         }
         return NextResponse.json({ received: true, deduped: result.deduped ?? false });
-    } catch (err) {
-        console.error("lemonsqueezy.webhook.error", err);
+    } catch (err: unknown) {
+        // Log message + name only. The raw error carries a stack and may carry
+        // request ids or customer data on arbitrary fields; none of that may
+        // reach the logs.
+        console.error("lemonsqueezy.webhook.error", {
+            event: "lemonsqueezy.webhook.error",
+            message: err instanceof Error ? err.message : String(err),
+            name: err instanceof Error ? err.name : "unknown",
+        });
         return NextResponse.json({ error: "webhook_failed" }, { status: 500 });
     }
 }

@@ -5,11 +5,15 @@
  * X-Bursora-Key plaintext, returns the workspace id and `ok: true`.
  *
  * Auth is stubbed at the Drizzle repository boundary via `mock.module` so the
- * real `withBursoraKey` / `lookupApiKey` pipeline executes.
+ * real `withSdkAuthz` pipeline (bearer auth + per-API-key rate limit) executes.
+ * Rate-limit deps are swapped to the in-memory adapter so the test does not
+ * require Redis.
  */
 
 import { setBudgetingDepsForTesting } from "@/lib/budgeting/server";
 import type { ApiKey } from "@/lib/identity";
+import { InMemoryRateLimiter } from "@/lib/rate-limit/in-memory.adapter";
+import { setRateLimitDepsForTesting } from "@/lib/rate-limit/server";
 import { afterEach, beforeAll, describe, expect, mock, test } from "bun:test";
 
 const API_KEY_ID = "00000000-1111-2222-3333-444444444444";
@@ -76,11 +80,20 @@ const setup = (opts: { knownKey: boolean }): void => {
         },
         now: () => new Date("2025-05-10T12:00:00.000Z"),
     });
+    setRateLimitDepsForTesting({
+        limiter: new InMemoryRateLimiter(),
+        enabled: true,
+        isCloud: false,
+        config: { limit: 100, windowMs: 1_000 },
+        burstConfig: { limit: 1_000, windowMs: 10_000 },
+        now: () => new Date("2025-05-10T12:00:00.000Z"),
+    });
 };
 
 const teardown = () => {
     apiKeyRow = null;
     setBudgetingDepsForTesting(null);
+    setRateLimitDepsForTesting(null);
 };
 
 describe("POST /api/v1/test", () => {

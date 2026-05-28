@@ -5,15 +5,14 @@
  * and other features depend on. Uses in-memory fakes for the payment
  * provider + the workspace-billing repository (identical pattern to the
  * deeper tests in `tests/billing/`); the goal here is to lock the feature
- * folder's public contract: schema re-exports, checkout/portal/webhook use
- * cases, subscription transitions, and the idempotency of webhook replays.
+ * folder's public contract: portal/webhook use cases, subscription
+ * transitions, and the idempotency of webhook replays.
  */
 
+import { workspaces as workspacesTable } from "@/lib/db/schema";
 import {
-    createCheckoutSessionUseCase,
     getBillingPortalUrlUseCase,
     handleWebhookUseCase,
-    workspaces as workspacesTable,
     type WebhookEvent,
     type WorkspaceBillingRepository,
 } from "@/lib/ee/billing";
@@ -62,25 +61,6 @@ const dispatch = async (
 describe("@/lib/billing public API", () => {
     test("schema tables are re-exported", () => {
         expect(workspacesTable).toBeDefined();
-    });
-
-    test("createCheckoutSessionUseCase delegates to the provider adapter", async () => {
-        const provider = new FakePaymentProviderAdapter();
-        provider.nextCheckoutResult = {
-            id: "cs_x",
-            url: "https://provider.test/checkout/cs_x",
-        };
-        const result = await createCheckoutSessionUseCase({
-            workspaceId: WORKSPACE_ID,
-            userEmail: "owner@example.com",
-            variantId: "variant_team",
-            successUrl: "https://app.test/ok",
-            cancelUrl: "https://app.test/cancel",
-            provider,
-        });
-        expect(result.url).toBe("https://provider.test/checkout/cs_x");
-        expect(provider.checkoutCalls).toHaveLength(1);
-        expect(provider.checkoutCalls[0]?.variantId).toBe("variant_team");
     });
 
     test("getBillingPortalUrlUseCase opens the portal for the workspace's provider customer", async () => {

@@ -23,6 +23,7 @@ import { lookupApiKeyUseCase } from "./lookup-api-key.usecase";
 import type { MemberRole } from "./member";
 import { renameApiKeyUseCase } from "./rename-api-key.usecase";
 import { renameWorkspaceUseCase } from "./rename-workspace.usecase";
+import { resendInviteUseCase } from "./resend-invite.usecase";
 import { revokeApiKeyUseCase } from "./revoke-api-key.usecase";
 import { setWorkspaceEnvironmentUseCase } from "./set-workspace-environment.usecase";
 
@@ -100,6 +101,22 @@ export async function listPendingInvites(workspaceId: string) {
 
 export async function cancelPendingInvite(input: { workspaceId: string; email: string }) {
     return invites().deletePending(input);
+}
+
+export async function resendInvite(input: {
+    workspaceId: string;
+    email: string;
+    actorUserId: string;
+}) {
+    return resendInviteUseCase({
+        workspaceId: input.workspaceId,
+        email: input.email,
+        actorUserId: input.actorUserId,
+        invites: invites(),
+        members: members(),
+        mailer: mailer(),
+        acceptUrl: inviteAcceptUrl,
+    });
 }
 
 export async function acceptInvite(input: { token: string; userId: string }) {

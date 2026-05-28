@@ -15,7 +15,8 @@ export interface InviteMemberInput {
     readonly ttlMs?: number;
 }
 
-const DEFAULT_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+// 24h cap reduces blast radius if an invite email is forwarded or intercepted.
+const DEFAULT_TTL_MS = 24 * 60 * 60 * 1000;
 
 export async function inviteMemberUseCase(input: InviteMemberInput): Promise<Invite> {
     const email = input.email.trim().toLowerCase();

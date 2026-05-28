@@ -64,6 +64,9 @@ export class DrizzleWorkspaceBillingRepository implements WorkspaceBillingReposi
         if (input.lastBilledMonth !== undefined) {
             set.lastBilledMonth = input.lastBilledMonth;
         }
+        if (input.trialEndsAt !== undefined) {
+            set.trialEndsAt = input.trialEndsAt;
+        }
         if (Object.keys(set).length === 0) return;
         await this.db
             .update(schema.workspaces)
@@ -82,5 +85,6 @@ function toRecord(row: Row): WorkspaceBillingRecord {
         refundEligibleUntil: row.refundEligibleUntil ?? null,
         lastInvoiceRef: row.lastInvoiceRef ?? null,
         lastBilledMonth: row.lastBilledMonth ?? null,
+        trialEndsAt: row.trialEndsAt ?? null,
     };
 }

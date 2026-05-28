@@ -5,9 +5,11 @@
  *   - disabled workspace → always allow.
  *   - zero baseline → allow even when burst is large.
  *   - under threshold → allow.
- *   - over threshold → 429 with spike cap header, cooldown set.
- *   - inside cooldown → 429 without re-checking baseline.
+ *   - over threshold → deny with spike reason, cooldown set.
+ *   - inside cooldown → deny without re-checking baseline.
  *   - after cooldown expires → re-evaluated, fresh allow.
+ *   - cloud Redis outage → deny (fail-closed) with retry hint.
+ *   - self-host Redis outage → allow (fail-open).
  */
 
 import { resetBaselineCache } from "@/lib/spike-protection/baseline-cache";
@@ -78,11 +80,11 @@ describe("applySpikeProtection", () => {
 
     test("passes through when globally disabled and workspace row is absent", async () => {
         setSpikeProtectionDepsForTesting(baseDeps({ enabled: false }));
-        const result = await applySpikeProtection({
+        const decision = await applySpikeProtection({
             workspaceId: WORKSPACE,
             eventCount: 100_000,
         });
-        expect(result.response).toBeNull();
+        expect(decision.allowed).toBe(true);
     });
 
     test("workspace row override flips off cloud default", async () => {
@@ -91,53 +93,49 @@ describe("applySpikeProtection", () => {
                 settings: fakeSettings({ enabled: false, thresholdMultiplier: 5 }),
             }),
         );
-        const result = await applySpikeProtection({
+        const decision = await applySpikeProtection({
             workspaceId: WORKSPACE,
             eventCount: 100_000,
         });
-        expect(result.response).toBeNull();
+        expect(decision.allowed).toBe(true);
     });
 
     test("zero baseline → allow (new workspace, nothing to compare against)", async () => {
         setSpikeProtectionDepsForTesting(baseDeps({ baseline: fakeBaseline(0) }));
-        const result = await applySpikeProtection({
+        const decision = await applySpikeProtection({
             workspaceId: WORKSPACE,
             eventCount: 5_000,
         });
-        expect(result.response).toBeNull();
+        expect(decision.allowed).toBe(true);
     });
 
     test("under threshold → allow", async () => {
         // Baseline 10/min, multiplier 5 → threshold 50/min. 40 events should pass.
         setSpikeProtectionDepsForTesting(baseDeps());
-        const result = await applySpikeProtection({
+        const decision = await applySpikeProtection({
             workspaceId: WORKSPACE,
             eventCount: 40,
         });
-        expect(result.response).toBeNull();
+        expect(decision.allowed).toBe(true);
     });
 
-    test("over threshold → 429 with spike cap header and cooldown set", async () => {
+    test("over threshold → deny with spike reason and cooldown set", async () => {
         // Baseline 10/min, multiplier 5 → threshold 50/min. 60 events trips.
         const state = new InMemorySpikeStateStore();
         setSpikeProtectionDepsForTesting(baseDeps({ state }));
-        const result = await applySpikeProtection({
+        const decision = await applySpikeProtection({
             workspaceId: WORKSPACE,
             eventCount: 60,
         });
-        expect(result.response).not.toBeNull();
-        expect(result.response?.status).toBe(429);
-        expect(result.response?.headers.get("X-Bursora-Cap-Hit")).toBe("spike");
-
-        const body = await result.response?.json();
-        expect(body.error).toBe("spike_protection_triggered");
-        expect(body.retry_after_ms).toBeGreaterThan(0);
+        expect(decision.allowed).toBe(false);
+        expect(decision.reason).toBe("spike");
+        expect(decision.retryAfterMs).toBeGreaterThan(0);
 
         const cooldown = await state.getCooldown({ workspaceId: WORKSPACE });
         expect(cooldown.untilMs).toBeGreaterThan(0);
     });
 
-    test("inside cooldown returns 429 with spike cap header", async () => {
+    test("inside cooldown returns deny with spike reason", async () => {
         const state = new InMemorySpikeStateStore();
         const nowMs = new Date("2025-06-01T00:00:00.000Z").getTime();
         await state.setCooldown({
@@ -147,12 +145,12 @@ describe("applySpikeProtection", () => {
 
         setSpikeProtectionDepsForTesting(baseDeps({ state }));
 
-        const result = await applySpikeProtection({
+        const decision = await applySpikeProtection({
             workspaceId: WORKSPACE,
             eventCount: 1,
         });
-        expect(result.response?.status).toBe(429);
-        expect(result.response?.headers.get("X-Bursora-Cap-Hit")).toBe("spike");
+        expect(decision.allowed).toBe(false);
+        expect(decision.reason).toBe("spike");
     });
 
     test("after cooldown expires, traffic is re-evaluated", async () => {
@@ -163,11 +161,11 @@ describe("applySpikeProtection", () => {
             untilMs: nowMs - 1, // already expired
         });
         setSpikeProtectionDepsForTesting(baseDeps({ state }));
-        const result = await applySpikeProtection({
+        const decision = await applySpikeProtection({
             workspaceId: WORKSPACE,
             eventCount: 1,
         });
-        expect(result.response).toBeNull();
+        expect(decision.allowed).toBe(true);
     });
 
     test("workspace multiplier override affects threshold", async () => {
@@ -177,36 +175,35 @@ describe("applySpikeProtection", () => {
                 settings: fakeSettings({ enabled: true, thresholdMultiplier: 2 }),
             }),
         );
-        const result = await applySpikeProtection({
+        const decision = await applySpikeProtection({
             workspaceId: WORKSPACE,
             eventCount: 25,
         });
-        expect(result.response?.status).toBe(429);
+        expect(decision.allowed).toBe(false);
+        expect(decision.reason).toBe("spike");
     });
 
-    test("cloud: Redis error returns 503 with Retry-After (fail-closed)", async () => {
+    test("cloud: Redis error returns deny with retry hint (fail-closed)", async () => {
         setSpikeProtectionDepsForTesting(
             baseDeps({ isCloud: true, state: new ThrowingSpikeStateStore() }),
         );
-        const result = await applySpikeProtection({
+        const decision = await applySpikeProtection({
             workspaceId: WORKSPACE,
             eventCount: 1,
         });
-        expect(result.response).not.toBeNull();
-        expect(result.response?.status).toBe(503);
-        expect(result.response?.headers.get("Retry-After")).toBe("5");
-        const body = await result.response?.json();
-        expect(body.error).toBe("spike_protection_unavailable");
+        expect(decision.allowed).toBe(false);
+        expect(decision.reason).toBe("spike");
+        expect(decision.retryAfterMs).toBe(5_000);
     });
 
-    test("self-host: Redis error returns null (fail-open)", async () => {
+    test("self-host: Redis error returns allow (fail-open)", async () => {
         setSpikeProtectionDepsForTesting(
             baseDeps({ isCloud: false, state: new ThrowingSpikeStateStore() }),
         );
-        const result = await applySpikeProtection({
+        const decision = await applySpikeProtection({
             workspaceId: WORKSPACE,
             eventCount: 1,
         });
-        expect(result.response).toBeNull();
+        expect(decision.allowed).toBe(true);
     });
 });

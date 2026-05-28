@@ -1,7 +1,3 @@
-import {
-    priorWindow,
-    relativeDelta,
-} from "@/app/(dashboard)/workspace/[workspaceId]/_lib/window-delta";
 import { PageHeader } from "@/components/shell/page-header";
 import { TopSpendersTable } from "@/components/ui/dashboard-views/top-spenders-table";
 import { FeedItem } from "@/components/ui/feed-item";
@@ -385,6 +381,20 @@ const RECENT_ALERTS_LIMIT = 5;
 function spendDirection(delta: number | null): KpiTone {
     if (delta === null || delta === 0) return "neut";
     return delta > 0 ? "up" : "down";
+}
+
+function priorWindow(from: Date, to: Date): { from: Date; to: Date } {
+    const span = to.getTime() - from.getTime();
+    return { from: new Date(from.getTime() - span), to: from };
+}
+
+function relativeDelta(current: number, prior: number): number | null {
+    if (!Number.isFinite(current) || !Number.isFinite(prior)) return null;
+    if (prior === 0) {
+        if (current === 0) return 0;
+        return current > 0 ? 1 : -1;
+    }
+    return (current - prior) / prior;
 }
 
 const CLOCK_FMT = new Intl.DateTimeFormat(undefined, {

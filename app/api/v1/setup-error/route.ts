@@ -6,14 +6,14 @@
  * Resp:    202 accepted | 401 bad key | 400 malformed/unsupported kind
  *
  * Mirrors the auth pattern from /api/v1/events: X-Bursora-Key validates against
- * the metering composition root, then `recordSetupError` fans out to the
+ * the metering composition root, then the setup-error logger fans out to the
  * dashboard rollup + workspace-member notifications. Fire-and-forget so the
  * SDK never waits on Bursora before throwing the wrap() error.
  */
 
 import { recordAuthFailure, withBursoraKey } from "@/lib/identity/with-bursora-key";
 import { logInvalidBody } from "@/lib/log-invalid-body";
-import { recordSetupError } from "@/lib/setup-errors/server";
+import { setupErrorLogger } from "@/lib/setup-errors/server";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -41,7 +41,7 @@ export async function POST(request: Request): Promise<NextResponse> {
         return NextResponse.json({ error: parsed.reason }, { status: 400 });
     }
 
-    void recordSetupError({
+    void setupErrorLogger().log({
         kind: parsed.value.kind,
         workspaceId: auth.apiKey.workspaceId,
     });

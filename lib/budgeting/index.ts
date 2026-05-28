@@ -7,14 +7,21 @@
  * server actions.
  */
 
-export { decideBudgetUseCase, type DecideBudgetInput } from "./decide-budget.usecase";
+export {
+    decideBudgetUseCase,
+    type BudgetAlertRaisedDispatchEvent,
+    type BudgetCrossingTrigger,
+    type DecideBudgetInput,
+    type DecideBudgetResult,
+} from "./decide-budget.usecase";
+export type { BudgetLock } from "./budget-lock";
 export type { BudgetingDeps } from "./server";
 export type { SpendAggregator, SpendAggregatorQuery } from "./spend-aggregator";
 
 export { evaluateBudget } from "./evaluate-budget";
 export type { BudgetTrigger, EvaluateBudgetOptions, EvaluateOutcome } from "./evaluate-budget";
-export { periodWindow } from "./period";
-export type { PeriodWindow } from "./period";
+export { defaultPeriodResolver, periodWindow } from "./period";
+export type { PeriodResolver, PeriodWindow } from "./period";
 export { spendKey } from "./spend-snapshot";
 export type { Spend } from "./spend-snapshot";
 
@@ -23,13 +30,9 @@ export * from "./queries";
 export {
     ValidationError,
     createBudgetUseCase,
-    validateAmount,
-    validateMode,
-    validatePeriod,
-    validateScopeId,
-    validateScopeType,
     type CreateBudgetUseCaseInput,
 } from "./create-budget.usecase";
+export { BudgetInputSchema, type BudgetInput } from "./budget-input.schema";
 export {
     updateBudgetUseCase,
     type UpdateBudgetPatch,

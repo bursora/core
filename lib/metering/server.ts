@@ -8,13 +8,11 @@
 
 import { db } from "@/lib/db";
 import "server-only";
-import { countEventsForWorkspaceUseCase } from "./count-events-for-workspace.usecase";
 import { drizzleMeteringReadRepository } from "./drizzle-metering-read.repository";
 import { DrizzleUsageEventRepository } from "./drizzle-usage-event.repository";
 import { getSpendSeriesUseCase } from "./get-spend-series.usecase";
 import { getTopSpendersUseCase } from "./get-top-spenders.usecase";
 import { ingestEventsUseCase } from "./ingest-events.usecase";
-import { listDistinctMeteringValuesBulkUseCase } from "./list-distinct-metering-values-bulk.usecase";
 import type {
     BlockedEventsPage,
     MeteringFilters,
@@ -103,6 +101,9 @@ export async function getTopSpenders(input: TopSpendersInput) {
     return getTopSpendersUseCase({ ...input, repo: deps.readRepo });
 }
 
+const DISTINCT_VALUES_SINCE_DAYS = 30;
+const DISTINCT_VALUES_LIMIT = 50;
+
 export async function listDistinctMeteringValuesBulk(input: {
     workspaceId: string;
     scopes: readonly ScopeKind[];
@@ -110,11 +111,12 @@ export async function listDistinctMeteringValuesBulk(input: {
     status?: MeteringStatusFilter;
 }) {
     const deps = meteringReadDeps();
-    return listDistinctMeteringValuesBulkUseCase({
+    return deps.readRepo.listDistinctValuesBulk({
         workspaceId: input.workspaceId,
         scopes: input.scopes,
+        sinceDays: DISTINCT_VALUES_SINCE_DAYS,
+        limit: DISTINCT_VALUES_LIMIT,
         now: input.now ?? new Date(),
-        repo: deps.readRepo,
         status: input.status,
     });
 }
@@ -127,7 +129,7 @@ interface CountEventsInput extends MeteringFilters {
 
 export async function countEventsForWorkspace(input: CountEventsInput): Promise<number> {
     const deps = meteringReadDeps();
-    return countEventsForWorkspaceUseCase({ ...input, repo: deps.readRepo });
+    return deps.readRepo.countEvents(input);
 }
 
 export async function getLastUsageEventAt(input: { workspaceId: string }): Promise<Date | null> {

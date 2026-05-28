@@ -31,6 +31,13 @@ export interface WorkspaceBillingRecord {
     readonly lastInvoiceRef: string | null;
     /** YYYY-MM of the last month the rollup successfully pushed. */
     readonly lastBilledMonth: string | null;
+    /**
+     * Provider-issued trial expiry for `trialing` subscriptions. Null for
+     * non-trial subscriptions and for legacy trialing rows that predate
+     * trial tracking. The spend aggregator gates billing for `trialing`
+     * workspaces on whether this is in the future.
+     */
+    readonly trialEndsAt: Date | null;
 }
 
 export interface WorkspaceBillingUpdate {
@@ -42,6 +49,7 @@ export interface WorkspaceBillingUpdate {
     readonly refundEligibleUntil?: Date | null;
     readonly lastInvoiceRef?: string | null;
     readonly lastBilledMonth?: string | null;
+    readonly trialEndsAt?: Date | null;
 }
 
 export interface WorkspaceBillingRepository {

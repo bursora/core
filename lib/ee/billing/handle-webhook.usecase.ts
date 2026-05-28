@@ -22,8 +22,14 @@ const REFUND_WINDOW_DAYS = 30;
  * events. Behaviour by event type:
  *   - subscription.activated   → store customer/sub ids, stamp
  *                                subscribed_at + refund_eligible_until
- *                                (signup + 30 days),
- *                                subscription_status='active'.
+ *                                (signup + 30 days). Subscription status
+ *                                is taken from the event payload when
+ *                                present (`trialing` on a trial checkout,
+ *                                `active` on a paid one) and defaults to
+ *                                `active` otherwise. The provider-issued
+ *                                trial expiry (`trial_ends_at`) is also
+ *                                persisted so the spend aggregator can
+ *                                skip workspaces still inside their trial.
  *                                Mapped from `subscription_created` /
  *                                `subscription_resumed` /
  *                                `subscription_unpaused`.
@@ -107,17 +113,27 @@ async function onSubscriptionActivated(
     if (!existing) return;
     const now = new Date();
     const refundUntil = new Date(now.getTime() + REFUND_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+    // Honor the provider-reported status when present (e.g. `trialing` on a
+    // trial checkout); otherwise default to `active` for back-compat with
+    // events that don't carry a status (resumed/unpaused).
+    const statusFromEvent =
+        typeof event.status === "string" && event.status.length > 0 ? event.status : "active";
     await workspaces.update({
         workspaceId: existing.workspaceId,
         providerCustomerId: event.customerId ?? null,
         providerSubscriptionId: event.subscriptionId ?? null,
-        subscriptionStatus: "active",
+        subscriptionStatus: statusFromEvent,
         // Stamp subscribed_at only on the first checkout. Re-checkouts after
         // a cancel keep the original signup timestamp; refund window does NOT
         // reset.
         ...(existing.subscribedAt === null
             ? { subscribedAt: now, refundEligibleUntil: refundUntil }
             : {}),
+        // Provider-issued trial window. The spend aggregator checks this so a
+        // workspace still inside its trial isn't invoiced. `undefined` from the
+        // adapter is forwarded as `null` for an explicit reset on a non-trial
+        // re-checkout.
+        trialEndsAt: event.trialEndsAt ?? null,
     });
 }
 

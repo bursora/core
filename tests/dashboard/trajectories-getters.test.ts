@@ -1,6 +1,6 @@
 /**
  * Tests for the window-aware trajectory loaders in
- * `app/(dashboard)/workspace/[workspaceId]/_lib/trajectories.ts`.
+ * `lib/compose/trajectories.ts`.
  *
  * Both `getCustomerTrajectories` and `getModelTrajectories` accept a
  * `DashboardWindow` and recompute pace / share against
@@ -15,10 +15,7 @@ import {
     setDashboardStatsDepsForTesting,
     type DashboardStatsDeps,
 } from "@/app/(dashboard)/workspace/[workspaceId]/_lib/dashboard-stats";
-import {
-    getCustomerTrajectories,
-    getModelTrajectories,
-} from "@/app/(dashboard)/workspace/[workspaceId]/_lib/trajectories";
+import { getCustomerTrajectories, getModelTrajectories } from "@/lib/compose/trajectories";
 import type { DashboardWindow } from "@/lib/dashboard-window";
 import type {
     MeteringReadRepository,

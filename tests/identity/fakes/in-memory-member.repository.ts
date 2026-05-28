@@ -88,6 +88,7 @@ export class InMemoryInviteRepository implements InviteRepository {
     async claim(token: string, acceptedAt: Date): Promise<Invite | null> {
         const existing = this.rows.get(token);
         if (!existing || existing.acceptedAt !== null) return null;
+        if (existing.expiresAt.getTime() <= acceptedAt.getTime()) return null;
         const claimed: Invite = { ...existing, acceptedAt };
         this.rows.set(token, claimed);
         return claimed;
@@ -106,6 +107,31 @@ export class InMemoryInviteRepository implements InviteRepository {
             }
         }
         return removed;
+    }
+
+    async rotateToken(input: {
+        workspaceId: string;
+        email: string;
+        newToken: string;
+        newExpiresAt: Date;
+    }): Promise<Invite | null> {
+        for (const [oldToken, row] of this.rows) {
+            if (
+                row.workspaceId === input.workspaceId &&
+                row.email === input.email &&
+                row.acceptedAt === null
+            ) {
+                this.rows.delete(oldToken);
+                const rotated: Invite = {
+                    ...row,
+                    token: input.newToken,
+                    expiresAt: input.newExpiresAt,
+                };
+                this.rows.set(input.newToken, rotated);
+                return rotated;
+            }
+        }
+        return null;
     }
 
     async listPendingByWorkspace(workspaceId: string): Promise<readonly Invite[]> {

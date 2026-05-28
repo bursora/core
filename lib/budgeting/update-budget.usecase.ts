@@ -2,9 +2,9 @@
  * updateBudget — partial update for a budget row, scoped by workspace.
  *
  * The repo enforces workspace isolation via `WHERE id = ? AND workspace_id =
- * ?`. The use case adds validation per field present in the patch and a
- * pair-check on (scopeType, scopeId) when either changes — the resulting
- * combination must satisfy the same rules as create.
+ * ?`. The use case validates the patch against `BudgetInputSchema` by
+ * merging the patch onto the existing row and parsing the result, so the
+ * resulting combination satisfies the same rules as create.
  *
  * Returns the updated row, or `null` when the id is unknown or the row
  * belongs to another workspace. The use case does NOT distinguish the two
@@ -13,15 +13,10 @@
  */
 
 import type { BudgetMode, ScopeType } from "./budget";
+import { BudgetInputSchema } from "./budget-input.schema";
 import type { BudgetRepository, RawBudget, UpdateBudgetInput } from "./budget.repository";
-import {
-    validateAmount,
-    validateMode,
-    validatePeriod,
-    validateScopeId,
-    validateScopeType,
-} from "./create-budget.usecase";
 import type { Period } from "./period";
+import { ValidationError } from "./validation-error";
 
 export interface UpdateBudgetUseCaseInput {
     readonly id: string;
@@ -41,20 +36,21 @@ export interface UpdateBudgetPatch {
 export async function updateBudgetUseCase(
     input: UpdateBudgetUseCaseInput,
 ): Promise<RawBudget | null> {
+    const existing = await loadOwnRow(input);
+    if (existing === null) return null;
+
     const patch = input.patch;
+    const merged = {
+        scopeType: patch.scopeType !== undefined ? patch.scopeType : existing.scopeType,
+        scopeId: patch.scopeId !== undefined ? patch.scopeId : existing.scopeId,
+        period: patch.period !== undefined ? patch.period : existing.period,
+        mode: patch.mode !== undefined ? patch.mode : existing.mode,
+        amountUsd: patch.amountUsd !== undefined ? patch.amountUsd : existing.amountUsd,
+    };
 
-    if (patch.scopeType !== undefined) validateScopeType(patch.scopeType);
-    if (patch.period !== undefined) validatePeriod(patch.period);
-    if (patch.mode !== undefined) validateMode(patch.mode);
-    if (patch.amountUsd !== undefined) validateAmount(patch.amountUsd);
-
-    if (patch.scopeType !== undefined || patch.scopeId !== undefined) {
-        const existing = await loadOwnRow(input);
-        if (existing === null) return null;
-        const effectiveScopeType =
-            patch.scopeType !== undefined ? patch.scopeType : existing.scopeType;
-        const effectiveScopeId = patch.scopeId !== undefined ? patch.scopeId : existing.scopeId;
-        validateScopeId(effectiveScopeType, effectiveScopeId);
+    const parsed = BudgetInputSchema.safeParse(merged);
+    if (!parsed.success) {
+        throw ValidationError.fromZodError(parsed.error);
     }
 
     const repoPatch: UpdateBudgetInput = {

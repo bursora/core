@@ -20,7 +20,7 @@
  * branch on `kind`.
  */
 
-import type { Period } from "../budgeting";
+import type { Period } from "../budgeting/period";
 import type { AlertKind, AlertSeverity } from "../severity";
 import type { Alert, AnomalyAlert } from "./alert";
 

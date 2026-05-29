@@ -82,12 +82,12 @@ export interface Env {
     /** Empty string when both rate-limit and spike-protection are off. */
     readonly REDIS_URL: string;
     /**
-     * CSRF allow-list for better-auth. Defaults to `[NEXT_PUBLIC_APP_URL,
-     * 'http://localhost:3000', 'http://localhost:3001',
-     * 'http://127.0.0.1:3000']` (deduped) so local dev across site (3000)
-     * and core (3001) works without extra config. Set
-     * `BETTER_AUTH_TRUSTED_ORIGINS` as a comma-separated list to override
-     * for preview deployments or secondary domains.
+     * CSRF allow-list for better-auth. Always includes the configured
+     * `NEXT_PUBLIC_APP_URL` and `BETTER_AUTH_URL`, plus localhost (:3000/:3001)
+     * in development so local dev across site (3000) and core (3001) works
+     * without extra config. Set `BETTER_AUTH_TRUSTED_ORIGINS` as a
+     * comma-separated list to add preview deployments or secondary domains;
+     * the env URLs stay trusted regardless.
      */
     readonly BETTER_AUTH_TRUSTED_ORIGINS: readonly string[];
 }
@@ -184,23 +184,21 @@ export function loadEnv(source: Record<string, string | undefined>): Env {
         return v;
     };
 
-    const appUrl = getAlways("NEXT_PUBLIC_APP_URL");
-    const defaultOrigins = Array.from(
-        new Set(
-            isCloud
-                ? [appUrl]
-                : [
-                      appUrl,
-                      "http://localhost:3000",
-                      "http://localhost:3001",
-                      "http://127.0.0.1:3000",
-                      "https://app-bursora.ngrok.app",
-                      "https://bursora.ngrok.app",
-                  ],
-        ),
-    );
     const trustedOrigins = Object.freeze(
-        parseTrustedOrigins(source.BETTER_AUTH_TRUSTED_ORIGINS, defaultOrigins),
+        Array.from(
+            new Set([
+                getAlways("NEXT_PUBLIC_APP_URL"),
+                getAlways("BETTER_AUTH_URL"),
+                ...((source.NODE_ENV ?? "development") !== "production"
+                    ? [
+                          "http://localhost:3000",
+                          "http://localhost:3001",
+                          "http://127.0.0.1:3000",
+                      ]
+                    : []),
+                ...parseTrustedOrigins(source.BETTER_AUTH_TRUSTED_ORIGINS, []),
+            ]),
+        ),
     );
 
     return Object.freeze({

@@ -163,16 +163,14 @@ describe("loadEnv", () => {
         expect(e.REDIS_URL).toBe("");
     });
 
-    test("BETTER_AUTH_TRUSTED_ORIGINS defaults to NEXT_PUBLIC_APP_URL + local dev fallbacks (deduped)", () => {
+    test("BETTER_AUTH_TRUSTED_ORIGINS defaults to the env URLs + local dev fallbacks (deduped)", () => {
         const e = loadEnv(BASE);
-        // NEXT_PUBLIC_APP_URL == http://localhost:3000, which dedups with the
-        // localhost:3000 fallback. Expect the unique dev origins + ngrok tunnels.
+        // NEXT_PUBLIC_APP_URL and BETTER_AUTH_URL are both http://localhost:3000,
+        // which dedup with the localhost:3000 fallback. Expect the unique dev origins.
         expect(e.BETTER_AUTH_TRUSTED_ORIGINS).toEqual([
             "http://localhost:3000",
             "http://localhost:3001",
             "http://127.0.0.1:3000",
-            "https://app-bursora.ngrok.app",
-            "https://bursora.ngrok.app",
         ]);
     });
 
@@ -183,26 +181,32 @@ describe("loadEnv", () => {
             "http://localhost:3000",
             "http://localhost:3001",
             "http://127.0.0.1:3000",
-            "https://app-bursora.ngrok.app",
-            "https://bursora.ngrok.app",
         ]);
     });
 
-    test("BETTER_AUTH_TRUSTED_ORIGINS parses a single origin", () => {
+    test("BETTER_AUTH_TRUSTED_ORIGINS adds a single explicit origin to the env URLs + dev fallbacks", () => {
         const e = loadEnv({
             ...BASE,
             BETTER_AUTH_TRUSTED_ORIGINS: "https://app.bursora.com",
         });
-        expect(e.BETTER_AUTH_TRUSTED_ORIGINS).toEqual(["https://app.bursora.com"]);
+        expect(e.BETTER_AUTH_TRUSTED_ORIGINS).toEqual([
+            "http://localhost:3000",
+            "http://localhost:3001",
+            "http://127.0.0.1:3000",
+            "https://app.bursora.com",
+        ]);
     });
 
-    test("BETTER_AUTH_TRUSTED_ORIGINS parses multiple comma-separated origins", () => {
+    test("BETTER_AUTH_TRUSTED_ORIGINS adds multiple comma-separated origins", () => {
         const e = loadEnv({
             ...BASE,
             BETTER_AUTH_TRUSTED_ORIGINS:
                 "https://app.bursora.com,https://staging.bursora.com,https://admin.bursora.com",
         });
         expect(e.BETTER_AUTH_TRUSTED_ORIGINS).toEqual([
+            "http://localhost:3000",
+            "http://localhost:3001",
+            "http://127.0.0.1:3000",
             "https://app.bursora.com",
             "https://staging.bursora.com",
             "https://admin.bursora.com",
@@ -216,9 +220,22 @@ describe("loadEnv", () => {
                 "  https://app.bursora.com  ,, https://staging.bursora.com ,",
         });
         expect(e.BETTER_AUTH_TRUSTED_ORIGINS).toEqual([
+            "http://localhost:3000",
+            "http://localhost:3001",
+            "http://127.0.0.1:3000",
             "https://app.bursora.com",
             "https://staging.bursora.com",
         ]);
+    });
+
+    test("BETTER_AUTH_TRUSTED_ORIGINS omits dev fallbacks in production, keeping only the env URLs", () => {
+        const e = loadEnv({
+            ...BASE,
+            NODE_ENV: "production",
+            NEXT_PUBLIC_APP_URL: "https://app.bursora.com",
+            BETTER_AUTH_URL: "https://app.bursora.com",
+        });
+        expect(e.BETTER_AUTH_TRUSTED_ORIGINS).toEqual(["https://app.bursora.com"]);
     });
 
     test("BETTER_AUTH_TRUSTED_ORIGINS throws when set but empty (commas/whitespace only)", () => {

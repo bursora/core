@@ -9,6 +9,13 @@
 import type { Route } from "next";
 
 /**
+ * `?from=` value set on the keys-page link rendered in the spend empty state.
+ * The keys page reads it to auto-open the issue-key dialog, then strips it so
+ * a refresh or back-navigation doesn't reopen the dialog.
+ */
+export const KEYS_FROM_SPEND_EMPTY = "spend-empty";
+
+/**
  * Canonical workspace page URL. Section omitted ⇒ workspace home.
  *
  * `query` is appended as `?k=v&...` (URL-encoded). Falsy/empty query ⇒

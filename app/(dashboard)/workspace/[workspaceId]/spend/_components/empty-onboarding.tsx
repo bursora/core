@@ -17,7 +17,7 @@ import { DashboardSection } from "@/components/ui/workspace/dashboard-section";
 import { env } from "@/lib/env";
 import { extractRegion } from "@/lib/extract-snippet";
 import { listApiKeys } from "@/lib/identity/server";
-import { buildWorkspacePath } from "@/lib/routes";
+import { buildWorkspacePath, KEYS_FROM_SPEND_EMPTY } from "@/lib/routes";
 import { KeyRound } from "lucide-react";
 import Link from "next/link";
 import path from "node:path";
@@ -98,17 +98,19 @@ export async function EmptyOnboarding({ workspaceId }: EmptyOnboardingProps) {
                     <KeyRound aria-hidden />
                     <AlertTitle>Issue an API key to fill in the snippet</AlertTitle>
                     <AlertDescription>
-                        The placeholders below need a real key id and your workspace id to send a
-                        request.{" "}
-                        <Link
-                            className="font-medium underline underline-offset-2"
-                            href={buildWorkspacePath(workspaceId, "keys", {
-                                from: "spend-empty",
-                            })}
-                        >
-                            Issue an API key
-                        </Link>
-                        .
+                        <p>
+                            The placeholders below need a real key id and your workspace id to send
+                            a request.{" "}
+                            <Link
+                                className="font-medium underline underline-offset-2"
+                                href={buildWorkspacePath(workspaceId, "keys", {
+                                    from: KEYS_FROM_SPEND_EMPTY,
+                                })}
+                            >
+                                Issue an API key
+                            </Link>
+                            .
+                        </p>
                     </AlertDescription>
                 </Alert>
             )}

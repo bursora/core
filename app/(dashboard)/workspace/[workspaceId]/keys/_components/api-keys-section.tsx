@@ -22,9 +22,15 @@ interface ApiKeysSectionProps {
     readonly workspaceId: string;
     /** Freshly issued plaintext secret, surfaced once via flash cookie. */
     readonly issuedPlaintext: string | null;
+    /** Open the issue-key dialog on mount (arriving from the spend empty state). */
+    readonly autoIssue: boolean;
 }
 
-export async function ApiKeysSection({ workspaceId, issuedPlaintext }: ApiKeysSectionProps) {
+export async function ApiKeysSection({
+    workspaceId,
+    issuedPlaintext,
+    autoIssue,
+}: ApiKeysSectionProps) {
     const keys = await listApiKeys(workspaceId);
 
     return (
@@ -34,7 +40,7 @@ export async function ApiKeysSection({ workspaceId, issuedPlaintext }: ApiKeysSe
             <DashboardSection
                 label="API keys"
                 sublabel="shown once at creation · store it somewhere safe"
-                actions={<IssueApiKeyButton workspaceId={workspaceId} />}
+                actions={<IssueApiKeyButton workspaceId={workspaceId} autoOpen={autoIssue} />}
                 bodyClassName="-mx-5"
             >
                 <Table>

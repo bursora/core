@@ -19,14 +19,23 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useState } from "react";
+import { buildWorkspacePath } from "@/lib/routes";
+import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 
 interface IssueApiKeyButtonProps {
     readonly workspaceId: string;
+    /** Open the dialog on mount, then strip the triggering query param. */
+    readonly autoOpen: boolean;
 }
 
-export function IssueApiKeyButton({ workspaceId }: IssueApiKeyButtonProps) {
-    const [open, setOpen] = useState(false);
+export function IssueApiKeyButton({ workspaceId, autoOpen }: IssueApiKeyButtonProps) {
+    const [open, setOpen] = useState(autoOpen);
+    const router = useRouter();
+
+    useEffect(() => {
+        if (autoOpen) router.replace(buildWorkspacePath(workspaceId, "keys"));
+    }, [autoOpen, router, workspaceId]);
 
     return (
         <Dialog open={open} onOpenChange={setOpen}>

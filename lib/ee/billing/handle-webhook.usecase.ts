@@ -24,9 +24,8 @@ const REFUND_WINDOW_DAYS = 30;
  *                                subscribed_at + refund_eligible_until
  *                                (signup + 30 days). Subscription status
  *                                is taken from the event payload when
- *                                present (`trialing` on a trial checkout,
- *                                `active` on a paid one) and defaults to
- *                                `active` otherwise. Mapped from
+ *                                present (`active` on a paid checkout) and
+ *                                defaults to `active` otherwise. Mapped from
  *                                `subscription_created` /
  *                                `subscription_resumed` /
  *                                `subscription_unpaused`.
@@ -124,9 +123,9 @@ async function onSubscriptionActivated(
     if (!existing) return;
     const now = new Date();
     const refundUntil = new Date(now.getTime() + REFUND_WINDOW_DAYS * 24 * 60 * 60 * 1000);
-    // Honor the provider-reported status when present (e.g. `trialing` on a
-    // trial checkout); otherwise default to `active` for back-compat with
-    // events that don't carry a status (resumed/unpaused).
+    // Honor the provider-reported status when present; otherwise default to
+    // `active` for back-compat with events that don't carry a status
+    // (resumed/unpaused).
     const statusFromEvent =
         typeof event.status === "string" && event.status.length > 0 ? event.status : "active";
     await workspaces.update({

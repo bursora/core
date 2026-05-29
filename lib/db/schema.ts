@@ -85,7 +85,7 @@ export const verification = pgTable("verification", {
 // handler's write a single UPDATE. All are nullable: cloud workspaces that
 // have never opened Checkout and every self-host workspace leave them empty.
 // `subscription_status` mirrors the upstream provider's subscription
-// state verbatim (e.g. `active`, `past_due`, `canceled`, `trialing`).
+// state verbatim (e.g. `active`, `past_due`, `cancelled`, `expired`).
 //
 // `subscribed_at` is set the first time Checkout completes. `refund_eligible_until`
 // is signup + 30 days — used by the UI to surface the money-back window.

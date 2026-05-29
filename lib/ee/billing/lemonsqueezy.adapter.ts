@@ -3,13 +3,11 @@
  *
  * The Bursora billing use cases depend on the neutral `PaymentProviderAdapter`
  * port. This file implements the LS half: checkout creation, portal lookup,
- * webhook signature verification + event projection, plus the refund-all +
- * end-of-period cancellation path that backs the money-back guarantee.
- * Checkout uses the flat $29/mo variant, which charges at checkout and
- * auto-renews on LS's side; Bursora records no bill of its own. LS cancels at
- * the end of the current billing period (no immediate-cancel primitive). LS
- * does not ship an official Node SDK we want to take a dep on, so we hit the
- * JSON:API endpoints with the runtime `fetch` directly.
+ * and webhook signature verification + event projection. Checkout uses the
+ * flat $29/mo variant, which charges at checkout and auto-renews on LS's side;
+ * Bursora records no bill of its own. LS does not ship an official Node SDK we
+ * want to take a dep on, so we hit the JSON:API endpoints with the runtime
+ * `fetch` directly.
  */
 
 import { createHmac, timingSafeEqual } from "node:crypto";
@@ -19,8 +17,6 @@ import type {
     PaymentProviderAdapter,
     PortalSessionInput,
     PortalSessionResult,
-    RefundAllOrdersInput,
-    RefundAllOrdersResult,
     VerifyCredentialsResult,
     VerifyEventInput,
     WebhookEvent,
@@ -181,137 +177,6 @@ export class LemonSqueezyApiAdapter implements PaymentProviderAdapter {
         return timingSafeEqual(Buffer.from(provided, "utf8"), Buffer.from(expected, "utf8"));
     }
 
-    async refundAllOrders(input: RefundAllOrdersInput): Promise<RefundAllOrdersResult> {
-        // Filter by `customer_id` so two LS customers sharing an email cannot
-        // bleed orders across workspaces. As a belt-and-suspenders guard we
-        // also drop any row whose `attributes.customer_id` mismatches before
-        // issuing a refund. Listing all pages before issuing refunds keeps the
-        // LS retry semantics simple: a refund failure surfaces immediately and
-        // the caller can replay because already-refunded orders are skipped on
-        // retry.
-        // A non-numeric customer id makes every comparison below true
-        // (NaN !== anything), silently skipping all refunds. Fail loud first.
-        const expectedCustomerId = Number(input.customerId);
-        if (!Number.isFinite(expectedCustomerId)) {
-            throw new Error(
-                `lemonsqueezy.refundAllOrders: non-numeric customerId ${JSON.stringify(input.customerId)}`,
-            );
-        }
-
-        const firstUrl =
-            `${LS_API_BASE}/v1/orders?filter%5Bstore_id%5D=${encodeURIComponent(this.storeId)}` +
-            `&filter%5Bcustomer_id%5D=${encodeURIComponent(input.customerId)}`;
-
-        const orders = await this.listAllOrders(firstUrl);
-
-        const refundedOrderIds: string[] = [];
-        let totalCents = 0;
-        for (const order of orders) {
-            if (order.status !== "paid") continue;
-            if (order.customerId !== expectedCustomerId) continue;
-            const refunded = await this.refundOrder(order.id);
-            refundedOrderIds.push(refunded.id);
-            totalCents += refunded.totalCents;
-        }
-
-        return { refundedOrderIds, totalCents };
-    }
-
-    private async listAllOrders(
-        startUrl: string,
-    ): Promise<Array<{ id: string; status: string; totalCents: number; customerId: number }>> {
-        const orders: Array<{
-            id: string;
-            status: string;
-            totalCents: number;
-            customerId: number;
-        }> = [];
-        let nextUrl: string | null = startUrl;
-        while (nextUrl !== null) {
-            const response = await this.fetcher(nextUrl, {
-                method: "GET",
-                headers: {
-                    Authorization: `Bearer ${this.apiKey}`,
-                    Accept: JSON_API_CONTENT_TYPE,
-                },
-            });
-            if (!response.ok) {
-                const errorText = await response.text().catch(() => "");
-                throw new Error(
-                    `lemonsqueezy.refundAllOrders list failed: ${response.status} ${errorText}`,
-                );
-            }
-            const payload = (await response.json()) as LemonSqueezyOrdersPage;
-            const rows = payload.data ?? [];
-            for (const row of rows) {
-                if (row.id === undefined || row.id === null) continue;
-                const attrs = row.attributes ?? {};
-                const status = typeof attrs.status === "string" ? attrs.status : "";
-                const total = typeof attrs.total === "number" ? attrs.total : 0;
-                const customerId =
-                    typeof attrs.customer_id === "number" ? attrs.customer_id : Number.NaN;
-                orders.push({ id: String(row.id), status, totalCents: total, customerId });
-            }
-            const next = payload.links?.next;
-            nextUrl = typeof next === "string" && next.length > 0 ? next : null;
-        }
-        return orders;
-    }
-
-    private async refundOrder(orderId: string): Promise<{ id: string; totalCents: number }> {
-        const response = await this.fetcher(
-            `${LS_API_BASE}/v1/orders/${encodeURIComponent(orderId)}/refund`,
-            {
-                method: "POST",
-                headers: {
-                    Authorization: `Bearer ${this.apiKey}`,
-                    Accept: JSON_API_CONTENT_TYPE,
-                    "Content-Type": JSON_API_CONTENT_TYPE,
-                },
-            },
-        );
-        if (!response.ok) {
-            const errorText = await response.text().catch(() => "");
-            throw new Error(
-                `lemonsqueezy.refundAllOrders refund failed for order ${orderId}: ${response.status} ${errorText}`,
-            );
-        }
-        const payload = (await response.json()) as {
-            data?: { id?: string | number; attributes?: { total?: number } };
-        };
-        const id = payload.data?.id !== undefined ? String(payload.data.id) : orderId;
-        const total = payload.data?.attributes?.total ?? 0;
-        return { id, totalCents: total };
-    }
-
-    async cancelSubscription(input: { subscriptionId: string }): Promise<void> {
-        const response = await this.fetcher(
-            `${LS_API_BASE}/v1/subscriptions/${encodeURIComponent(input.subscriptionId)}`,
-            {
-                method: "DELETE",
-                headers: {
-                    Authorization: `Bearer ${this.apiKey}`,
-                    Accept: JSON_API_CONTENT_TYPE,
-                },
-            },
-        );
-        if (response.ok) return;
-        // Idempotency: a 404 means the subscription is already gone, and LS
-        // returns a 4xx like 422 with a body that explicitly says the
-        // subscription is already cancelled. Both branches are safe no-ops
-        // because the desired state is "cancelled".
-        if (response.status === 404) return;
-        const errorText = await response.text().catch(() => "");
-        if (
-            response.status >= 400 &&
-            response.status < 500 &&
-            /already\s*cancell?ed/i.test(errorText)
-        ) {
-            return;
-        }
-        throw new Error(`lemonsqueezy.cancelSubscription failed: ${response.status} ${errorText}`);
-    }
-
     async verifyCredentials(): Promise<VerifyCredentialsResult> {
         // `/v1/users/me` is the cheapest authenticated read: it touches no
         // store data and exists on every LS account. A 401/403 means the key
@@ -331,18 +196,6 @@ export class LemonSqueezyApiAdapter implements PaymentProviderAdapter {
         const errorText = await response.text().catch(() => "");
         throw new Error(`lemonsqueezy.verifyCredentials failed: ${response.status} ${errorText}`);
     }
-}
-
-interface LemonSqueezyOrdersPage {
-    readonly data?: ReadonlyArray<{
-        readonly id?: string | number;
-        readonly attributes?: {
-            readonly status?: string;
-            readonly total?: number;
-            readonly customer_id?: number;
-        };
-    }>;
-    readonly links?: { readonly next?: string | null };
 }
 
 interface LemonSqueezyWebhookPayload {

@@ -2,37 +2,59 @@
  * Workspace event-bundle usage panel.
  *
  * The 5M events/month bundle is a fixed fair-use cap with flat pricing —
- * there's nothing to configure. This shows the current cycle's usage so
- * operators can see where they stand against the cap. Past it, tracking
- * keeps working and we reach out; ingest is never blocked.
+ * there's nothing to configure. This shows the current cycle's usage as a
+ * meter so operators can see where they stand against the cap. Past it,
+ * tracking keeps working and we reach out; ingest is never blocked.
  */
 
-import { formatCount } from "@/lib/format";
+import { ShareBar } from "@/components/ui/share-bar";
+import type { EventBundleBannerLevel } from "@/lib/event-bundle/counter";
+import { formatCount, formatDashboardPercent } from "@/lib/format";
+import { cn } from "@/lib/utils";
 
 interface EventBundleFormProps {
     readonly eventsCount: number;
     readonly bundleEvents: number;
+    readonly level: EventBundleBannerLevel;
 }
 
-export function EventBundleForm({ eventsCount, bundleEvents }: EventBundleFormProps) {
+const FILL_CLASS: Record<EventBundleBannerLevel, string> = {
+    none: "bg-success/70",
+    approaching: "bg-warning",
+    exhausted: "bg-destructive",
+};
+
+const PERCENT_CLASS: Record<EventBundleBannerLevel, string> = {
+    none: "text-muted-foreground",
+    approaching: "text-warning",
+    exhausted: "text-destructive",
+};
+
+export function EventBundleForm({ eventsCount, bundleEvents, level }: EventBundleFormProps) {
     const remaining = Math.max(0, bundleEvents - eventsCount);
+    const ratio = bundleEvents > 0 ? eventsCount / bundleEvents : 0;
 
     return (
-        <dl className="grid grid-cols-3 gap-3 rounded-md border border-border bg-muted/30 p-3 text-sm">
-            <Stat label="This cycle" value={`${formatCount(eventsCount)} events`} />
-            <Stat label="Fair-use cap" value={`${formatCount(bundleEvents)} events`} />
-            <Stat label="Cap left" value={formatCount(remaining)} />
-        </dl>
-    );
-}
-
-function Stat({ label, value }: { readonly label: string; readonly value: string }) {
-    return (
-        <div>
-            <dt className="font-mono text-[10.5px] uppercase tracking-[0.08em] text-muted-foreground/70">
-                {label}
-            </dt>
-            <dd className="mt-1 text-sm font-medium tabular-nums">{value}</dd>
+        <div className="space-y-2.5">
+            <div className="flex items-baseline justify-between gap-2 font-mono text-sm tabular-nums">
+                <span>
+                    <span className="font-semibold">{formatCount(eventsCount)}</span>
+                    <span className="text-muted-foreground"> / {formatCount(bundleEvents)} events</span>
+                </span>
+                <span className={cn("text-xs font-medium", PERCENT_CLASS[level])}>
+                    {formatDashboardPercent(ratio)}
+                </span>
+            </div>
+            <ShareBar
+                percent={ratio * 100}
+                fillClassName={FILL_CLASS[level]}
+                ariaLabel={`Event bundle usage: ${formatCount(eventsCount)} of ${formatCount(bundleEvents)} events this cycle`}
+                className="h-2"
+            />
+            <p className="text-xs text-muted-foreground">
+                {formatCount(remaining)} left this cycle. Past the cap we reach out; ingest never
+                stops.
+            </p>
         </div>
     );
 }

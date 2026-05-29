@@ -17,11 +17,6 @@ export type {
     PaymentProviderAdapter,
     PortalSessionInput,
     PortalSessionResult,
-    RefundAllOrdersInput,
-    RefundAllOrdersResult,
-    RequestRefundStatus,
-    RequestRefundUseCaseInput,
-    RequestRefundUseCaseResult,
     VerifyCredentialsResult,
     VerifyEventInput,
     WebhookEvent,
@@ -49,4 +44,3 @@ export {
 } from "./get-billing-portal-url.usecase";
 export { handleWebhookUseCase } from "./handle-webhook.usecase";
 export { LemonSqueezyApiAdapter } from "./lemonsqueezy.adapter";
-export { requestRefundUseCase } from "./request-refund.usecase";

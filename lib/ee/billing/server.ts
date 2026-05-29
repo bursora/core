@@ -22,12 +22,7 @@ import { DrizzleWorkspaceBillingRepository } from "./drizzle-workspace-billing.r
 import { getBillingPortalUrlUseCase } from "./get-billing-portal-url.usecase";
 import { handleWebhookUseCase } from "./handle-webhook.usecase";
 import { LemonSqueezyApiAdapter } from "./lemonsqueezy.adapter";
-import { requestRefundUseCase } from "./request-refund.usecase";
-import type {
-    BillingDeps,
-    PaymentProviderAdapter,
-    RequestRefundUseCaseResult,
-} from "./types";
+import type { BillingDeps, PaymentProviderAdapter } from "./types";
 import type {
     WorkspaceBillingRecord,
     WorkspaceBillingRepository,
@@ -201,22 +196,6 @@ export async function runBillingWebhookPrune(now: Date): Promise<{ rowsPruned: n
     const deps = billingDeps();
     const rowsPruned = await deps.webhookEvents.pruneOlderThan(billingWebhookPruneCutoff(now));
     return { rowsPruned };
-}
-
-/**
- * Execute the money-back guarantee. Refunds every paid order on file,
- * cancels the subscription at end-of-period, marks the workspace canceled
- * in the DB, and clears the eligibility window so the action is single-use.
- */
-export async function requestRefund(input: {
-    workspaceId: string;
-}): Promise<RequestRefundUseCaseResult> {
-    const deps = billingDeps();
-    return requestRefundUseCase({
-        workspaceId: input.workspaceId,
-        provider: deps.provider,
-        workspaces: deps.workspaces,
-    });
 }
 
 export type {

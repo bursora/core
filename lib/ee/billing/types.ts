@@ -21,8 +21,6 @@ export type {
     PaymentProviderAdapter,
     PortalSessionInput,
     PortalSessionResult,
-    RefundAllOrdersInput,
-    RefundAllOrdersResult,
     VerifyCredentialsResult,
     VerifyEventInput,
     WebhookEvent,
@@ -59,19 +57,4 @@ export interface HandleWebhookUseCaseInput {
 export interface HandleWebhookUseCaseResult {
     readonly verified: boolean;
     readonly deduped?: boolean;
-}
-
-export interface RequestRefundUseCaseInput {
-    readonly workspaceId: string;
-    readonly now?: Date;
-    readonly provider: PaymentProviderAdapter;
-    readonly workspaces: WorkspaceBillingRepository;
-}
-
-export type RequestRefundStatus = "refunded" | "not_eligible" | "no_invoices";
-
-export interface RequestRefundUseCaseResult {
-    readonly status: RequestRefundStatus;
-    readonly refundedOrderIds: readonly string[];
-    readonly totalCents: number;
 }

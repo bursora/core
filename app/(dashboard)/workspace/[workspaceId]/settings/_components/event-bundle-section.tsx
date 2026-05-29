@@ -15,8 +15,12 @@ interface EventBundleSectionProps {
 export async function EventBundleSection({ workspaceId }: EventBundleSectionProps) {
     const status = await readEventBundleStatus(workspaceId);
     return (
-        <DashboardSection label="Event bundle" sublabel="5M events / month included">
-            <EventBundleForm eventsCount={status.eventsCount} bundleEvents={status.bundleEvents} />
+        <DashboardSection label="Event bundle" sublabel="this cycle">
+            <EventBundleForm
+                eventsCount={status.eventsCount}
+                bundleEvents={status.bundleEvents}
+                level={status.bannerLevel}
+            />
         </DashboardSection>
     );
 }

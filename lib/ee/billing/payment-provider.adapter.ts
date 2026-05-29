@@ -68,15 +68,6 @@ export interface VerifyEventInput {
     readonly signatureHeader: string;
 }
 
-export interface RefundAllOrdersInput {
-    readonly customerId: string;
-}
-
-export interface RefundAllOrdersResult {
-    readonly refundedOrderIds: readonly string[];
-    readonly totalCents: number;
-}
-
 /**
  * Outcome of a boot-time credential probe. `ok` means the configured key
  * authenticated against the provider. `unauthorized` means the provider
@@ -99,7 +90,6 @@ export type VerifyCredentialsResult =
  * Operations:
  *   - Checkout/Portal session creation
  *   - Webhook signature verification + event projection
- *   - Refund-all + subscription cancellation (money-back guarantee)
  */
 export interface PaymentProviderAdapter {
     createCheckoutSession(input: CheckoutSessionInput): Promise<CheckoutSessionResult>;
@@ -110,22 +100,6 @@ export interface PaymentProviderAdapter {
      * Throws on signature mismatch — the route turns the throw into a 400.
      */
     verifyAndParseEvent(input: VerifyEventInput): WebhookEvent;
-    /**
-     * Refund every paid order belonging to `customerId`. Idempotent:
-     * orders already fully refunded are skipped. Returns the ids of
-     * orders that produced a non-zero refund plus the summed refunded
-     * amount in cents. Used by the money-back guarantee path.
-     */
-    refundAllOrders(input: RefundAllOrdersInput): Promise<RefundAllOrdersResult>;
-    /**
-     * Cancel a subscription at the end of the current billing period.
-     * Lemon Squeezy does not expose an immediate-cancel primitive; the
-     * `DELETE /v1/subscriptions/{id}` call marks the subscription canceled
-     * but lets the customer keep access until period end. Backs the
-     * money-back guarantee path alongside `refundAllOrders`.
-     * Idempotent: already-canceled subscriptions are treated as a no-op.
-     */
-    cancelSubscription(input: { subscriptionId: string }): Promise<void>;
     /**
      * Make one cheap authenticated call to confirm the configured API key
      * works. Returns `{ ok: true }` on success and

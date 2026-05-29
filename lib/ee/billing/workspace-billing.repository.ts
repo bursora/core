@@ -5,9 +5,8 @@
  * shared.
  *
  * `subscriptionStatus` mirrors the upstream provider's subscription state
- * verbatim (`active`, `trialing`, `past_due`, `canceled`, `unpaid`,
- * `incomplete`, `incomplete_expired`). `null` means the workspace has
- * never opened Checkout.
+ * verbatim (`active`, `past_due`, `unpaid`, `paused`, `cancelled`,
+ * `expired`). `null` means the workspace has never opened Checkout.
  *
  * `refundEligibleUntil` is set at checkout to signup + 30 days. UI reads
  * this to render the "money-back" badge; the refund use case clears it once

@@ -75,14 +75,12 @@ export default async function SettingsPage({ params, searchParams }: SettingsPag
                     ...(isCloud && BillingSection
                         ? {
                               billing: (
-                                  <div className="space-y-6">
-                                      <BillingSection
-                                          workspaceId={workspaceId}
-                                          status={billingStatus}
-                                          isOwner={membership.role === "owner"}
-                                      />
+                                  <BillingSection
+                                      workspaceId={workspaceId}
+                                      status={billingStatus}
+                                  >
                                       <EventBundleSection workspaceId={workspaceId} />
-                                  </div>
+                                  </BillingSection>
                               ),
                           }
                         : {}),

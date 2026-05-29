@@ -8,14 +8,25 @@ import * as Sentry from "@sentry/nextjs";
 const dsn = process.env.SENTRY_DSN;
 
 export function register(): void {
-    if (!dsn) return;
     const runtime = process.env.NEXT_RUNTIME;
     if (runtime !== "nodejs" && runtime !== "edge") return;
-    Sentry.init({
-        dsn,
-        // Errors only. No performance tracing; keeps us inside the free tier.
-        tracesSampleRate: 0,
-    });
+
+    if (dsn) {
+        Sentry.init({
+            dsn,
+            // Errors only. No performance tracing; keeps us inside the free tier.
+            tracesSampleRate: 0,
+        });
+    }
+
+    // Scheduled jobs run in-process on the long-lived Node.js server. Dynamic
+    // import keeps croner out of the edge bundle; production-only so dev
+    // restarts never fire provider syncs.
+    if (runtime === "nodejs" && process.env.NODE_ENV === "production") {
+        void import("@/lib/cron/scheduler")
+            .then((m) => m.startCronScheduler())
+            .catch((error: unknown) => console.error("cron.start.error", error));
+    }
 }
 
 export const onRequestError = Sentry.captureRequestError;

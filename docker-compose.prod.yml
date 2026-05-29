@@ -1,6 +1,6 @@
 # Self-host only. Bursora Cloud uses a shared host-level bun container.
 #
-# Bursora production compose. Brings up the app + Caddy + cron sidecar.
+# Bursora production compose. Brings up the app + Caddy.
 #
 # Expects an external Postgres reachable on the shared `develop` docker
 # network. DATABASE_URL in .env.prod must point at it by container DNS,
@@ -13,7 +13,7 @@
 # Usage (run from the umbrella repo root, which holds core/ and sdk/):
 #   docker compose -f core/docker-compose.prod.yml build --pull bursora-app
 #   docker compose -f core/docker-compose.prod.yml run --rm bursora-app bun run db:migrate
-#   docker compose -f core/docker-compose.prod.yml up -d bursora-app caddy bursora-cron
+#   docker compose -f core/docker-compose.prod.yml up -d bursora-app caddy
 
 services:
     bursora-app:
@@ -45,28 +45,6 @@ services:
             - develop
         depends_on:
             - bursora-app
-
-    # Daily pricing-sync trigger. Tiny alpine + busybox crond curls the
-    # internal route over the `develop` network. Cron output lands on
-    # stdout/stderr so `docker logs bursora-cron` surfaces every run.
-    # `$$CRON_SECRET` escapes compose interpolation so the shell expands
-    # it at container start using the value loaded from `.env.prod`.
-    bursora-cron:
-        image: alpine:3
-        restart: unless-stopped
-        env_file:
-            - ./.env.prod
-        networks:
-            - develop
-        depends_on:
-            - bursora-app
-        command:
-            - sh
-            - -c
-            - |
-                apk add --no-cache curl >/dev/null && \
-                echo "0 4 * * * curl --fail-with-body --silent --show-error --max-time 60 -H \"Authorization: Bearer $$CRON_SECRET\" http://bursora-app:3000/api/cron/pricing-sync > /proc/1/fd/1 2>&1" > /etc/crontabs/root && \
-                crond -f -l 2 -L /dev/stderr
 
 volumes:
     caddy_data: {}

@@ -1,7 +1,7 @@
 /**
  * Public types for the billing feature.
  *
- * Implementations live alongside in `app/lib/billing/`. The use cases
+ * Implementations live alongside in `lib/ee/billing/`. The use cases
  * depend on these interfaces; the LemonSqueezyApiAdapter and Drizzle
  * repositories supply the production wiring.
  *
@@ -10,13 +10,10 @@
  * convenience.
  */
 
+import type { PlanReadRepository } from "@/lib/plans/plan";
 import type { BillingWebhookEventStore } from "./billing-webhook-event.store";
 import type { PaymentProviderAdapter } from "./payment-provider.adapter";
-import type { TrackedSpendRepository } from "./tracked-spend.repository";
-import type {
-    EventBundleRollupRepository,
-    WorkspaceBillingRepository,
-} from "./workspace-billing.repository";
+import type { WorkspaceBillingRepository } from "./workspace-billing.repository";
 
 export type {
     CheckoutSessionInput,
@@ -26,8 +23,6 @@ export type {
     PortalSessionResult,
     RefundAllOrdersInput,
     RefundAllOrdersResult,
-    ReportUsageInput,
-    ReportUsageResult,
     VerifyCredentialsResult,
     VerifyEventInput,
     WebhookEvent,
@@ -38,9 +33,7 @@ export interface BillingDeps {
     readonly provider: PaymentProviderAdapter;
     readonly workspaces: WorkspaceBillingRepository;
     readonly webhookEvents: BillingWebhookEventStore;
-    readonly trackedSpend: TrackedSpendRepository;
-    readonly eventBundleRollup: EventBundleRollupRepository;
-    readonly variantIdTeam: string;
+    readonly plans: PlanReadRepository;
     readonly appUrl: string;
 }
 
@@ -66,72 +59,6 @@ export interface HandleWebhookUseCaseInput {
 export interface HandleWebhookUseCaseResult {
     readonly verified: boolean;
     readonly deduped?: boolean;
-}
-
-/**
- * Inputs to the pure bill calculator. Lives in the public types module
- * so test code and dashboards can construct expected results without
- * pulling the cloud overlay in.
- */
-export interface BillCalculationInput {
-    readonly trackedSpendCents: number;
-    readonly eventsCount: number;
-}
-
-export interface BillCalculationResult {
-    readonly percentageCents: number;
-    readonly overageCents: number;
-    readonly totalCents: number;
-}
-
-/** One workspace's tally for a billing month. */
-export interface BillUsageRollup {
-    readonly workspaceId: string;
-    /** YYYY-MM. */
-    readonly month: string;
-    readonly trackedSpendCents: number;
-    readonly eventsCount: number;
-    readonly percentageCents: number;
-    readonly overageCents: number;
-    readonly totalCents: number;
-    /** Provider invoice id when the rollup pushed one; null when the bill was $0
-     * (impossible given the floor) or the push failed and was retried later. */
-    readonly invoiceId: string | null;
-}
-
-/** Live month-to-date estimate shown in the settings UI. */
-export interface NextBillEstimate {
-    /** YYYY-MM of the current cycle. */
-    readonly month: string;
-    readonly trackedSpendCents: number;
-    readonly eventsCount: number;
-    readonly percentageCents: number;
-    readonly overageCents: number;
-    readonly totalCents: number;
-}
-
-export interface RollupBillUseCaseInput {
-    /** Reference date inside the month being billed. The use case derives
-     * the [periodStart, periodEnd) window in UTC. */
-    readonly now: Date;
-    readonly provider: PaymentProviderAdapter;
-    readonly workspaces: WorkspaceBillingRepository;
-    readonly trackedSpend: TrackedSpendRepository;
-    readonly eventBundleRollup: EventBundleRollupRepository;
-}
-
-export interface RollupBillUseCaseResult {
-    readonly month: string;
-    readonly processed: number;
-    readonly skipped: number;
-    readonly failed: number;
-}
-
-export interface NextBillEstimateUseCaseInput {
-    readonly workspaceId: string;
-    readonly now: Date;
-    readonly trackedSpend: TrackedSpendRepository;
-    readonly eventBundleRollup: EventBundleRollupRepository;
 }
 
 export interface RequestRefundUseCaseInput {

@@ -1,45 +1,34 @@
 /**
- * Behavioral tests for the event-bundle middleware halves:
- *   - disabled (self-host) → both halves no-op
- *   - no hard cap → pre-write check allows
- *   - hard cap not yet reached → pre-write check allows
- *   - hard cap would be exceeded → pre-write check returns deny + bundle reason
- *   - record bumps the hot counter AND the cold rollup with absolute values
+ * Behavioral tests for the event-bundle recording path:
+ *   - disabled (self-host) → no writes
+ *   - record bumps the hot counter AND the cold rollup with absolute totals
  *   - record skips on zero events
+ *   - cold writes batch (interval + per-batch event threshold)
+ *
+ * Ingest never blocks on the bundle: the fair-use cap is alert-only, so the
+ * middleware has no reject path to test.
  */
 
 import { BUNDLE_EVENTS_PER_MONTH } from "@/lib/event-bundle/counter";
 import { InMemoryEventBundleCounterStore } from "@/lib/event-bundle/in-memory.adapter";
 import {
-    checkEventBundleHardCap,
     recordEventBundleUsage,
     resetEventBundleColdWriteTracker,
 } from "@/lib/event-bundle/middleware";
 import { setEventBundleDepsForTesting, type EventBundleDeps } from "@/lib/event-bundle/server";
-import type {
-    EventBundleMonthRollup,
-    EventBundleSettings,
-    EventBundleUsageRepository,
-} from "@/lib/event-bundle/types";
+import type { EventBundleMonthRollup, EventBundleUsageRepository } from "@/lib/event-bundle/types";
 import { afterEach, describe, expect, test } from "bun:test";
 
 const WORKSPACE = "11111111-2222-3333-4444-555555555555";
 const NOW = new Date("2025-06-15T12:00:00.000Z");
 const MONTH = "2025-06";
 
-const fakeSettings = (row: EventBundleSettings | null) => ({
-    async findByWorkspaceId() {
-        return row;
-    },
-    async upsert() {},
-});
-
 const fakeUsage = (
     initial?: EventBundleMonthRollup,
 ): EventBundleUsageRepository & {
-    readonly writes: { eventsCount: number; overageCents: number }[];
+    readonly writes: { eventsCount: number }[];
 } => {
-    const writes: { eventsCount: number; overageCents: number }[] = [];
+    const writes: { eventsCount: number }[] = [];
     let row: EventBundleMonthRollup | null = initial ?? null;
     return {
         writes,
@@ -47,8 +36,8 @@ const fakeUsage = (
             return row;
         },
         async upsertMonth(input) {
-            row = { eventsCount: input.eventsCount, overageCents: input.overageCents };
-            writes.push({ eventsCount: input.eventsCount, overageCents: input.overageCents });
+            row = { eventsCount: input.eventsCount };
+            writes.push({ eventsCount: input.eventsCount });
         },
     };
 };
@@ -56,93 +45,9 @@ const fakeUsage = (
 const baseDeps = (overrides: Partial<EventBundleDeps> = {}): EventBundleDeps => ({
     enabled: true,
     counter: new InMemoryEventBundleCounterStore(),
-    settings: fakeSettings(null),
     usage: fakeUsage(),
     now: () => NOW,
     ...overrides,
-});
-
-describe("checkEventBundleHardCap", () => {
-    afterEach(() => setEventBundleDepsForTesting(null));
-
-    test("disabled (self-host) → allow regardless of cap", async () => {
-        setEventBundleDepsForTesting(
-            baseDeps({
-                enabled: false,
-                settings: fakeSettings({ hardCapUsdCents: 1 }),
-            }),
-        );
-        const decision = await checkEventBundleHardCap({
-            workspaceId: WORKSPACE,
-            eventCount: 1_000_000,
-        });
-        expect(decision.allowed).toBe(true);
-    });
-
-    test("no hard cap row → allow", async () => {
-        setEventBundleDepsForTesting(baseDeps());
-        const decision = await checkEventBundleHardCap({
-            workspaceId: WORKSPACE,
-            eventCount: 10_000_000,
-        });
-        expect(decision.allowed).toBe(true);
-    });
-
-    test("null hard cap on existing row → allow", async () => {
-        setEventBundleDepsForTesting(
-            baseDeps({ settings: fakeSettings({ hardCapUsdCents: null }) }),
-        );
-        const decision = await checkEventBundleHardCap({
-            workspaceId: WORKSPACE,
-            eventCount: 10_000_000,
-        });
-        expect(decision.allowed).toBe(true);
-    });
-
-    test("under cap → allow", async () => {
-        const counter = new InMemoryEventBundleCounterStore();
-        // Seed at bundle exactly → next 1000 events = 30 cents, under $5 cap.
-        await counter.seedMonth({
-            workspaceId: WORKSPACE,
-            month: MONTH,
-            value: BUNDLE_EVENTS_PER_MONTH,
-        });
-        setEventBundleDepsForTesting(
-            baseDeps({
-                counter,
-                settings: fakeSettings({ hardCapUsdCents: 500 }),
-            }),
-        );
-
-        const decision = await checkEventBundleHardCap({
-            workspaceId: WORKSPACE,
-            eventCount: 1_000,
-        });
-        expect(decision.allowed).toBe(true);
-    });
-
-    test("would exceed cap → deny with bundle reason", async () => {
-        const counter = new InMemoryEventBundleCounterStore();
-        // Already at bundle + 5000 → already 150 cents accrued, well past $1 cap.
-        await counter.seedMonth({
-            workspaceId: WORKSPACE,
-            month: MONTH,
-            value: BUNDLE_EVENTS_PER_MONTH + 5_000,
-        });
-        setEventBundleDepsForTesting(
-            baseDeps({
-                counter,
-                settings: fakeSettings({ hardCapUsdCents: 100 }),
-            }),
-        );
-
-        const decision = await checkEventBundleHardCap({
-            workspaceId: WORKSPACE,
-            eventCount: 1,
-        });
-        expect(decision.allowed).toBe(false);
-        expect(decision.reason).toBe("bundle");
-    });
 });
 
 describe("recordEventBundleUsage", () => {
@@ -182,12 +87,8 @@ describe("recordEventBundleUsage", () => {
         const hot = await counter.readMonth({ workspaceId: WORKSPACE, month: MONTH });
         expect(hot).toBe(BUNDLE_EVENTS_PER_MONTH + 2_000);
 
-        // 2000 overage events = 60 cents.
         expect(usage.writes).toHaveLength(1);
-        expect(usage.writes[0]).toEqual({
-            eventsCount: BUNDLE_EVENTS_PER_MONTH + 2_000,
-            overageCents: 60,
-        });
+        expect(usage.writes[0]).toEqual({ eventsCount: BUNDLE_EVENTS_PER_MONTH + 2_000 });
     });
 
     test("batches cold writes: small increments between flushes don't hit the rollup", async () => {

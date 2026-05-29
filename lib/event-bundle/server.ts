@@ -18,23 +18,16 @@ import {
     BUNDLE_EVENTS_PER_MONTH,
     bannerLevel,
     monthKey,
-    overageCentsAt,
     type EventBundleBannerLevel,
 } from "./counter";
-import { drizzleEventBundleSettingsRepository } from "./drizzle-settings.repository";
 import { drizzleEventBundleUsageRepository } from "./drizzle-usage.repository";
 import { InMemoryEventBundleCounterStore } from "./in-memory.adapter";
 import { RedisEventBundleCounterStore } from "./redis.adapter";
-import type {
-    EventBundleCounterStore,
-    EventBundleSettingsRepository,
-    EventBundleUsageRepository,
-} from "./types";
+import type { EventBundleCounterStore, EventBundleUsageRepository } from "./types";
 
 export interface EventBundleDeps {
     readonly enabled: boolean;
     readonly counter: EventBundleCounterStore;
-    readonly settings: EventBundleSettingsRepository;
     readonly usage: EventBundleUsageRepository;
     readonly now: () => Date;
 }
@@ -55,7 +48,6 @@ export function eventBundleDeps(): EventBundleDeps {
     return {
         enabled,
         counter,
-        settings: drizzleEventBundleSettingsRepository(db()),
         usage: drizzleEventBundleUsageRepository(db()),
         now: () => new Date(),
     };
@@ -64,18 +56,15 @@ export function eventBundleDeps(): EventBundleDeps {
 export interface EventBundleStatus {
     readonly enabled: boolean;
     readonly eventsCount: number;
-    readonly overageCents: number;
     readonly bundleEvents: number;
-    readonly hardCapUsdCents: number | null;
-    readonly hardCapHit: boolean;
     readonly bannerLevel: EventBundleBannerLevel;
     readonly month: string;
 }
 
 /**
- * Dashboard read: returns the live counter and accrued overage for the
- * current calendar month, plus the workspace's hard-cap setting (or null
- * when none configured) so the settings UI can render a complete view.
+ * Dashboard read: returns the live counter for the current calendar month
+ * against the fixed fair-use bundle so the banner and settings UI can render
+ * a complete view.
  *
  * Returns `enabled: false` on self-host so the caller can hide the banner
  * and the settings section without a separate `IS_CLOUD` check.
@@ -87,18 +76,14 @@ export async function readEventBundleStatus(workspaceId: string): Promise<EventB
         return {
             enabled: false,
             eventsCount: 0,
-            overageCents: 0,
             bundleEvents: BUNDLE_EVENTS_PER_MONTH,
-            hardCapUsdCents: null,
-            hardCapHit: false,
             bannerLevel: "none",
             month,
         };
     }
 
-    const [hot, settings, cold] = await Promise.all([
+    const [hot, cold] = await Promise.all([
         deps.counter.readMonth({ workspaceId, month }),
-        deps.settings.findByWorkspaceId(workspaceId),
         deps.usage.findMonth({ workspaceId, month }),
     ]);
 
@@ -110,28 +95,11 @@ export async function readEventBundleStatus(workspaceId: string): Promise<EventB
         await deps.counter.seedMonth({ workspaceId, month, value: cold.eventsCount });
     }
 
-    const hardCapUsdCents = settings?.hardCapUsdCents ?? null;
-    const overageCents = overageCentsAt(eventsCount);
-    const hardCapHit = hardCapUsdCents !== null && overageCents >= hardCapUsdCents;
     return {
         enabled: true,
         eventsCount,
-        overageCents,
         bundleEvents: BUNDLE_EVENTS_PER_MONTH,
-        hardCapUsdCents,
-        hardCapHit,
-        bannerLevel: bannerLevel({ eventsCount, hardCapHit }),
+        bannerLevel: bannerLevel(eventsCount),
         month,
     };
-}
-
-export async function saveEventBundleSettings(input: {
-    readonly workspaceId: string;
-    readonly hardCapUsdCents: number | null;
-}): Promise<void> {
-    const deps = eventBundleDeps();
-    await deps.settings.upsert({
-        workspaceId: input.workspaceId,
-        hardCapUsdCents: input.hardCapUsdCents,
-    });
 }

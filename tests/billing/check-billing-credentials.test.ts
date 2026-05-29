@@ -26,8 +26,7 @@ import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import { installCloudEnv } from "../support/with-cloud-env";
 import { FakePaymentProviderAdapter } from "./fakes/fake-payment-provider.adapter";
 import { InMemoryBillingWebhookEventStore } from "./fakes/in-memory-billing-webhook-event.store";
-import { InMemoryEventBundleRollupRepository } from "./fakes/in-memory-event-bundle-rollup.repository";
-import { InMemoryTrackedSpendRepository } from "./fakes/in-memory-tracked-spend.repository";
+import { InMemoryPlanRepository } from "./fakes/in-memory-plan.repository";
 import { InMemoryWorkspaceBillingRepository } from "./fakes/in-memory-workspace-billing.repository";
 
 installCloudEnv();
@@ -70,9 +69,7 @@ describe("checkBillingCredentials memoization", () => {
             provider,
             workspaces: new InMemoryWorkspaceBillingRepository(),
             webhookEvents: new InMemoryBillingWebhookEventStore(),
-            trackedSpend: new InMemoryTrackedSpendRepository(),
-            eventBundleRollup: new InMemoryEventBundleRollupRepository(),
-            variantIdTeam: "variant_team",
+            plans: new InMemoryPlanRepository(),
             appUrl: "https://app.test",
         });
     });

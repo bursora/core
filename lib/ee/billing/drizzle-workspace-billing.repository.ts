@@ -32,15 +32,6 @@ export class DrizzleWorkspaceBillingRepository implements WorkspaceBillingReposi
         return row ? toRecord(row) : null;
     }
 
-    async findByInvoiceRef(invoiceRef: string): Promise<WorkspaceBillingRecord | null> {
-        const [row] = await this.db
-            .select()
-            .from(schema.workspaces)
-            .where(eq(schema.workspaces.lastInvoiceRef, invoiceRef))
-            .limit(1);
-        return row ? toRecord(row) : null;
-    }
-
     async update(input: WorkspaceBillingUpdate): Promise<void> {
         const set: Partial<typeof schema.workspaces.$inferInsert> = {};
         if (input.providerCustomerId !== undefined) {
@@ -58,15 +49,6 @@ export class DrizzleWorkspaceBillingRepository implements WorkspaceBillingReposi
         if (input.refundEligibleUntil !== undefined) {
             set.refundEligibleUntil = input.refundEligibleUntil;
         }
-        if (input.lastInvoiceRef !== undefined) {
-            set.lastInvoiceRef = input.lastInvoiceRef;
-        }
-        if (input.lastBilledMonth !== undefined) {
-            set.lastBilledMonth = input.lastBilledMonth;
-        }
-        if (input.trialEndsAt !== undefined) {
-            set.trialEndsAt = input.trialEndsAt;
-        }
         if (Object.keys(set).length === 0) return;
         await this.db
             .update(schema.workspaces)
@@ -83,8 +65,5 @@ function toRecord(row: Row): WorkspaceBillingRecord {
         subscriptionStatus: row.subscriptionStatus ?? null,
         subscribedAt: row.subscribedAt ?? null,
         refundEligibleUntil: row.refundEligibleUntil ?? null,
-        lastInvoiceRef: row.lastInvoiceRef ?? null,
-        lastBilledMonth: row.lastBilledMonth ?? null,
-        trialEndsAt: row.trialEndsAt ?? null,
     };
 }

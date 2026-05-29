@@ -124,7 +124,6 @@ const setupHarness = (opts: { knownKey?: boolean } = {}): Harness => {
     setEventBundleDepsForTesting({
         enabled: true,
         counter: bundleCounter,
-        settings: { async findByWorkspaceId() { return null; }, async upsert() {} },
         usage: { async findMonth() { return null; }, async upsertMonth() {} },
         now: () => new Date("2025-05-10T12:00:00.000Z"),
     });

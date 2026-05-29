@@ -47,7 +47,7 @@ public/
 
 ## Boundaries
 
-`bursora/lib/ee/` is source-available, not Apache 2.0. Only an allowlist of callers may import `@/lib/ee/*` (enforced by ESLint `no-restricted-imports`): the settings page, the Lemon Squeezy webhook route, the billing-rollup cron route, EE-scoped tests, and code inside `lib/ee/`.
+`bursora/lib/ee/` is source-available, not Apache 2.0. Only an allowlist of callers may import `@/lib/ee/*` (enforced by ESLint `no-restricted-imports`): the settings page, the Lemon Squeezy webhook route, the billing-webhook-prune cron route, EE-scoped tests, and code inside `lib/ee/`.
 
 ## Self-host
 

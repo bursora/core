@@ -15,6 +15,18 @@
 
 import "server-only";
 
+/**
+ * Decision returned by the events-ingest spike check. Spike protection is the
+ * capacity guard on ingest (burst against the per-workspace 7-day baseline).
+ * The event-bundle fair-use cap is alert-only and never blocks, so it has no
+ * say here.
+ */
+export interface SpikeDecision {
+    readonly allowed: boolean;
+    /** Suggested wait before retrying. Only set on a deny. */
+    readonly retryAfterMs?: number;
+}
+
 export interface SpikeBucketIncrement {
     /** Pre-increment count inside the current minute. */
     readonly priorCount: number;

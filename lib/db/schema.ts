@@ -80,22 +80,15 @@ export const verification = pgTable("verification", {
 
 // --- workspaces ---------------------------------------------------------------
 // `provider_customer_id`, `provider_subscription_id`, `subscription_status`,
-// `subscribed_at`, `refund_eligible_until`, `last_invoice_ref`,
-// `last_billed_month`, and `trial_ends_at` are billing-owned columns that
-// live on the workspace row to keep the webhook handler's write a single
-// UPDATE. All are nullable: cloud workspaces that have never opened
-// Checkout and every self-host workspace leave them empty.
+// `subscribed_at` and `refund_eligible_until` are
+// billing-owned columns that live on the workspace row to keep the webhook
+// handler's write a single UPDATE. All are nullable: cloud workspaces that
+// have never opened Checkout and every self-host workspace leave them empty.
 // `subscription_status` mirrors the upstream provider's subscription
 // state verbatim (e.g. `active`, `past_due`, `canceled`, `trialing`).
 //
-// `subscribed_at` is set the first time Checkout completes; the rollup
-// cron uses it to pro-rate the first invoice. `refund_eligible_until` is
-// signup + 30 days — used by the UI to surface the money-back window.
-// `last_invoice_ref` carries the most recent invoice the rollup pushed
-// (deep-link target). `last_billed_month` (YYYY-MM) lets the cron skip
-// months it already invoiced after a retry. `trial_ends_at` carries the
-// provider-issued trial expiry for `trialing` subscriptions so the spend
-// aggregator knows whether the trial window is still open.
+// `subscribed_at` is set the first time Checkout completes. `refund_eligible_until`
+// is signup + 30 days — used by the UI to surface the money-back window.
 export const workspaces = pgTable(
     "workspaces",
     {
@@ -107,15 +100,9 @@ export const workspaces = pgTable(
         subscriptionStatus: text("subscription_status"),
         subscribedAt: timestamp("subscribed_at", { withTimezone: true }),
         refundEligibleUntil: timestamp("refund_eligible_until", { withTimezone: true }),
-        lastInvoiceRef: text("last_invoice_ref"),
-        lastBilledMonth: text("last_billed_month"),
-        trialEndsAt: timestamp("trial_ends_at", { withTimezone: true }),
         createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     },
-    (t) => [
-        uniqueIndex("workspaces_provider_customer_idx").on(t.providerCustomerId),
-        uniqueIndex("workspaces_last_invoice_ref_idx").on(t.lastInvoiceRef),
-    ],
+    (t) => [uniqueIndex("workspaces_provider_customer_idx").on(t.providerCustomerId)],
 );
 
 // --- workspace_members --------------------------------------------------------
@@ -499,24 +486,12 @@ export const billingWebhookEvents = pgTable("billing_webhook_events", {
     processedAt: timestamp("processed_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
-// --- workspace_event_bundle_settings -----------------------------------------
-// Per-workspace cloud event-bundle configuration. One row per workspace; absence
-// of a row means "no hard cap, default bundle policy". `hard_cap_usd_cents` is
-// nullable — null disables hard-capping, a non-null value tells the middleware
-// to reject events once accrued overage hits that amount this cycle.
-export const workspaceEventBundleSettings = pgTable("workspace_event_bundle_settings", {
-    workspaceId: uuid("workspace_id")
-        .primaryKey()
-        .references(() => workspaces.id, { onDelete: "cascade" }),
-    hardCapUsdCents: integer("hard_cap_usd_cents"),
-    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-});
-
 // --- workspace_event_bundle_usage --------------------------------------------
-// Per-(workspace, calendar month) rollup. Used both as the cold store for the
-// Redis counter and as the canonical billing source for overage. The middleware
-// writes this row at increment time so a cold cache after Redis loss still
-// reflects committed usage. `month` is the first day of the cycle in UTC.
+// Per-(workspace, calendar month) rollup. Cold store for the Redis fair-use
+// counter; the middleware writes this row at increment time so a cold cache
+// after Redis loss still reflects committed usage. `month` is the first day of
+// the cycle in UTC. The 5M-events/month bundle is a fixed fair-use cap — no
+// overage is billed, so the rollup only carries the event count.
 export const workspaceEventBundleUsage = pgTable(
     "workspace_event_bundle_usage",
     {
@@ -525,7 +500,6 @@ export const workspaceEventBundleUsage = pgTable(
             .references(() => workspaces.id, { onDelete: "cascade" }),
         month: text("month").notNull(), // YYYY-MM
         eventsCount: integer("events_count").notNull().default(0),
-        overageCents: integer("overage_cents").notNull().default(0),
         updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
     },
     (t) => [primaryKey({ columns: [t.workspaceId, t.month] })],
@@ -554,4 +528,27 @@ export const workspaceSpikeProtectionSettings = pgTable("workspace_spike_protect
 export const pricingSyncState = pgTable("pricing_sync_state", {
     id: integer("id").primaryKey(),
     lastSyncedAt: timestamp("last_synced_at", { withTimezone: true }).notNull(),
+});
+
+// --- plans --------------------------------------------------------------------
+// Single source of truth for cloud pricing. Name/description/price/interval and
+// currency mirror Lemon Squeezy (synced by the DB seeder when cloud + LS keys
+// are present). `config` holds Bursora-side defaults that LS never overrides
+// (event-bundle size, floor/cap math, etc.). Keyed for upsert on `lsVariantId`
+// so re-running the sync updates in place rather than duplicating a row.
+export const plans = pgTable("plans", {
+    id: uuid("id").primaryKey().defaultRandom(),
+    lsProductId: text("ls_product_id").notNull(),
+    lsVariantId: text("ls_variant_id").notNull().unique(),
+    name: text("name").notNull(),
+    description: text("description"),
+    priceCents: integer("price_cents").notNull(),
+    currency: text("currency").notNull(),
+    interval: text("interval").notNull(),
+    intervalCount: integer("interval_count").notNull(),
+    config: jsonb("config").notNull().default({}),
+    isActive: boolean("is_active").notNull().default(true),
+    syncedAt: timestamp("synced_at", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

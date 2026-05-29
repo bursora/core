@@ -5,10 +5,9 @@
  *   - `EventBundleCounterStore` holds the per-(workspace, month) running
  *     count. Redis adapter is production; in-memory mirrors its semantics
  *     for tests.
- *   - `EventBundleSettingsRepository` reads/writes the per-workspace hard
- *     cap from Postgres.
  *   - `EventBundleUsageRepository` persists the month rollup; used as the
- *     cold store and as the billing source for overage.
+ *     cold store for the Redis counter so a cache loss still reflects
+ *     committed usage. Drives the fair-use warning and dashboards.
  */
 
 import "server-only";
@@ -45,22 +44,8 @@ export interface EventBundleCounterStore {
     }): Promise<void>;
 }
 
-export interface EventBundleSettings {
-    /** Null disables the hard cap entirely. */
-    readonly hardCapUsdCents: number | null;
-}
-
-export interface EventBundleSettingsRepository {
-    findByWorkspaceId(workspaceId: string): Promise<EventBundleSettings | null>;
-    upsert(input: {
-        readonly workspaceId: string;
-        readonly hardCapUsdCents: number | null;
-    }): Promise<void>;
-}
-
 export interface EventBundleMonthRollup {
     readonly eventsCount: number;
-    readonly overageCents: number;
 }
 
 export interface EventBundleUsageRepository {
@@ -71,13 +56,12 @@ export interface EventBundleUsageRepository {
     }): Promise<EventBundleMonthRollup | null>;
 
     /**
-     * Upsert the rollup to the absolute values from the hot counter. Implementations
+     * Upsert the rollup to the absolute value from the hot counter. Implementations
      * MUST overwrite, not increment — the caller already aggregated.
      */
     upsertMonth(input: {
         readonly workspaceId: string;
         readonly month: string;
         readonly eventsCount: number;
-        readonly overageCents: number;
     }): Promise<void>;
 }

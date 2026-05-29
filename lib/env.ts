@@ -35,7 +35,6 @@ const CLOUD_REQUIRED = [
     "LEMONSQUEEZY_API_KEY",
     "LEMONSQUEEZY_WEBHOOK_SECRET",
     "LEMONSQUEEZY_STORE_ID",
-    "LEMONSQUEEZY_VARIANT_ID",
 ] as const;
 
 type AlwaysKey = (typeof ALWAYS_REQUIRED)[number];
@@ -69,8 +68,6 @@ export interface Env {
     readonly LEMONSQUEEZY_WEBHOOK_SECRET_NEXT: string;
     /** Empty string when `IS_CLOUD=false`. */
     readonly LEMONSQUEEZY_STORE_ID: string;
-    /** Empty string when `IS_CLOUD=false`. */
-    readonly LEMONSQUEEZY_VARIANT_ID: string;
     /**
      * Which Lemon Squeezy environment the configured key + store target.
      * `test` while the LS store is in test mode; `live` once activated.
@@ -221,7 +218,6 @@ export function loadEnv(source: Record<string, string | undefined>): Env {
             ? (source.LEMONSQUEEZY_WEBHOOK_SECRET_NEXT ?? "")
             : "",
         LEMONSQUEEZY_STORE_ID: getCloud("LEMONSQUEEZY_STORE_ID"),
-        LEMONSQUEEZY_VARIANT_ID: getCloud("LEMONSQUEEZY_VARIANT_ID"),
         LEMONSQUEEZY_MODE: lemonSqueezyMode,
         BURSORA_RATE_LIMIT_ENABLED: rateLimitEnabled,
         BURSORA_SPIKE_PROTECTION_ENABLED: spikeProtectionEnabled,

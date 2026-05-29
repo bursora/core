@@ -7,8 +7,8 @@
  * Lemon Squeezy subscription (end-of-period; LS has no immediate-cancel
  * primitive), refunds every paid order on file, and clears the eligibility
  * timestamp so the action is single-use. The DB-side `subscriptionStatus`
- * flips to `canceled` immediately so the monthly rollup cron skips this
- * workspace during the leftover days.
+ * flips to `canceled` immediately so the UI reflects the cancellation during
+ * the leftover days LS lets the subscription run out.
  *
  * Eligibility is keyed off signup, not subscription status: a customer who
  * cancels through the Customer Portal mid-window can still claim a refund
@@ -49,11 +49,9 @@ export async function requestRefundUseCase(
 
     if (record.providerSubscriptionId) {
         // Cancel first: marks the subscription cancelled at LS so no further
-        // renewals fire. LS cancels at the end of the current period, but the
-        // rollup cron skips workspaces whose status is `canceled`, so no
-        // post-refund usage gets reported. Already-cancelled subscriptions are
-        // absorbed by the adapter so this is safe even if the customer
-        // cancelled through the portal earlier.
+        // renewals fire. LS cancels at the end of the current period.
+        // Already-cancelled subscriptions are absorbed by the adapter so this
+        // is safe even if the customer cancelled through the portal earlier.
         await input.provider.cancelSubscription({
             subscriptionId: record.providerSubscriptionId,
         });
@@ -64,11 +62,11 @@ export async function requestRefundUseCase(
     });
 
     if (refund.totalCents === 0) {
-        // Customer has no paid orders to refund (subscribed but never billed,
-        // or all charges were already refunded out-of-band). The cancel call
-        // above already ran, so mirror that in the DB — leaving the row
-        // `active` would let the rollup cron keep reporting usage during the
-        // period LS lets the cancelled subscription run out.
+        // Customer has no paid orders to refund (all charges were already
+        // refunded out-of-band). The cancel call above already ran, so mirror
+        // that in the DB — leaving the row `active` would misrepresent the
+        // workspace as subscribed during the leftover days LS lets the
+        // cancelled subscription run out.
         const updates: {
             workspaceId: string;
             refundEligibleUntil: Date | null;

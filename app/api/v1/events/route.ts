@@ -9,23 +9,22 @@
  *          events were skipped for lack of a pricing row; the priced rows in
  *          the same batch still persist, so known spend never drops — issue
  *          #915) | 401 bad key | 400 malformed/empty batch |
- *          429 rate-limit, spike-protection, or event-bundle cap hit
+ *          429 rate-limit or spike-protection
  *
  * Cap order is per-API-key rate-limit first (one bad key shouldn't drag the
- * workspace into spike protection), then the unified capping middleware
- * which runs spike protection followed by the event-bundle hard cap. All
- * 429s carry `X-Bursora-Cap-Hit`: `rate` (rate limit), `spike` (spike
- * protection), or `events` (event-bundle cap).
+ * workspace into spike protection), then spike protection (burst guard). The
+ * event-bundle fair-use cap is alert-only and never blocks ingest. 429s carry
+ * `X-Bursora-Cap-Hit`: `rate` (rate limit) or `spike` (spike protection).
  */
 
-import { createCappingMiddleware, type CappingDecision } from "@/lib/capping/middleware";
-import { checkEventBundleHardCap, recordEventBundleUsage } from "@/lib/event-bundle/middleware";
+import { recordEventBundleUsage } from "@/lib/event-bundle/middleware";
 import { recordAuthFailure } from "@/lib/identity/with-bursora-key";
 import { withSdkAuthz } from "@/lib/identity/with-sdk-authz";
 import { logInvalidBody } from "@/lib/log-invalid-body";
 import { ingestEvents } from "@/lib/metering/server";
 import { setupErrorLogger } from "@/lib/setup-errors/server";
 import { applySpikeProtection } from "@/lib/spike-protection/middleware";
+import type { SpikeDecision } from "@/lib/spike-protection/types";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -54,11 +53,6 @@ const bodySchema = z.object({
     events: z.array(eventSchema).min(1),
 });
 
-const capping = createCappingMiddleware({
-    spike: (workspaceId, eventCount) => applySpikeProtection({ workspaceId, eventCount }),
-    bundle: (workspaceId, eventCount) => checkEventBundleHardCap({ workspaceId, eventCount }),
-});
-
 export async function POST(request: Request): Promise<NextResponse> {
     const authz = await withSdkAuthz(request, { onAuthFailure: recordAuthFailure });
     if (!authz.allowed) return authz.response;
@@ -81,7 +75,10 @@ export async function POST(request: Request): Promise<NextResponse> {
         return NextResponse.json({ error: parsed.reason }, { status: 400 });
     }
 
-    const decision = await capping.apply(authz.apiKey.workspaceId, parsed.value.events.length);
+    const decision = await applySpikeProtection({
+        workspaceId: authz.apiKey.workspaceId,
+        eventCount: parsed.value.events.length,
+    });
     if (!decision.allowed) return capResponse(decision);
 
     const summary = await ingestEvents({
@@ -132,16 +129,13 @@ export async function POST(request: Request): Promise<NextResponse> {
     return NextResponse.json(body, { status: 202 });
 }
 
-function capResponse(decision: CappingDecision): NextResponse {
-    const reason = decision.reason ?? "spike";
-    const body: Record<string, unknown> = {
-        error: reason === "spike" ? "spike_protection_triggered" : "events_capped",
-    };
+function capResponse(decision: SpikeDecision): NextResponse {
+    const body: Record<string, unknown> = { error: "spike_protection_triggered" };
     if (decision.retryAfterMs !== undefined) {
         body.retry_after_ms = decision.retryAfterMs;
     }
     const response = NextResponse.json(body, { status: 429 });
-    response.headers.set("X-Bursora-Cap-Hit", reason === "spike" ? "spike" : "events");
+    response.headers.set("X-Bursora-Cap-Hit", "spike");
     if (decision.retryAfterMs !== undefined) {
         response.headers.set(
             "Retry-After",

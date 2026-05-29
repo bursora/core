@@ -20,7 +20,6 @@ const FULL_CLOUD = {
     LEMONSQUEEZY_API_KEY: "ls_test_x",
     LEMONSQUEEZY_WEBHOOK_SECRET: "ls_whsec_x",
     LEMONSQUEEZY_STORE_ID: "store_x",
-    LEMONSQUEEZY_VARIANT_ID: "variant_x",
     REDIS_URL: "redis://localhost:6379",
 };
 
@@ -34,7 +33,6 @@ describe("loadEnv", () => {
         expect(env.LEMONSQUEEZY_API_KEY).toBe("ls_test_x");
         expect(env.LEMONSQUEEZY_WEBHOOK_SECRET).toBe("ls_whsec_x");
         expect(env.LEMONSQUEEZY_STORE_ID).toBe("store_x");
-        expect(env.LEMONSQUEEZY_VARIANT_ID).toBe("variant_x");
     });
 
     test("OSS mode does not require Lemon Squeezy vars and exposes empty strings", () => {
@@ -44,7 +42,6 @@ describe("loadEnv", () => {
         expect(env.LEMONSQUEEZY_API_KEY).toBe("");
         expect(env.LEMONSQUEEZY_WEBHOOK_SECRET).toBe("");
         expect(env.LEMONSQUEEZY_STORE_ID).toBe("");
-        expect(env.LEMONSQUEEZY_VARIANT_ID).toBe("");
     });
 
     test("throws when a required var is missing", () => {
@@ -77,13 +74,6 @@ describe("loadEnv", () => {
         delete (partial as Record<string, string | undefined>).LEMONSQUEEZY_STORE_ID;
 
         expect(() => loadEnv(partial)).toThrow(/LEMONSQUEEZY_STORE_ID/);
-    });
-
-    test("throws when LEMONSQUEEZY_VARIANT_ID is missing in cloud mode", () => {
-        const partial = { ...FULL_CLOUD };
-        delete (partial as Record<string, string | undefined>).LEMONSQUEEZY_VARIANT_ID;
-
-        expect(() => loadEnv(partial)).toThrow(/LEMONSQUEEZY_VARIANT_ID/);
     });
 
     test("exposes Google OAuth credentials", () => {
@@ -264,7 +254,6 @@ describe("env() cache reset", () => {
         "LEMONSQUEEZY_API_KEY",
         "LEMONSQUEEZY_WEBHOOK_SECRET",
         "LEMONSQUEEZY_STORE_ID",
-        "LEMONSQUEEZY_VARIANT_ID",
         "BURSORA_RATE_LIMIT_ENABLED",
         "BURSORA_SPIKE_PROTECTION_ENABLED",
     ] as const;
@@ -297,7 +286,6 @@ describe("env() cache reset", () => {
         process.env.LEMONSQUEEZY_API_KEY = "ls_test_x";
         process.env.LEMONSQUEEZY_WEBHOOK_SECRET = "ls_whsec_x";
         process.env.LEMONSQUEEZY_STORE_ID = "store_x";
-        process.env.LEMONSQUEEZY_VARIANT_ID = "variant_x";
 
         resetEnvCacheForTesting();
         expect(env().IS_CLOUD).toBe(true);

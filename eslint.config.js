@@ -14,7 +14,6 @@ const eeAllowedFiles = [
     "lib/ee/**/*.{ts,tsx}",
     "app/(dashboard)/workspace/[workspaceId]/settings/**/*.{ts,tsx}",
     "app/api/webhooks/lemonsqueezy/route.ts",
-    "app/api/cron/billing-rollup/route.ts",
     "app/api/cron/billing-webhook-prune/route.ts",
     "tests/billing/**/*.{ts,tsx}",
     "tests/features/billing.test.ts",

@@ -15,9 +15,8 @@ import { POST } from "@/lib/ee/routes/lemonsqueezy-webhook";
 import type { BillingWebhookEventStore } from "@/lib/ee/billing";
 import { FakePaymentProviderAdapter } from "./fakes/fake-payment-provider.adapter";
 import { InMemoryBillingWebhookEventStore } from "./fakes/in-memory-billing-webhook-event.store";
+import { InMemoryPlanRepository } from "./fakes/in-memory-plan.repository";
 import { InMemoryWorkspaceBillingRepository } from "./fakes/in-memory-workspace-billing.repository";
-import { InMemoryTrackedSpendRepository } from "./fakes/in-memory-tracked-spend.repository";
-import { InMemoryEventBundleRollupRepository } from "./fakes/in-memory-event-bundle-rollup.repository";
 
 const WORKSPACE_ID = "11111111-2222-3333-4444-555555555555";
 
@@ -49,9 +48,7 @@ beforeEach(() => {
         provider,
         workspaces,
         webhookEvents,
-        trackedSpend: new InMemoryTrackedSpendRepository(),
-        eventBundleRollup: new InMemoryEventBundleRollupRepository(),
-        variantIdTeam: "variant_team",
+        plans: new InMemoryPlanRepository(),
         appUrl: "https://app.test",
     });
 });
@@ -133,9 +130,7 @@ describe("/api/webhooks/lemonsqueezy", () => {
             provider,
             workspaces,
             webhookEvents: throwingEvents,
-            trackedSpend: new InMemoryTrackedSpendRepository(),
-            eventBundleRollup: new InMemoryEventBundleRollupRepository(),
-            variantIdTeam: "variant_team",
+            plans: new InMemoryPlanRepository(),
             appUrl: "https://app.test",
         });
         const errorSpy = spyOn(console, "error").mockImplementation(() => {});

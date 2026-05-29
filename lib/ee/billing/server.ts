@@ -12,29 +12,23 @@ import "server-only";
 
 import { db } from "@/lib/db";
 import { env } from "@/lib/env";
+import { drizzlePlanRepository } from "@/lib/plans/drizzle-plan.repository";
 import { buildWorkspacePath } from "@/lib/routes";
 import type { BillingWebhookEventStore } from "./billing-webhook-event.store";
 import { billingWebhookPruneCutoff } from "./billing-webhook-retention";
+import { createCheckoutSessionUseCase } from "./create-checkout-session.usecase";
 import { DrizzleBillingWebhookEventStore } from "./drizzle-billing-webhook-event.store";
-import { DrizzleEventBundleRollupRepository } from "./drizzle-event-bundle-rollup.repository";
-import { DrizzleTrackedSpendRepository } from "./drizzle-tracked-spend.repository";
 import { DrizzleWorkspaceBillingRepository } from "./drizzle-workspace-billing.repository";
 import { getBillingPortalUrlUseCase } from "./get-billing-portal-url.usecase";
 import { handleWebhookUseCase } from "./handle-webhook.usecase";
 import { LemonSqueezyApiAdapter } from "./lemonsqueezy.adapter";
-import { nextBillEstimateUseCase } from "./next-bill-estimate";
 import { requestRefundUseCase } from "./request-refund.usecase";
-import { rollupBillUseCase } from "./rollup-bill.usecase";
-import type { TrackedSpendRepository } from "./tracked-spend.repository";
 import type {
     BillingDeps,
-    NextBillEstimate,
     PaymentProviderAdapter,
     RequestRefundUseCaseResult,
-    RollupBillUseCaseResult,
 } from "./types";
 import type {
-    EventBundleRollupRepository,
     WorkspaceBillingRecord,
     WorkspaceBillingRepository,
 } from "./workspace-billing.repository";
@@ -45,10 +39,9 @@ function buildDeps(): BillingDeps {
     const webhookSecret = e.LEMONSQUEEZY_WEBHOOK_SECRET;
     const webhookSecretNext = e.LEMONSQUEEZY_WEBHOOK_SECRET_NEXT;
     const storeId = e.LEMONSQUEEZY_STORE_ID;
-    const variantId = e.LEMONSQUEEZY_VARIANT_ID;
-    if (!apiKey || !webhookSecret || !storeId || !variantId) {
+    if (!apiKey || !webhookSecret || !storeId) {
         throw new Error(
-            "billing is not configured: LEMONSQUEEZY_API_KEY, LEMONSQUEEZY_WEBHOOK_SECRET, LEMONSQUEEZY_STORE_ID, and LEMONSQUEEZY_VARIANT_ID must be set",
+            "billing is not configured: LEMONSQUEEZY_API_KEY, LEMONSQUEEZY_WEBHOOK_SECRET, and LEMONSQUEEZY_STORE_ID must be set",
         );
     }
     const database = db();
@@ -61,9 +54,7 @@ function buildDeps(): BillingDeps {
         }),
         workspaces: new DrizzleWorkspaceBillingRepository(database),
         webhookEvents: new DrizzleBillingWebhookEventStore(database),
-        trackedSpend: new DrizzleTrackedSpendRepository(database),
-        eventBundleRollup: new DrizzleEventBundleRollupRepository(database),
-        variantIdTeam: variantId,
+        plans: drizzlePlanRepository(database),
         appUrl: e.NEXT_PUBLIC_APP_URL,
     };
 }
@@ -90,9 +81,9 @@ export function billingDeps(): BillingDeps {
 /**
  * Probe the configured payment provider once to confirm its API key actually
  * authenticates. `env.ts` only proves the key is *present*; a rotated or
- * revoked key passes boot validation yet fails the first invoice. This runs a
+ * revoked key passes boot validation yet fails the first charge. This runs a
  * single cheap authenticated call so that failure surfaces loudly at boot
- * instead of silently when the monthly rollup fires.
+ * instead of silently when checkout or a refund fires.
  *
  * No-op off cloud: self-host installs have no provider to probe. On an
  * unauthorized key it logs a structured signal and throws so ops sees the
@@ -121,10 +112,10 @@ let credentialCheck: Promise<void> | null = null;
 
 /**
  * Boot hook: verify billing credentials once per process. Memoized so the
- * probe never runs per request — the cron + webhook routes call this on their
- * first invocation and every later call resolves the cached promise. On
- * failure the cache is cleared so a transient error does not pin a rejected
- * promise for the life of the process.
+ * probe never runs per request — the webhook route calls this on its first
+ * invocation and every later call resolves the cached promise. On failure the
+ * cache is cleared so a transient error does not pin a rejected promise for
+ * the life of the process.
  */
 export function checkBillingCredentials(): Promise<void> {
     if (credentialCheck === null) {
@@ -147,19 +138,25 @@ export function resetBillingCredentialCheckForTesting(): void {
 const settingsUrl = (workspaceId: string, status: "ok" | "cancel"): string =>
     `${billingDeps().appUrl}${buildWorkspacePath(workspaceId, "settings")}?billing=${status}`;
 
+/**
+ * Open Lemon Squeezy checkout for the active Bursora Cloud plan. The variant is
+ * resolved from the `plans` table (the daily sync's source of truth), charges
+ * at checkout, and auto-renews on LS's side; Bursora records no bill of its
+ * own. Throws `NoActiveCloudPlanError` when no plan is configured.
+ */
 export async function createCheckoutSession(input: {
     workspaceId: string;
     userEmail: string;
 }): Promise<{ url: string }> {
     const deps = billingDeps();
-    const session = await deps.provider.createCheckoutSession({
+    return createCheckoutSessionUseCase({
         workspaceId: input.workspaceId,
         userEmail: input.userEmail,
-        variantId: deps.variantIdTeam,
         successUrl: settingsUrl(input.workspaceId, "ok"),
         cancelUrl: settingsUrl(input.workspaceId, "cancel"),
+        provider: deps.provider,
+        plans: deps.plans,
     });
-    return { url: session.url };
 }
 
 export async function getBillingPortalUrl(input: {
@@ -196,21 +193,6 @@ export async function getWorkspaceBillingRecord(
 }
 
 /**
- * Run the monthly billing rollup over every active workspace. The cron
- * route calls this.
- */
-export async function runBillingRollup(now: Date): Promise<RollupBillUseCaseResult> {
-    const deps = billingDeps();
-    return rollupBillUseCase({
-        now,
-        provider: deps.provider,
-        workspaces: deps.workspaces,
-        trackedSpend: deps.trackedSpend,
-        eventBundleRollup: deps.eventBundleRollup,
-    });
-}
-
-/**
  * Delete `billing_webhook_events` rows older than the retention window. The
  * daily prune cron calls this. Returns the number of rows removed so the
  * scheduler logs see what happened.
@@ -221,25 +203,10 @@ export async function runBillingWebhookPrune(now: Date): Promise<{ rowsPruned: n
     return { rowsPruned };
 }
 
-/** Live month-to-date bill estimate for one workspace. */
-export async function getNextBillEstimate(input: {
-    workspaceId: string;
-    now?: Date;
-}): Promise<NextBillEstimate> {
-    const deps = billingDeps();
-    return nextBillEstimateUseCase({
-        workspaceId: input.workspaceId,
-        now: input.now ?? new Date(),
-        trackedSpend: deps.trackedSpend,
-        eventBundleRollup: deps.eventBundleRollup,
-    });
-}
-
 /**
  * Execute the money-back guarantee. Refunds every paid order on file,
  * cancels the subscription at end-of-period, marks the workspace canceled
- * in the DB (so the rollup cron stops reporting usage), and clears the
- * eligibility window so the action is single-use.
+ * in the DB, and clears the eligibility window so the action is single-use.
  */
 export async function requestRefund(input: {
     workspaceId: string;
@@ -255,9 +222,7 @@ export async function requestRefund(input: {
 export type {
     BillingDeps,
     BillingWebhookEventStore,
-    EventBundleRollupRepository,
     PaymentProviderAdapter,
-    TrackedSpendRepository,
     WorkspaceBillingRecord,
     WorkspaceBillingRepository,
 };

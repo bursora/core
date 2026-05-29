@@ -18,7 +18,6 @@ import { Button } from "@/components/ui/button";
 import { DashboardSection } from "@/components/ui/workspace/dashboard-section";
 import { createCheckoutAction, openPortalAction } from "../billing-actions";
 import { getWorkspaceBillingRecord } from "../billing/server";
-import { NextBillEstimate } from "./next-bill-estimate";
 import { PastDueBanner } from "./past-due-banner";
 import { RefundPanel } from "./refund-panel";
 
@@ -58,7 +57,7 @@ export async function BillingSection({ workspaceId, status, isOwner }: BillingSe
                 <p className="text-sm text-muted-foreground">
                     {hasActiveSubscription
                         ? "Your workspace is on Bursora cloud. Manage payment, invoices, or cancel from the billing portal."
-                        : "Upgrade to Bursora cloud for managed enforcement, alerts, and dashboards."}
+                        : "Upgrade to Bursora cloud for $29/mo: managed enforcement, alerts, and dashboards."}
                 </p>
                 <div className="mt-4 space-y-3">
                     {status === "ok" ? (
@@ -91,7 +90,6 @@ export async function BillingSection({ workspaceId, status, isOwner }: BillingSe
                     canRequest={isOwner}
                 />
             ) : null}
-            {hasActiveSubscription ? <NextBillEstimate workspaceId={workspaceId} /> : null}
         </div>
     );
 }

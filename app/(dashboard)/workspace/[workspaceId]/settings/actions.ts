@@ -32,7 +32,6 @@ import {
     updatePricingOverrideForWorkspace,
 } from "@/lib/compose/settings";
 import { emailSchema } from "@/lib/email";
-import { saveEventBundleSettings } from "@/lib/event-bundle/server";
 import {
     deleteWorkspace,
     issueApiKey,
@@ -312,37 +311,6 @@ export const deleteWorkspaceAction = withWorkspace(
         redirect("/" as Route);
     },
     { getWorkspaceId: workspaceIdFromForm },
-);
-
-export const saveEventBundleAction = withWorkspace(
-    async (_ctx, _prev: ActionResult, formData: FormData): Promise<ActionResult> => {
-        try {
-            const workspaceId = workspaceIdFromForm(formData);
-            const enabled = formData.get("enabled") === "on";
-
-            let hardCapUsdCents: number | null = null;
-            if (enabled) {
-                const rawCap = requireField(formData, "hardCapUsd");
-                const cap = Number.parseInt(rawCap, 10);
-                if (!Number.isInteger(cap) || cap < 1 || cap > 10_000) {
-                    return actionFail("Cap must be between $1 and $10,000.", {
-                        hardCapUsd: "Must be a whole dollar amount between 1 and 10000.",
-                    });
-                }
-                hardCapUsdCents = cap * 100;
-            }
-
-            await saveEventBundleSettings({ workspaceId, hardCapUsdCents });
-            revalidatePath(settingsHref(workspaceId));
-            return actionOk();
-        } catch (err: unknown) {
-            rethrowRedirect(err);
-            const message =
-                err instanceof Error ? err.message : "Failed to save event bundle settings.";
-            return actionFail(message);
-        }
-    },
-    { getWorkspaceId: workspaceIdFromPrevForm },
 );
 
 export const saveAlertChannelsAction = withWorkspace(

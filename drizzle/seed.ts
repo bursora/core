@@ -19,10 +19,14 @@ import {
     syncPricing,
     type SyncPricingRepo,
 } from "@/lib/metering/pricing/sync-pricing.usecase";
-import { and, desc, eq, isNull } from "drizzle-orm";
+import type { PlanSyncRepository, PlanUpsert } from "@/lib/plans/plan";
+import { TRACKED_PLANS } from "@/lib/plans/plan-config";
+import { shouldSyncPlans, syncPlans } from "@/lib/plans/sync-plans.usecase";
+import { and, desc, eq, isNull, sql as dsql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
-import { pricing } from "../lib/db/schema";
+import { lemonSqueezyPlanSource } from "./plan-sync/lemonsqueezy-plan-source";
+import { pricing, plans } from "../lib/db/schema";
 
 const url = process.env.DATABASE_URL;
 if (!url) throw new Error("DATABASE_URL is required");
@@ -78,6 +82,66 @@ try {
     } else {
         throw error;
     }
+}
+
+// --- plan sync ---------------------------------------------------------------
+// Cloud installs with LS configured pull the Bursora Cloud plan into `plans`.
+// Self-host (or missing keys) skips cleanly — the dashboard reads plans only
+// for cloud-only checkout, so an empty table is fine off cloud.
+const isCloud = ["true", "1", "yes"].includes((process.env.IS_CLOUD ?? "").trim().toLowerCase());
+const lsApiKey = process.env.LEMONSQUEEZY_API_KEY ?? "";
+const lsStoreId = process.env.LEMONSQUEEZY_STORE_ID ?? "";
+
+if (shouldSyncPlans({ isCloud, apiKey: lsApiKey, storeId: lsStoreId })) {
+    const planRepo: PlanSyncRepository = {
+        upsertByVariant: async (plan: PlanUpsert) => {
+            await db
+                .insert(plans)
+                .values({
+                    lsProductId: plan.lsProductId,
+                    lsVariantId: plan.lsVariantId,
+                    name: plan.name,
+                    description: plan.description,
+                    priceCents: plan.priceCents,
+                    currency: plan.currency,
+                    interval: plan.interval,
+                    intervalCount: plan.intervalCount,
+                    config: plan.config,
+                    syncedAt: plan.syncedAt,
+                })
+                .onConflictDoUpdate({
+                    target: plans.lsVariantId,
+                    set: {
+                        lsProductId: plan.lsProductId,
+                        name: plan.name,
+                        description: plan.description,
+                        priceCents: plan.priceCents,
+                        currency: plan.currency,
+                        interval: plan.interval,
+                        intervalCount: plan.intervalCount,
+                        config: plan.config,
+                        syncedAt: plan.syncedAt,
+                        updatedAt: dsql`now()`,
+                    },
+                });
+        },
+    };
+
+    const planSource = lemonSqueezyPlanSource({
+        apiKey: lsApiKey,
+        storeId: lsStoreId,
+        trackedProductIds: TRACKED_PLANS.map((p) => p.lsProductId),
+    });
+
+    const { upserted, skipped } = await syncPlans(planSource, planRepo, TRACKED_PLANS, new Date());
+    console.log(`Plan sync: ${upserted} upserted, ${skipped} skipped`);
+    if (upserted < TRACKED_PLANS.length) {
+        console.warn(
+            `Plan sync: only ${upserted}/${TRACKED_PLANS.length} tracked plans synced — check TRACKED_PLANS product ids against Lemon Squeezy`,
+        );
+    }
+} else {
+    console.log("Plan sync: skipped (not cloud or LEMONSQUEEZY_API_KEY/STORE_ID absent)");
 }
 
 await sql.end();

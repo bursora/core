@@ -1,13 +1,13 @@
 CREATE TABLE "session" (
-  "id"         uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  "expires_at" timestamptz NOT NULL,
-  "token"      text NOT NULL UNIQUE,
-  "created_at" timestamptz NOT NULL DEFAULT now(),
-  "updated_at" timestamptz NOT NULL DEFAULT now(),
-  "ip_address" text,
-  "user_agent" text,
-  "user_id"    uuid NOT NULL REFERENCES "users"("id") ON DELETE CASCADE
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"expires_at" timestamp with time zone NOT NULL,
+	"token" text NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"ip_address" text,
+	"user_agent" text,
+	"user_id" uuid NOT NULL,
+	CONSTRAINT "session_token_unique" UNIQUE("token")
 );
-
-CREATE INDEX "session_user_id_idx"    ON "session" ("user_id");
-CREATE INDEX "session_expires_at_idx" ON "session" ("expires_at");
+--> statement-breakpoint
+ALTER TABLE "session" ADD CONSTRAINT "session_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;

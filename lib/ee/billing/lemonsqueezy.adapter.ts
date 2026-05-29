@@ -3,13 +3,13 @@
  *
  * The Bursora billing use cases depend on the neutral `PaymentProviderAdapter`
  * port. This file implements the LS half: checkout creation, portal lookup,
- * webhook signature verification + event projection, monthly usage reporting
- * against the metered subscription item, plus the refund-all + end-of-period
- * cancellation path that backs the money-back guarantee. LS cancels at the
- * end of the current billing period (no immediate-cancel primitive); the
- * rollup cron skips `canceled`/`expired` workspaces so no usage is reported
- * after a refund. LS does not ship an official Node SDK we want to take a
- * dep on, so we hit the JSON:API endpoints with the runtime `fetch` directly.
+ * webhook signature verification + event projection, plus the refund-all +
+ * end-of-period cancellation path that backs the money-back guarantee.
+ * Checkout uses the flat $29/mo variant, which charges at checkout and
+ * auto-renews on LS's side; Bursora records no bill of its own. LS cancels at
+ * the end of the current billing period (no immediate-cancel primitive). LS
+ * does not ship an official Node SDK we want to take a dep on, so we hit the
+ * JSON:API endpoints with the runtime `fetch` directly.
  */
 
 import { createHmac, timingSafeEqual } from "node:crypto";
@@ -21,8 +21,6 @@ import type {
     PortalSessionResult,
     RefundAllOrdersInput,
     RefundAllOrdersResult,
-    ReportUsageInput,
-    ReportUsageResult,
     VerifyCredentialsResult,
     VerifyEventInput,
     WebhookEvent,
@@ -31,14 +29,6 @@ import type {
 
 const LS_API_BASE = "https://api.lemonsqueezy.com";
 const JSON_API_CONTENT_TYPE = "application/vnd.api+json";
-
-// LS rejects a per-unit price below $0.50 in the dashboard, and usage-record
-// quantities must be integers. So 1 unit = $0.50 = 50 cents: we report
-// `round(totalCents / 50)` units, and LS bills `units × $0.50`. This rounds
-// the monthly charge to the nearest half-dollar — only bills strictly between
-// the $29 floor and $499 cap are affected (both are exact multiples of $0.50).
-// Revert to 1 (cent-exact) if LS enables a $0.01 unit price.
-const USAGE_UNIT_CENTS = 50;
 
 /**
  * Minimal fetcher shape the adapter depends on. Avoids capturing Bun-specific
@@ -189,88 +179,6 @@ export class LemonSqueezyApiAdapter implements PaymentProviderAdapter {
         // beyond what the attacker already knows from their own input length.
         if (provided.length !== expected.length) return false;
         return timingSafeEqual(Buffer.from(provided, "utf8"), Buffer.from(expected, "utf8"));
-    }
-
-    async reportUsage(input: ReportUsageInput): Promise<ReportUsageResult> {
-        // LS attaches usage records to a *subscription item* (the metered
-        // variant line on the subscription), not the subscription itself.
-        // Fetch the subscription so we can resolve the first item id.
-        const subscriptionResponse = await this.fetcher(
-            `${LS_API_BASE}/v1/subscriptions/${encodeURIComponent(input.subscriptionId)}`,
-            {
-                method: "GET",
-                headers: {
-                    Authorization: `Bearer ${this.apiKey}`,
-                    Accept: JSON_API_CONTENT_TYPE,
-                },
-            },
-        );
-        if (!subscriptionResponse.ok) {
-            const errorText = await subscriptionResponse.text().catch(() => "");
-            throw new Error(
-                `lemonsqueezy.reportUsage subscription lookup failed: ${subscriptionResponse.status} ${errorText}`,
-            );
-        }
-        const subscriptionPayload = (await subscriptionResponse.json()) as {
-            data?: {
-                relationships?: {
-                    "subscription-items"?: { data?: ReadonlyArray<{ id?: string | number }> };
-                };
-            };
-        };
-        const itemId =
-            subscriptionPayload.data?.relationships?.["subscription-items"]?.data?.[0]?.id;
-        if (itemId === undefined || itemId === null || String(itemId).length === 0) {
-            throw new Error(
-                `lemonsqueezy.reportUsage: subscription ${input.subscriptionId} has no subscription-item`,
-            );
-        }
-
-        // Idempotency: LS does not formally document an idempotency-key header
-        // on `/v1/usage-records`, but it accepts and ignores unknown headers.
-        // We send `Idempotency-Key` derived from (subscriptionId, periodMonth)
-        // so any retry of the same period carries a stable token; if LS adds
-        // first-class support later this just starts working. The primary
-        // dedup guard is application-side via `lastBilledMonth` on the
-        // workspace row (see `reportUsageUseCase`).
-        const idempotencyKey = `bursora:usage:${input.subscriptionId}:${input.periodMonth}`;
-
-        const quantity = Math.round(input.totalCents / USAGE_UNIT_CENTS);
-
-        const body = {
-            data: {
-                type: "usage-records",
-                attributes: { quantity },
-                relationships: {
-                    "subscription-item": {
-                        data: { type: "subscription-items", id: String(itemId) },
-                    },
-                },
-            },
-        };
-
-        const response = await this.fetcher(`${LS_API_BASE}/v1/usage-records`, {
-            method: "POST",
-            headers: {
-                Authorization: `Bearer ${this.apiKey}`,
-                Accept: JSON_API_CONTENT_TYPE,
-                "Content-Type": JSON_API_CONTENT_TYPE,
-                "Idempotency-Key": idempotencyKey,
-            },
-            body: JSON.stringify(body),
-        });
-
-        if (!response.ok) {
-            const errorText = await response.text().catch(() => "");
-            throw new Error(`lemonsqueezy.reportUsage failed: ${response.status} ${errorText}`);
-        }
-
-        const payload = (await response.json()) as { data?: { id?: string | number } };
-        const id = payload.data?.id;
-        if (id === undefined || id === null || String(id).length === 0) {
-            throw new Error("lemonsqueezy.reportUsage returned no usage-record id");
-        }
-        return { usageRecordId: String(id) };
     }
 
     async refundAllOrders(input: RefundAllOrdersInput): Promise<RefundAllOrdersResult> {
@@ -504,11 +412,6 @@ export function mapLemonSqueezyEvent(
         String(storeIdAttr) === expectedStoreId;
     const type = storeMatches ? eventNameToWebhookType(eventName) : "unknown";
 
-    // LS stamps `trial_ends_at` as an ISO 8601 string on subscription
-    // objects with a trial period. Parse it into a Date so downstream
-    // billing code can compare against `now` without re-parsing.
-    const trialEndsAt = parseTrialEndsAt(attributes.trial_ends_at);
-
     return {
         id: eventId,
         type,
@@ -516,20 +419,8 @@ export function mapLemonSqueezyEvent(
         customerId,
         subscriptionId,
         status,
-        trialEndsAt,
         ...(invoiceId !== null ? { invoiceId } : {}),
     };
-}
-
-// LS stamps `trial_ends_at` as an ISO 8601 string on subscription objects
-// with a trial period. Parse into a Date so downstream billing can compare
-// against `now` without re-parsing. An unparseable value yields Invalid Date,
-// whose getTime() is NaN; is-billable-now's `NaN <= now` is false, which would
-// pin a trialing workspace as permanently non-billable. Reject it to null.
-function parseTrialEndsAt(attr: unknown): Date | null {
-    if (typeof attr !== "string" || attr.length === 0) return null;
-    const d = new Date(attr);
-    return Number.isNaN(d.getTime()) ? null : d;
 }
 
 function eventNameToWebhookType(eventName: string): WebhookEventType {

@@ -35,14 +35,6 @@ export interface WebhookEvent {
     readonly status?: string | null;
     /** Set on payment.* events. Provider invoice id. */
     readonly invoiceId?: string | null;
-    /**
-     * Provider-issued trial end date for subscriptions on a trial.
-     * Lemon Squeezy projects this from `data.attributes.trial_ends_at`.
-     * Null when the subscription has no trial window. The webhook handler
-     * persists it on `subscription.activated`; the spend aggregator uses
-     * it to gate billing for `trialing` workspaces.
-     */
-    readonly trialEndsAt?: Date | null;
 }
 
 export interface CheckoutSessionInput {
@@ -76,25 +68,6 @@ export interface VerifyEventInput {
     readonly signatureHeader: string;
 }
 
-/**
- * Inputs to report one month of usage for a workspace. `totalCents` is the
- * exact monthly bill; the adapter converts it to LS usage units (1 unit =
- * $0.50). The workspace id rides along for log traceability; the provider
- * does not surface it back.
- */
-export interface ReportUsageInput {
-    readonly subscriptionId: string;
-    readonly workspaceId: string;
-    /** YYYY-MM label of the billing period the usage report covers. */
-    readonly periodMonth: string;
-    readonly totalCents: number;
-}
-
-export interface ReportUsageResult {
-    /** Provider usage-record id. */
-    readonly usageRecordId: string;
-}
-
 export interface RefundAllOrdersInput {
     readonly customerId: string;
 }
@@ -126,7 +99,6 @@ export type VerifyCredentialsResult =
  * Operations:
  *   - Checkout/Portal session creation
  *   - Webhook signature verification + event projection
- *   - Monthly usage reporting against the subscription's metered item
  *   - Refund-all + subscription cancellation (money-back guarantee)
  */
 export interface PaymentProviderAdapter {
@@ -139,13 +111,6 @@ export interface PaymentProviderAdapter {
      */
     verifyAndParseEvent(input: VerifyEventInput): WebhookEvent;
     /**
-     * Report one month of usage for a workspace's subscription. Used by
-     * the monthly rollup cron. The provider posts the value to the
-     * metered subscription item and returns a usage-record id the caller
-     * can persist for retry detection + deep-linking.
-     */
-    reportUsage(input: ReportUsageInput): Promise<ReportUsageResult>;
-    /**
      * Refund every paid order belonging to `customerId`. Idempotent:
      * orders already fully refunded are skipped. Returns the ids of
      * orders that produced a non-zero refund plus the summed refunded
@@ -156,9 +121,8 @@ export interface PaymentProviderAdapter {
      * Cancel a subscription at the end of the current billing period.
      * Lemon Squeezy does not expose an immediate-cancel primitive; the
      * `DELETE /v1/subscriptions/{id}` call marks the subscription canceled
-     * but lets the customer keep access until period end. Bursora
-     * compensates by skipping `canceled`/`expired` workspaces in the
-     * monthly rollup so no usage is reported after a refund.
+     * but lets the customer keep access until period end. Backs the
+     * money-back guarantee path alongside `refundAllOrders`.
      * Idempotent: already-canceled subscriptions are treated as a no-op.
      */
     cancelSubscription(input: { subscriptionId: string }): Promise<void>;

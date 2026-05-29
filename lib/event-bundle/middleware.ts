@@ -1,31 +1,29 @@
 /**
- * Event-bundle middleware for the events ingest path. Two halves:
+ * Event-bundle recording for the events ingest path.
  *
- *   1. `checkEventBundleHardCap` runs after rate-limit and spike-protection
- *      but before the DB write. If the workspace has a hard cap configured
- *      and accepting the batch would push accrued overage past it, returns
- *      a deny decision with `reason: "bundle"`. Event is NOT recorded.
+ * `recordEventBundleUsage` runs after a successful DB write. It bumps the
+ * Redis counter by the batch size and, when the per-workspace batching
+ * threshold is crossed, persists the rollup to the cold store. The hot path
+ * stays synchronous because the dashboard fair-use banner reads the counter
+ * directly.
  *
- *   2. `recordEventBundleUsage` runs after a successful DB write. It bumps
- *      the Redis counter by the batch size and, when the per-workspace
- *      batching threshold is crossed, persists the rollup to the cold
- *      store. The hot path stays synchronous because the dashboard banner
- *      reads the counter directly.
+ * The 5M events/month bundle is a fair-use cap, not a hard block: ingest
+ * always proceeds. Past the bundle the dashboard warns and the operator
+ * reaches out. See `counter.ts` for why a billing limit never blocks spend
+ * protection.
  *
  * Cold-store cadence: the Redis counter is authoritative; the Postgres
- * rollup only matters for billing reconciliation. We batch writes so the
- * cold store sees an upsert at most every `COLD_WRITE_INTERVAL_MS` or
- * every `COLD_WRITE_BATCH_EVENTS` events per workspace — whichever comes
- * first.
+ * rollup only backs cache loss. We batch writes so the cold store sees an
+ * upsert at most every `COLD_WRITE_INTERVAL_MS` or every
+ * `COLD_WRITE_BATCH_EVENTS` events per workspace — whichever comes first.
  *
- * Self-host (`IS_CLOUD=false`): both halves no-op via the `enabled` flag.
+ * Self-host (`IS_CLOUD=false`): no-ops via the `enabled` flag.
  */
 
 import "server-only";
 
-import type { CappingDecision } from "../capping/middleware";
 import { LruCache } from "../lru-cache";
-import { monthKey, overageCentsAt, wouldExceedHardCap } from "./counter";
+import { monthKey } from "./counter";
 import { eventBundleDeps } from "./server";
 
 const COLD_WRITE_INTERVAL_MS = 60_000;
@@ -41,34 +39,6 @@ const lastColdWrite = new LruCache<string, ColdWriteState>(COLD_WRITE_TRACKER_MA
 /** Clear the cold-write tracker. Test-only. */
 export function resetEventBundleColdWriteTracker(): void {
     lastColdWrite.clear();
-}
-
-export async function checkEventBundleHardCap(input: {
-    readonly workspaceId: string;
-    readonly eventCount: number;
-}): Promise<CappingDecision> {
-    const deps = eventBundleDeps();
-    if (!deps.enabled) return { allowed: true };
-
-    const month = monthKey(deps.now());
-    const [settings, priorCount] = await Promise.all([
-        deps.settings.findByWorkspaceId(input.workspaceId),
-        deps.counter.readMonth({ workspaceId: input.workspaceId, month }),
-    ]);
-    const hardCapUsdCents = settings?.hardCapUsdCents ?? null;
-    if (hardCapUsdCents === null) return { allowed: true };
-
-    if (
-        wouldExceedHardCap({
-            priorCount,
-            nextEventCount: input.eventCount,
-            hardCapUsdCents,
-        })
-    ) {
-        return { allowed: false, reason: "bundle" };
-    }
-
-    return { allowed: true };
 }
 
 export async function recordEventBundleUsage(input: {
@@ -97,7 +67,6 @@ export async function recordEventBundleUsage(input: {
         workspaceId: input.workspaceId,
         month,
         eventsCount: newCount,
-        overageCents: overageCentsAt(newCount),
     });
     lastColdWrite.set(trackerKey, { lastWrittenCount: newCount }, deps.now().getTime());
 }

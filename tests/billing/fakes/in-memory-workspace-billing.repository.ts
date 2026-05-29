@@ -10,9 +10,6 @@ interface BillingRow {
     subscriptionStatus: string | null;
     subscribedAt: Date | null;
     refundEligibleUntil: Date | null;
-    lastInvoiceRef: string | null;
-    lastBilledMonth: string | null;
-    trialEndsAt: Date | null;
 }
 
 export class InMemoryWorkspaceBillingRepository implements WorkspaceBillingRepository {
@@ -26,9 +23,6 @@ export class InMemoryWorkspaceBillingRepository implements WorkspaceBillingRepos
             subscriptionStatus: row.subscriptionStatus ?? null,
             subscribedAt: row.subscribedAt ?? null,
             refundEligibleUntil: row.refundEligibleUntil ?? null,
-            lastInvoiceRef: row.lastInvoiceRef ?? null,
-            lastBilledMonth: row.lastBilledMonth ?? null,
-            trialEndsAt: row.trialEndsAt ?? null,
         });
     }
 
@@ -44,13 +38,6 @@ export class InMemoryWorkspaceBillingRepository implements WorkspaceBillingRepos
         return null;
     }
 
-    async findByInvoiceRef(invoiceRef: string): Promise<WorkspaceBillingRecord | null> {
-        for (const row of this.rows.values()) {
-            if (row.lastInvoiceRef === invoiceRef) return toRecord(row);
-        }
-        return null;
-    }
-
     async update(input: {
         workspaceId: string;
         providerCustomerId?: string | null;
@@ -58,9 +45,6 @@ export class InMemoryWorkspaceBillingRepository implements WorkspaceBillingRepos
         subscriptionStatus?: string | null;
         subscribedAt?: Date | null;
         refundEligibleUntil?: Date | null;
-        lastInvoiceRef?: string | null;
-        lastBilledMonth?: string | null;
-        trialEndsAt?: Date | null;
     }): Promise<void> {
         const existing = this.rows.get(input.workspaceId);
         if (!existing) {
@@ -86,14 +70,6 @@ export class InMemoryWorkspaceBillingRepository implements WorkspaceBillingRepos
                 input.refundEligibleUntil === undefined
                     ? existing.refundEligibleUntil
                     : input.refundEligibleUntil,
-            lastInvoiceRef:
-                input.lastInvoiceRef === undefined ? existing.lastInvoiceRef : input.lastInvoiceRef,
-            lastBilledMonth:
-                input.lastBilledMonth === undefined
-                    ? existing.lastBilledMonth
-                    : input.lastBilledMonth,
-            trialEndsAt:
-                input.trialEndsAt === undefined ? existing.trialEndsAt : input.trialEndsAt,
         });
     }
 }
@@ -106,8 +82,5 @@ function toRecord(row: BillingRow): WorkspaceBillingRecord {
         subscriptionStatus: row.subscriptionStatus,
         subscribedAt: row.subscribedAt,
         refundEligibleUntil: row.refundEligibleUntil,
-        lastInvoiceRef: row.lastInvoiceRef,
-        lastBilledMonth: row.lastBilledMonth,
-        trialEndsAt: row.trialEndsAt,
     };
 }

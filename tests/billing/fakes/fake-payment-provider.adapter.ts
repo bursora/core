@@ -6,8 +6,6 @@ import type {
     PortalSessionResult,
     RefundAllOrdersInput,
     RefundAllOrdersResult,
-    ReportUsageInput,
-    ReportUsageResult,
     VerifyCredentialsResult,
     WebhookEvent,
 } from "@/lib/ee/billing";
@@ -20,7 +18,6 @@ interface FakePaidOrder {
 export class FakePaymentProviderAdapter implements PaymentProviderAdapter {
     public readonly checkoutCalls: CheckoutSessionInput[] = [];
     public readonly portalCalls: PortalSessionInput[] = [];
-    public readonly reportUsageCalls: ReportUsageInput[] = [];
     public readonly refundCalls: RefundAllOrdersInput[] = [];
     public readonly cancelCalls: { subscriptionId: string }[] = [];
 
@@ -31,8 +28,6 @@ export class FakePaymentProviderAdapter implements PaymentProviderAdapter {
     public nextPortalResult: PortalSessionResult = {
         url: "https://provider.test/portal/default",
     };
-    public nextUsageRecordId = "usage_rec_default";
-    public reportUsageShouldThrow = false;
     public nextEvent: WebhookEvent | null = null;
     public verifyShouldThrow = false;
     public refundShouldThrow = false;
@@ -66,15 +61,6 @@ export class FakePaymentProviderAdapter implements PaymentProviderAdapter {
             throw new Error("FakePaymentProviderAdapter: nextEvent not set");
         }
         return this.nextEvent;
-    }
-
-    async reportUsage(input: ReportUsageInput): Promise<ReportUsageResult> {
-        this.reportUsageCalls.push(input);
-        if (this.reportUsageShouldThrow) {
-            throw new Error("reportUsage forced failure");
-        }
-        const usageRecordId = `${this.nextUsageRecordId}_${this.reportUsageCalls.length}`;
-        return { usageRecordId };
     }
 
     async refundAllOrders(input: RefundAllOrdersInput): Promise<RefundAllOrdersResult> {

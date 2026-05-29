@@ -1,7 +1,7 @@
 /**
  * Drizzle-backed `EventBundleUsageRepository`. Wraps the
- * `workspace_event_bundle_usage` rollup. Used as both the cold store for
- * the Redis counter and the canonical billing source for overage.
+ * `workspace_event_bundle_usage` rollup. Cold store for the Redis counter;
+ * a cache loss after a deploy still reflects committed usage.
  */
 
 import "server-only";
@@ -16,7 +16,6 @@ export function drizzleEventBundleUsageRepository(db: Db): EventBundleUsageRepos
             const rows = await db
                 .select({
                     eventsCount: schema.workspaceEventBundleUsage.eventsCount,
-                    overageCents: schema.workspaceEventBundleUsage.overageCents,
                 })
                 .from(schema.workspaceEventBundleUsage)
                 .where(
@@ -30,7 +29,6 @@ export function drizzleEventBundleUsageRepository(db: Db): EventBundleUsageRepos
             if (!row) return null;
             const rollup: EventBundleMonthRollup = {
                 eventsCount: row.eventsCount,
-                overageCents: row.overageCents,
             };
             return rollup;
         },
@@ -44,7 +42,6 @@ export function drizzleEventBundleUsageRepository(db: Db): EventBundleUsageRepos
                     workspaceId: input.workspaceId,
                     month: input.month,
                     eventsCount: input.eventsCount,
-                    overageCents: input.overageCents,
                 })
                 .onConflictDoUpdate({
                     target: [
@@ -53,7 +50,6 @@ export function drizzleEventBundleUsageRepository(db: Db): EventBundleUsageRepos
                     ],
                     set: {
                         eventsCount: input.eventsCount,
-                        overageCents: input.overageCents,
                         updatedAt: new Date(),
                     },
                     setWhere: sql`excluded.events_count >= ${schema.workspaceEventBundleUsage.eventsCount}`,

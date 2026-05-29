@@ -4,8 +4,8 @@
  * into a single call so route handlers branch on `allowed` once instead of
  * threading two `if (!ok) return response` checks each.
  *
- * Spike protection lives in the capping middleware at event ingest only;
- * it is intentionally not part of the authz pipeline.
+ * Spike protection lives in the spike-protection middleware at event ingest
+ * only; it is intentionally not part of the authz pipeline.
  *
  * Usage:
  *

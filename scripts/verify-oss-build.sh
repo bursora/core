@@ -16,7 +16,7 @@
 #   - A stub /api/webhooks/lemonsqueezy route that returns 404.
 #
 # The bundle MUST NOT contain:
-#   - EE use-case symbols (calculateMonthlyBill, *UseCase exports).
+#   - EE use-case symbols (*UseCase exports, mapLemonSqueezyEvent).
 #   - EE server actions (createCheckoutAction, requestRefundAction, ...).
 #   - EE components (BillingSection, RefundPanel).
 #   - The Lemon Squeezy payment adapter (LemonSqueezyApiAdapter).
@@ -49,15 +49,11 @@ fi
 # Identifiers that should appear ONLY in lib/ee/ source. If any of these land
 # in a built .js chunk, the runtime guard or dynamic-import boundary failed.
 FORBIDDEN=(
-    'calculateMonthlyBill'
     'createCheckoutSession'
     'getBillingPortalUrlUseCase'
     'handleWebhookUseCase'
     'mapLemonSqueezyEvent'
-    'nextBillEstimateUseCase'
-    'reportUsageUseCase'
     'requestRefundUseCase'
-    'rollupBillUseCase'
     'LemonSqueezyApiAdapter'
     'BillingNotEnabledError'
     'createCheckoutAction'

@@ -89,71 +89,27 @@ describe("handleWebhookUseCase", () => {
         expect(row?.providerSubscriptionId).toBe("sub_99");
     });
 
-    test("subscription.activated persists trial_ends_at when the provider signals a trial", async () => {
-        const workspaces = new InMemoryWorkspaceBillingRepository();
-        seedUnsubscribed(workspaces);
-        const trialEnd = new Date("2025-03-15T00:00:00Z");
-
-        await runWebhook(
-            {
-                id: "evt_trial_checkout",
-                type: "subscription.activated",
-                workspaceId: WORKSPACE_ID,
-                customerId: "cus_99",
-                subscriptionId: "sub_99",
-                trialEndsAt: trialEnd,
-            },
-            workspaces,
-        );
-
-        const row = await workspaces.findById(WORKSPACE_ID);
-        expect(row?.trialEndsAt).toEqual(trialEnd);
-    });
-
-    test("subscription.activated leaves trial_ends_at null when the provider omits it", async () => {
+    test("subscription.activated writes the provider-reported status verbatim", async () => {
+        // The handler must not hardcode `active`; an explicit status on the
+        // event is written through unchanged (defaulting to `active` only
+        // when the event omits one).
         const workspaces = new InMemoryWorkspaceBillingRepository();
         seedUnsubscribed(workspaces);
 
         await runWebhook(
             {
-                id: "evt_no_trial_checkout",
+                id: "evt_activated_status",
                 type: "subscription.activated",
                 workspaceId: WORKSPACE_ID,
                 customerId: "cus_99",
                 subscriptionId: "sub_99",
+                status: "past_due",
             },
             workspaces,
         );
 
         const row = await workspaces.findById(WORKSPACE_ID);
-        expect(row?.trialEndsAt).toBeNull();
-    });
-
-    test("subscription.activated with status=trialing preserves trialing rather than forcing active", async () => {
-        // A trial checkout fires subscription_created → subscription.activated
-        // with `status=trialing`. Forcing the row to `active` would defeat
-        // the trial filter on the spend aggregator. Preserve the
-        // provider-reported status verbatim.
-        const workspaces = new InMemoryWorkspaceBillingRepository();
-        seedUnsubscribed(workspaces);
-        const trialEnd = new Date("2025-03-15T00:00:00Z");
-
-        await runWebhook(
-            {
-                id: "evt_trial_activated",
-                type: "subscription.activated",
-                workspaceId: WORKSPACE_ID,
-                customerId: "cus_99",
-                subscriptionId: "sub_99",
-                status: "trialing",
-                trialEndsAt: trialEnd,
-            },
-            workspaces,
-        );
-
-        const row = await workspaces.findById(WORKSPACE_ID);
-        expect(row?.subscriptionStatus).toBe("trialing");
-        expect(row?.trialEndsAt).toEqual(trialEnd);
+        expect(row?.subscriptionStatus).toBe("past_due");
     });
 
     test("subscription.canceled records subscription_status='canceled'", async () => {

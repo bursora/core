@@ -26,18 +26,18 @@
 
 import "server-only";
 
-import type { CappingDecision } from "../capping/middleware";
 import { errMessage } from "../error-message";
 import { getCachedBaseline } from "./baseline-cache";
 import type { SpikeProtectionDeps } from "./server";
 import { mergeSettings, spikeProtectionDeps } from "./server";
+import type { SpikeDecision } from "./types";
 
 const FAIL_CLOSED_RETRY_AFTER_MS = 5_000;
 
 export async function applySpikeProtection(input: {
     readonly workspaceId: string;
     readonly eventCount: number;
-}): Promise<CappingDecision> {
+}): Promise<SpikeDecision> {
     const deps = spikeProtectionDeps();
     // Short-circuit when the feature is off globally — the per-workspace row
     // can only opt out further, never opt in beyond a disabled cluster. Saves
@@ -100,8 +100,8 @@ export async function applySpikeProtection(input: {
     }
 }
 
-function deny(retryAfterMs: number): CappingDecision {
-    return { allowed: false, retryAfterMs, reason: "spike" };
+function deny(retryAfterMs: number): SpikeDecision {
+    return { allowed: false, retryAfterMs };
 }
 
 export type { SpikeProtectionDeps };

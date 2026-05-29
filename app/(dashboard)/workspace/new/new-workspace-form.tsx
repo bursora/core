@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SubmitButton } from "@/components/ui/submit-button";
+import { EnvironmentPicker } from "@/components/ui/workspace/environment-picker";
 import { cn } from "@/lib/utils";
 import { Building2 } from "lucide-react";
 import Link from "next/link";
@@ -19,9 +20,7 @@ interface Props {
 
 const INITIAL: NewWorkspaceState = { error: null };
 const MAX_LEN = 60;
-const ENVIRONMENT_SUGGESTIONS = ["prod", "staging", "dev"] as const;
 const DEFAULT_ENVIRONMENT = "prod";
-const MAX_ENV_LEN = 40;
 
 export function NewWorkspaceForm({ action }: Props) {
     const [state, formAction] = useActionState(action, INITIAL);
@@ -29,7 +28,6 @@ export function NewWorkspaceForm({ action }: Props) {
     const [environment, setEnvironment] = useState<string>(DEFAULT_ENVIRONMENT);
     const errorId = useId();
     const helperId = useId();
-    const envListId = useId();
     const inputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
@@ -95,25 +93,9 @@ export function NewWorkspaceForm({ action }: Props) {
             </div>
 
             <div className="grid gap-2">
-                <Label htmlFor="environment" className="text-sm font-medium">
-                    Environment
-                </Label>
-                <Input
-                    id="environment"
-                    name="environment"
-                    list={envListId}
-                    required
-                    maxLength={MAX_ENV_LEN}
-                    autoComplete="off"
-                    placeholder="prod"
-                    value={environment}
-                    onChange={(e) => setEnvironment(e.target.value)}
-                />
-                <datalist id={envListId}>
-                    {ENVIRONMENT_SUGGESTIONS.map((opt) => (
-                        <option key={opt} value={opt} />
-                    ))}
-                </datalist>
+                <Label className="text-sm font-medium">Environment</Label>
+                <EnvironmentPicker value={environment} onChange={setEnvironment} />
+                <input type="hidden" name="environment" value={environment} />
                 <p className="text-xs text-muted-foreground">
                     A short label like prod, staging, or dev. Shows on the sidebar.
                 </p>

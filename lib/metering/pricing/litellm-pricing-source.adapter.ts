@@ -2,14 +2,16 @@
  * LiteLLM pricing source adapter.
  *
  * Daily cron pulls https://github.com/BerriAI/litellm's curated price map and
- * surfaces OpenAI + Anthropic + DeepSeek entries as ScrapedRate rows.
+ * surfaces priced entries for our supported vendors as ScrapedRate rows.
  * Per-token costs in the feed are converted to per-1M tokens — the unit every
  * major provider (OpenAI, Anthropic, Google, Azure, DeepSeek) displays.
  * Cache-read cost maps to cachePer1mUsd; absent → null. Cache-write cost is
  * ignored (not in schema).
  *
- * Filters to openai/anthropic/deepseek. All matching entries kept verbatim -
- * missing rows would silently cost $0.
+ * Only the vendors in LITELLM_TO_SLUG are surfaced, mapped from LiteLLM's
+ * `litellm_provider` value to the canonical slug the SDK emits so events match
+ * a price. All matching entries kept verbatim - missing rows would silently
+ * cost $0.
  *
  * Non-2xx fetches throw; bad shape throws. The surrounding `syncPricing`
  * use case catches per-source errors, completes the remaining sources, then
@@ -23,16 +25,27 @@ const FEED_URL =
 
 const USER_AGENT = "bursora-pricing-sync";
 
-type AllowedVendor = "openai" | "anthropic" | "deepseek";
-
-const ALLOWED_PROVIDERS: ReadonlySet<AllowedVendor> = new Set<AllowedVendor>([
-    "openai",
-    "anthropic",
-    "deepseek",
-]);
-
-const isAllowedVendor = (value: string): value is AllowedVendor =>
-    (ALLOWED_PROVIDERS as ReadonlySet<string>).has(value);
+// LiteLLM's `litellm_provider` value → the canonical provider slug the SDK
+// emits on usage events. Doubles as the allowlist (only these feed slugs are
+// surfaced) and the reconciliation map: three vendors are keyed differently by
+// LiteLLM than by our SDK, so rows are stored under the slug the SDK reports —
+// otherwise an event's provider would never match a synced price.
+//   gemini       → google      (SDK derives from generativelanguage.googleapis.com)
+//   together_ai  → together
+//   fireworks_ai → fireworks
+const LITELLM_TO_SLUG: Readonly<Record<string, string>> = {
+    openai: "openai",
+    anthropic: "anthropic",
+    deepseek: "deepseek",
+    gemini: "google",
+    groq: "groq",
+    xai: "xai",
+    mistral: "mistral",
+    together_ai: "together",
+    fireworks_ai: "fireworks",
+    perplexity: "perplexity",
+    openrouter: "openrouter",
+};
 
 interface LiteLLMEntry {
     readonly litellm_provider?: string;
@@ -65,8 +78,10 @@ export async function fetchFeed(): Promise<LiteLLMFeed> {
 export function parseFeed(feed: LiteLLMFeed): ScrapedRate[] {
     const rates: ScrapedRate[] = [];
     for (const [model, entry] of Object.entries(feed)) {
-        const provider = entry.litellm_provider;
-        if (provider === undefined || !isAllowedVendor(provider)) continue;
+        const litellmProvider = entry.litellm_provider;
+        if (litellmProvider === undefined) continue;
+        const provider = LITELLM_TO_SLUG[litellmProvider];
+        if (provider === undefined) continue;
 
         const input = parsePerToken(entry.input_cost_per_token);
         const output = parsePerToken(entry.output_cost_per_token);

@@ -8,10 +8,11 @@
  * Cache-read cost maps to cachePer1mUsd; absent → null. Cache-write cost is
  * ignored (not in schema).
  *
- * Only the vendors in LITELLM_TO_SLUG are surfaced, mapped from LiteLLM's
- * `litellm_provider` value to the canonical slug the SDK emits so events match
- * a price. All matching entries kept verbatim - missing rows would silently
- * cost $0.
+ * Only the vendors in LITELLM_TO_SLUG are surfaced. Both keys are reconciled to
+ * what the SDK emits so events match a price: the `litellm_provider` value maps
+ * to the canonical provider slug, and the model key drops LiteLLM's
+ * `${provider}/` namespace prefix down to the bare id the vendor's API takes
+ * (see stripVendorPrefix). Missing rows would silently cost $0.
  *
  * Non-2xx fetches throw; bad shape throws. The surrounding `syncPricing`
  * use case catches per-source errors, completes the remaining sources, then
@@ -77,7 +78,11 @@ export async function fetchFeed(): Promise<LiteLLMFeed> {
 
 export function parseFeed(feed: LiteLLMFeed): ScrapedRate[] {
     const rates: ScrapedRate[] = [];
-    for (const [model, entry] of Object.entries(feed)) {
+    // A few vendors list a model under both its bare and `${provider}/`-prefixed
+    // key; once normalized they collide on (provider, model). Keep the first and
+    // drop the rest so the sync doesn't churn versions re-resolving a dup.
+    const seen = new Set<string>();
+    for (const [key, entry] of Object.entries(feed)) {
         const litellmProvider = entry.litellm_provider;
         if (litellmProvider === undefined) continue;
         const provider = LITELLM_TO_SLUG[litellmProvider];
@@ -86,6 +91,11 @@ export function parseFeed(feed: LiteLLMFeed): ScrapedRate[] {
         const input = parsePerToken(entry.input_cost_per_token);
         const output = parsePerToken(entry.output_cost_per_token);
         if (input === null || output === null) continue;
+
+        const model = stripVendorPrefix(litellmProvider, key);
+        const dedupeKey = `${provider} ${model}`;
+        if (seen.has(dedupeKey)) continue;
+        seen.add(dedupeKey);
 
         const cache = parsePerToken(entry.cache_read_input_token_cost);
 
@@ -99,6 +109,28 @@ export function parseFeed(feed: LiteLLMFeed): ScrapedRate[] {
         });
     }
     return rates;
+}
+
+// LiteLLM namespaces most non-OpenAI models as `${litellm_provider}/<id>` (e.g.
+// groq/llama-3.1-8b-instant, gemini/gemini-2.0-flash), but the SDK reports the
+// bare id the vendor's API takes, and price matching is exact. Strip only the
+// one leading litellm_provider segment so events match.
+//
+// Edge cases handled by stripping a single segment:
+//   - OpenRouter keys carry a second vendor segment
+//     (openrouter/anthropic/claude-3.5-sonnet) that OpenRouter itself requires
+//     in the model id, so it's preserved -> anthropic/claude-3.5-sonnet.
+//   - groq/together_ai/fireworks_ai sub-namespace some ids
+//     (groq/meta-llama/..., fireworks_ai/accounts/fireworks/models/...); the
+//     vendor API keeps that tail, so only the provider segment is dropped.
+//
+// together_ai/fireworks_ai also expose size-bucket pseudo-models
+// (together-ai-4.1b-8b, fireworks-ai-default) with no `/`; they carry no bare id
+// a real event would emit, so they pass through unchanged and simply never
+// match — there's no sane id to map them to.
+function stripVendorPrefix(litellmProvider: string, key: string): string {
+    const prefix = `${litellmProvider}/`;
+    return key.startsWith(prefix) ? key.slice(prefix.length) : key;
 }
 
 // Returns null when the cost field is absent or invalid. The caller treats

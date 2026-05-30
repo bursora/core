@@ -1,52 +1,110 @@
 name: CI
 
 on:
-  pull_request:
-  push:
-    branches: [main]
+    pull_request:
+        paths-ignore:
+            - "**.md"
+            - "docs/**"
+            - "LICENSE"
+            - ".gitignore"
+    push:
+        branches: [main]
+        paths-ignore:
+            - "**.md"
+            - "docs/**"
+            - "LICENSE"
+            - ".gitignore"
 
 concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
+    group: ci-${{ github.ref }}
+    cancel-in-progress: true
 
 # Dummy build/test env. The self-host flavor (IS_CLOUD unset) needs no real
 # secrets; these throwaway values only satisfy lib/env.ts validation so
 # `next build`, `bun test`, and the OSS bundle scan can run. None are real
-# credentials.
+# credentials. The suite is DB-less (in-memory fakes), so no Postgres service
+# is provisioned; an unreachable DATABASE_URL is never queried.
 env:
-  DATABASE_URL: postgres://bursora:bursora@localhost:5432/bursora
-  BURSORA_API_KEY_PEPPER: ci-dummy-pepper
-  BETTER_AUTH_SECRET: ci-dummy-secret
-  BETTER_AUTH_URL: http://localhost:3000
-  SMTP_HOST: localhost
-  SMTP_PORT: "1025"
-  CRON_SECRET: ci-dummy-cron
-  NEXT_PUBLIC_APP_URL: http://localhost:3000
-  GOOGLE_CLIENT_ID: ci-dummy-google-id
-  GOOGLE_CLIENT_SECRET: ci-dummy-google-secret
+    DATABASE_URL: postgres://bursora:bursora@localhost:5432/bursora
+    BURSORA_API_KEY_PEPPER: ci-dummy-pepper
+    BETTER_AUTH_SECRET: ci-dummy-secret
+    BETTER_AUTH_URL: http://localhost:3000
+    SMTP_HOST: localhost
+    SMTP_PORT: "1025"
+    CRON_SECRET: ci-dummy-cron
+    NEXT_PUBLIC_APP_URL: http://localhost:3000
+    GOOGLE_CLIENT_ID: ci-dummy-google-id
+    GOOGLE_CLIENT_SECRET: ci-dummy-google-secret
 
 jobs:
-  quality:
-    name: Lint, typecheck, test
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-      - run: bun install --frozen-lockfile
-      - run: bun run lint
-      - run: bun run typecheck
-      - run: bun test
+    quality:
+        name: Lint, typecheck, test, build
+        runs-on: ubuntu-latest
+        steps:
+            # core depends on @bursora/sdk via `file:../sdk`, so the sibling repo must
+            # sit next to core. Check both out under the workspace as siblings.
+            - name: Checkout core
+              uses: actions/checkout@v4
+              with:
+                  path: core
+            - name: Checkout @bursora/sdk sibling
+              uses: actions/checkout@v4
+              with:
+                  repository: bursora/sdk
+                  ref: main
+                  path: sdk
+            - uses: oven-sh/setup-bun@v2
+              with:
+                  bun-version: 1.3.13
+            # sdk publishes from dist/ (gitignored), so build it before core installs.
+            - name: Build @bursora/sdk
+              working-directory: sdk
+              run: |
+                  bun install
+                  bun run build
+                  test -f dist/index.mjs
+            - name: Install core
+              working-directory: core
+              run: bun install
+            - name: Lint
+              working-directory: core
+              run: bun run lint
+            - name: Typecheck
+              working-directory: core
+              run: bun run typecheck
+            - name: Test
+              working-directory: core
+              run: bun test
+            - name: Build
+              working-directory: core
+              run: bun run build
 
-  oss-build:
-    name: No EE symbols in OSS bundle
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-      - run: bun install --frozen-lockfile
-      - name: Verify OSS bundle excludes lib/ee
-        run: ./scripts/verify-oss-build.sh
+    oss-build:
+        name: No EE symbols in OSS bundle
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout core
+              uses: actions/checkout@v4
+              with:
+                  path: core
+            - name: Checkout @bursora/sdk sibling
+              uses: actions/checkout@v4
+              with:
+                  repository: bursora/sdk
+                  ref: main
+                  path: sdk
+            - uses: oven-sh/setup-bun@v2
+              with:
+                  bun-version: 1.3.13
+            - name: Build @bursora/sdk
+              working-directory: sdk
+              run: |
+                  bun install
+                  bun run build
+                  test -f dist/index.mjs
+            - name: Install core
+              working-directory: core
+              run: bun install
+            - name: Verify OSS bundle excludes lib/ee
+              working-directory: core
+              run: ./scripts/verify-oss-build.sh

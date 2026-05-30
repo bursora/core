@@ -13,10 +13,7 @@
  * `isCloud` flag and a fake billing read directly.
  */
 
-import {
-    cloudWorkspaceLocked,
-    setBillingGateDepsForTesting,
-} from "@/lib/billing-gate/server";
+import { cloudWorkspaceLocked, setBillingGateDepsForTesting } from "@/lib/billing-gate/server";
 import type { WorkspaceBillingRecord } from "@/lib/ee/billing/workspace-billing.repository";
 import { afterEach, describe, expect, test } from "bun:test";
 

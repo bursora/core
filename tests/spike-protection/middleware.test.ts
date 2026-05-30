@@ -127,7 +127,8 @@ describe("applySpikeProtection", () => {
             workspaceId: WORKSPACE,
             eventCount: 60,
         });
-        expect(decision.allowed).toBe(false);        expect(decision.retryAfterMs).toBeGreaterThan(0);
+        expect(decision.allowed).toBe(false);
+        expect(decision.retryAfterMs).toBeGreaterThan(0);
 
         const cooldown = await state.getCooldown({ workspaceId: WORKSPACE });
         expect(cooldown.untilMs).toBeGreaterThan(0);
@@ -147,7 +148,8 @@ describe("applySpikeProtection", () => {
             workspaceId: WORKSPACE,
             eventCount: 1,
         });
-        expect(decision.allowed).toBe(false);    });
+        expect(decision.allowed).toBe(false);
+    });
 
     test("after cooldown expires, traffic is re-evaluated", async () => {
         const state = new InMemorySpikeStateStore();
@@ -175,7 +177,8 @@ describe("applySpikeProtection", () => {
             workspaceId: WORKSPACE,
             eventCount: 25,
         });
-        expect(decision.allowed).toBe(false);    });
+        expect(decision.allowed).toBe(false);
+    });
 
     test("cloud: Redis error returns deny with retry hint (fail-closed)", async () => {
         setSpikeProtectionDepsForTesting(
@@ -185,7 +188,8 @@ describe("applySpikeProtection", () => {
             workspaceId: WORKSPACE,
             eventCount: 1,
         });
-        expect(decision.allowed).toBe(false);        expect(decision.retryAfterMs).toBe(5_000);
+        expect(decision.allowed).toBe(false);
+        expect(decision.retryAfterMs).toBe(5_000);
     });
 
     test("self-host: Redis error returns allow (fail-open)", async () => {

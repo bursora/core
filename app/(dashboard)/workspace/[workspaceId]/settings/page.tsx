@@ -80,10 +80,7 @@ export default async function SettingsPage({ params, searchParams }: SettingsPag
                     ...(isCloud && BillingSection
                         ? {
                               billing: (
-                                  <BillingSection
-                                      workspaceId={workspaceId}
-                                      status={billingStatus}
-                                  >
+                                  <BillingSection workspaceId={workspaceId} status={billingStatus}>
                                       <EventBundleSection workspaceId={workspaceId} />
                                   </BillingSection>
                               ),

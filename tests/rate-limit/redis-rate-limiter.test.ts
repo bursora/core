@@ -15,8 +15,8 @@
  */
 
 import { RedisRateLimiter } from "@/lib/rate-limit/redis.adapter";
-import type { Redis } from "ioredis";
 import { describe, expect, test } from "bun:test";
+import type { Redis } from "ioredis";
 
 /**
  * Minimal stand-in for ioredis that honors the `defineCommand` contract.

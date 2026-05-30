@@ -8,12 +8,12 @@
  */
 
 import { NowStrip } from "@/app/(dashboard)/workspace/[workspaceId]/_components/now-strip";
+import type { RawBudget } from "@/lib/budgeting/budget.repository";
+import { resolveWindow, type DashboardWindow, type WindowKey } from "@/lib/dashboard-window";
 import {
     setDashboardStatsDepsForTesting,
     type DashboardStatsDeps,
 } from "@/lib/dashboard/dashboard-stats";
-import type { RawBudget } from "@/lib/budgeting/budget.repository";
-import { resolveWindow, type DashboardWindow, type WindowKey } from "@/lib/dashboard-window";
 import type { Alert, AlertRepository, AnomalyAlert, ListAlertsQuery } from "@/lib/detection";
 import { setAlertsDepsForTesting } from "@/lib/detection";
 import { afterEach, describe, expect, test } from "bun:test";

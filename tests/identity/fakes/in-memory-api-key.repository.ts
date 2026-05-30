@@ -36,8 +36,7 @@ export class InMemoryApiKeyRepository implements ApiKeyRepository {
     ): Promise<readonly ApiKey[]> {
         const includeRevoked = opts?.includeRevoked ?? false;
         return [...this.rows.values()].filter(
-            (row) =>
-                row.workspaceId === workspaceId && (includeRevoked || row.revokedAt === null),
+            (row) => row.workspaceId === workspaceId && (includeRevoked || row.revokedAt === null),
         );
     }
 

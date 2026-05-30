@@ -133,9 +133,7 @@ export function drizzleNotificationsRepository(db: Db): NotificationsRepository 
                 // with an active subscription. A locked workspace has a NULL or
                 // non-active status, which `inArray` excludes, so its alert
                 // content never leaks through the cross-workspace bell.
-                conditions.push(
-                    inArray(workspaces.subscriptionStatus, [...subscriptionStatuses]),
-                );
+                conditions.push(inArray(workspaces.subscriptionStatus, [...subscriptionStatuses]));
             }
             if (sources && sources.length > 0) {
                 conditions.push(inArray(notifications.source, [...sources]));

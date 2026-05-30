@@ -1,3 +1,4 @@
+import { CloudPaywallPage } from "@/app/(dashboard)/workspace/[workspaceId]/_components/cloud-paywall-page";
 import { PageHeader } from "@/components/shell/page-header";
 import { TopSpendersTable } from "@/components/ui/dashboard-views/top-spenders-table";
 import { FeedItem } from "@/components/ui/feed-item";
@@ -8,7 +9,6 @@ import { GroupByFilter } from "@/components/ui/workspace/filters/group-by-filter
 import { MeteringActiveFilters } from "@/components/ui/workspace/filters/metering-active-filters";
 import { StatusFilter } from "@/components/ui/workspace/filters/status-filter";
 import { StatusTag } from "@/components/ui/workspace/status-tag";
-import { CloudPaywallPage } from "@/app/(dashboard)/workspace/[workspaceId]/_components/cloud-paywall-page";
 import { requireSessionUI } from "@/lib/auth";
 import { cloudWorkspaceLocked } from "@/lib/billing-gate/server";
 import { getBlockedCallsLastDay } from "@/lib/budgeting/blocked-calls";

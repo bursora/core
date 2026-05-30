@@ -23,11 +23,11 @@ export {
     type CreateWorkspaceResult,
 } from "./create-workspace.usecase";
 export { InviteCapExceededError, MAX_PENDING_INVITES_PER_WORKSPACE } from "./invite-cap";
+export { inviteMemberUseCase, type InviteMemberInput } from "./invite-member.usecase";
 export {
     isAdminOwnedWorkspaceUseCase,
     type IsAdminOwnedWorkspaceInput,
 } from "./is-admin-owned-workspace.usecase";
-export { inviteMemberUseCase, type InviteMemberInput } from "./invite-member.usecase";
 export { issueApiKeyUseCase, type IssueApiKeyInput } from "./issue-api-key.usecase";
 export {
     listApiKeysUseCase,
@@ -44,13 +44,13 @@ export {
     type SetWorkspaceEnvironmentInput,
 } from "./set-workspace-environment.usecase";
 
-export type { ApiKeyRepository } from "./api-key.repository";
 export type {
     ApiKeyAuditAction,
     ApiKeyAuditLogEntry,
     ApiKeyAuditLogRepository,
     RecordApiKeyAuditLogInput,
 } from "./api-key-audit-log.repository";
+export type { ApiKeyRepository } from "./api-key.repository";
 
 export { generateApiKeyPlaintext, hashApiKey, parseApiKeyPlaintext } from "./api-key.crypto";
 

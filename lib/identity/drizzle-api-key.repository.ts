@@ -43,10 +43,7 @@ export class DrizzleApiKeyRepository implements ApiKeyRepository {
     ): Promise<readonly ApiKey[]> {
         const where = opts?.includeRevoked
             ? eq(schema.apiKeys.workspaceId, workspaceId)
-            : and(
-                  eq(schema.apiKeys.workspaceId, workspaceId),
-                  isNull(schema.apiKeys.revokedAt),
-              );
+            : and(eq(schema.apiKeys.workspaceId, workspaceId), isNull(schema.apiKeys.revokedAt));
         const rows = await this.db
             .select()
             .from(schema.apiKeys)

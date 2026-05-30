@@ -191,8 +191,9 @@ export const findMembership = cache(async (workspaceId: string, userId: string) 
  * Memoised per request: the SDK ingest path resolves this on every event, so
  * cache the owner-role read to keep it a single query within a request.
  */
-export const isAdminOwnedWorkspace = cache(async (workspaceId: string): Promise<boolean> =>
-    isAdminOwnedWorkspaceUseCase({ workspaceId, members: members() }),
+export const isAdminOwnedWorkspace = cache(
+    async (workspaceId: string): Promise<boolean> =>
+        isAdminOwnedWorkspaceUseCase({ workspaceId, members: members() }),
 );
 
 /**

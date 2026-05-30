@@ -3,9 +3,9 @@
 // customer ratio, >+15pp model share AND >1.5x cpc). `today` is skipped:
 // partial-day data is too noisy to flag a sustained trajectory.
 
-import { getBudgetList } from "@/lib/dashboard/dashboard-stats";
 import { periodWindow, type Period, type RawBudget } from "@/lib/budgeting";
 import type { DashboardWindow } from "@/lib/dashboard-window";
+import { getBudgetList } from "@/lib/dashboard/dashboard-stats";
 import type { FacetedSeries } from "@/lib/metering";
 import { getSpendSeries } from "@/lib/metering/server";
 import "server-only";

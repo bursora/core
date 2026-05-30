@@ -4,8 +4,8 @@
  * exemptions for admin-run workspaces. Pure: repo injected, no DB.
  */
 
-import { isAdminOwnedWorkspaceUseCase } from "@/lib/identity";
 import type { MemberRepository } from "@/lib/identity";
+import { isAdminOwnedWorkspaceUseCase } from "@/lib/identity";
 import { describe, expect, test } from "bun:test";
 import { InMemoryMemberRepository } from "./fakes/in-memory-member.repository";
 

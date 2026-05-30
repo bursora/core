@@ -60,6 +60,15 @@ beforeAll(() => {
             }
         },
     }));
+    // Owner is a regular user → no admin-owned bypass; the route runs the
+    // rate limiter and records bundle usage as normal.
+    mock.module("@/lib/identity/drizzle-member.repository", () => ({
+        DrizzleMemberRepository: class {
+            async findOwnerUserRole(): Promise<string | null> {
+                return "user";
+            }
+        },
+    }));
 });
 
 const { POST } = await import("@/app/api/v1/events/route");

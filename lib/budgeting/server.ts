@@ -11,6 +11,7 @@
  */
 
 import { db, schema } from "@/lib/db";
+import { isAdminOwnedWorkspace } from "@/lib/identity/server";
 import { and, count, eq, gte, inArray, lt, min, sql, sum } from "drizzle-orm";
 import "server-only";
 import type { AlertRepository } from "../detection/alert.repository";
@@ -43,6 +44,11 @@ export interface BudgetingDeps {
     readonly bus?: EventBus;
     readonly alerts?: AlertRepository;
     readonly recordBlocked?: RecordBlockedCall;
+    /**
+     * Resolves whether the workspace is admin-owned (operator dogfood tenant).
+     * Optional: production falls back to the real resolver; tests inject a fake.
+     */
+    readonly isAdminOwnedWorkspace?: (workspaceId: string) => Promise<boolean>;
 }
 
 let testOverride: BudgetingDeps | null = null;
@@ -136,6 +142,12 @@ export async function decideBudget(input: {
     intendedModel?: string | null;
 }): Promise<Decision> {
     const deps = budgetingDeps();
+    // Admin-owned workspaces (operator dogfood tenants) never block on budget.
+    // Resolve first so we can skip the blocked-row write and the crossing alert.
+    const adminOwned = await (deps.isAdminOwnedWorkspace ?? isAdminOwnedWorkspace)(
+        input.workspaceId,
+    );
+
     const result = await decideBudgetUseCase({
         workspaceId: input.workspaceId,
         tenantId: input.tenantId,
@@ -146,15 +158,28 @@ export async function decideBudget(input: {
         now: deps.now(),
         budgets: deps.budgets,
         spend: deps.spend,
-        ...(deps.recordBlocked === undefined ? {} : { recordBlocked: deps.recordBlocked }),
+        // An admin-owned workspace is never blocked, so don't stamp a blocked row.
+        ...(adminOwned || deps.recordBlocked === undefined
+            ? {}
+            : { recordBlocked: deps.recordBlocked }),
         ...(deps.ttlSeconds === undefined ? {} : { ttlSeconds: deps.ttlSeconds }),
     });
 
-    if (result.trigger !== undefined) {
+    if (!adminOwned && result.trigger !== undefined) {
         await dispatchBudgetCrossing(result.trigger, deps);
     }
 
-    return result.decision;
+    return adminOwned ? liftBlock(result.decision) : result.decision;
+}
+
+/**
+ * Flips a block decision to allow for an admin-owned workspace, leaving the
+ * headroom snapshot (`remainingUsd`/`resetAt`) intact so the SDK self-degrade
+ * path still sees real numbers. Mode drops to `notify` so the SDK never throws.
+ */
+function liftBlock(decision: Decision): Decision {
+    if (decision.allow) return decision;
+    return { ...decision, allow: true, mode: "notify" };
 }
 
 /**

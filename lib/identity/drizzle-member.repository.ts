@@ -70,6 +70,21 @@ export class DrizzleMemberRepository implements MemberRepository {
             .where(eq(schema.workspaceMembers.workspaceId, workspaceId));
         return rows.map((r) => r.userId);
     }
+
+    async findOwnerUserRole(workspaceId: string): Promise<string | null> {
+        const [row] = await this.db
+            .select({ role: schema.users.role })
+            .from(schema.workspaceMembers)
+            .innerJoin(schema.users, eq(schema.workspaceMembers.userId, schema.users.id))
+            .where(
+                and(
+                    eq(schema.workspaceMembers.workspaceId, workspaceId),
+                    eq(schema.workspaceMembers.role, "owner"),
+                ),
+            )
+            .limit(1);
+        return row?.role ?? null;
+    }
 }
 
 type MemberRow = typeof schema.workspaceMembers.$inferSelect;

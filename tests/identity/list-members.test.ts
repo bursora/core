@@ -17,6 +17,9 @@ class FakeMemberRepository implements MemberRepository {
     async listMemberUserIds(workspaceId: string): Promise<readonly string[]> {
         return this.rows.filter((r) => r.workspaceId === workspaceId).map((r) => r.userId);
     }
+    async findOwnerUserRole(): Promise<string | null> {
+        return null;
+    }
 }
 
 describe("listMembersUseCase", () => {

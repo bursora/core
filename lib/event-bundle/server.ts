@@ -13,6 +13,7 @@ import "server-only";
 
 import { db } from "@/lib/db";
 import { env } from "../env";
+import { isAdminOwnedWorkspace } from "../identity/server";
 import { redisClient } from "../redis/client";
 import {
     BUNDLE_EVENTS_PER_MONTH,
@@ -30,6 +31,12 @@ export interface EventBundleDeps {
     readonly counter: EventBundleCounterStore;
     readonly usage: EventBundleUsageRepository;
     readonly now: () => Date;
+    /**
+     * True when the workspace owner is a platform admin. Admin-owned tenants
+     * are the operator's own; their fair-use banner is suppressed. Optional so
+     * recording callers and legacy test deps default to enforcing (no bypass).
+     */
+    readonly isAdminOwned?: (workspaceId: string) => Promise<boolean>;
 }
 
 let testOverride: EventBundleDeps | null = null;
@@ -50,6 +57,7 @@ export function eventBundleDeps(): EventBundleDeps {
         counter,
         usage: drizzleEventBundleUsageRepository(db()),
         now: () => new Date(),
+        isAdminOwned: isAdminOwnedWorkspace,
     };
 }
 
@@ -82,9 +90,10 @@ export async function readEventBundleStatus(workspaceId: string): Promise<EventB
         };
     }
 
-    const [hot, cold] = await Promise.all([
+    const [hot, cold, adminOwned] = await Promise.all([
         deps.counter.readMonth({ workspaceId, month }),
         deps.usage.findMonth({ workspaceId, month }),
+        deps.isAdminOwned?.(workspaceId) ?? Promise.resolve(false),
     ]);
 
     // Reconcile from the cold store if Redis is below the persisted rollup
@@ -95,11 +104,13 @@ export async function readEventBundleStatus(workspaceId: string): Promise<EventB
         await deps.counter.seedMonth({ workspaceId, month, value: cold.eventsCount });
     }
 
+    // Admin-owned tenants are the operator's own; the count still reports so
+    // the settings UI shows real usage, but the fair-use warning is hidden.
     return {
         enabled: true,
         eventsCount,
         bundleEvents: BUNDLE_EVENTS_PER_MONTH,
-        bannerLevel: bannerLevel(eventsCount),
+        bannerLevel: adminOwned ? "none" : bannerLevel(eventsCount),
         month,
     };
 }

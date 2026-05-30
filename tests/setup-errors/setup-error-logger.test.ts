@@ -42,6 +42,13 @@ beforeAll(() => {
             }
         },
     }));
+    mock.module("@/lib/identity/drizzle-member.repository", () => ({
+        DrizzleMemberRepository: class {
+            async findOwnerUserRole(): Promise<string | null> {
+                return "user";
+            }
+        },
+    }));
 });
 
 const { POST: postEvents } = await import("@/app/api/v1/events/route");

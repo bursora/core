@@ -46,6 +46,13 @@ beforeAll(() => {
             }
         },
     }));
+    mock.module("@/lib/identity/drizzle-member.repository", () => ({
+        DrizzleMemberRepository: class {
+            async findOwnerUserRole(): Promise<string | null> {
+                return "user";
+            }
+        },
+    }));
 });
 
 const { GET } = await import("@/app/api/v1/budget/route");

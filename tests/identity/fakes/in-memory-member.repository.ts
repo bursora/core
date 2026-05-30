@@ -11,6 +11,12 @@ const key = (workspaceId: string, userId: string) => `${workspaceId}:${userId}`;
 
 export class InMemoryMemberRepository implements MemberRepository {
     private readonly rows = new Map<string, WorkspaceMember>();
+    private readonly userRoles = new Map<string, string>();
+
+    /** Test-only: set a user's platform role so `findOwnerUserRole` can resolve it. */
+    setUserRole(userId: string, role: string): void {
+        this.userRoles.set(userId, role);
+    }
 
     async addMember(input: {
         workspaceId: string;
@@ -47,6 +53,14 @@ export class InMemoryMemberRepository implements MemberRepository {
         return Array.from(this.rows.values())
             .filter((m) => m.workspaceId === workspaceId)
             .map((m) => m.userId);
+    }
+
+    async findOwnerUserRole(workspaceId: string): Promise<string | null> {
+        const owner = Array.from(this.rows.values()).find(
+            (m) => m.workspaceId === workspaceId && m.role === "owner",
+        );
+        if (!owner) return null;
+        return this.userRoles.get(owner.userId) ?? "user";
     }
 }
 

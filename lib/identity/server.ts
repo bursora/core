@@ -16,6 +16,7 @@ import { DrizzleApiKeyRepository } from "./drizzle-api-key.repository";
 import { DrizzleInviteRepository, DrizzleMemberRepository } from "./drizzle-member.repository";
 import { DrizzleWorkspaceRepository } from "./drizzle-workspace.repository";
 import { inviteMemberUseCase } from "./invite-member.usecase";
+import { isAdminOwnedWorkspaceUseCase } from "./is-admin-owned-workspace.usecase";
 import { issueApiKeyUseCase } from "./issue-api-key.usecase";
 import { listApiKeysUseCase } from "./list-api-keys.usecase";
 import { listMembersUseCase } from "./list-members.usecase";
@@ -181,6 +182,17 @@ export async function lookupApiKey(plaintext: string) {
  */
 export const findMembership = cache(async (workspaceId: string, userId: string) =>
     members().findMembership(workspaceId, userId),
+);
+
+/**
+ * True when the workspace owner is a platform admin. Drives the rate-limit
+ * and fair-use exemptions for the operator's own dogfood tenants.
+ *
+ * Memoised per request: the SDK ingest path resolves this on every event, so
+ * cache the owner-role read to keep it a single query within a request.
+ */
+export const isAdminOwnedWorkspace = cache(async (workspaceId: string): Promise<boolean> =>
+    isAdminOwnedWorkspaceUseCase({ workspaceId, members: members() }),
 );
 
 /**

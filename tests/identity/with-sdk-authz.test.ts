@@ -18,6 +18,7 @@ const API_KEY_ID = "00000000-1111-2222-3333-444444444444";
 const PLAINTEXT = `bsk_${WORKSPACE}_${"a".repeat(32)}`;
 
 let apiKeyRow: ApiKey | null = null;
+let ownerRole: string | null = "user";
 
 beforeAll(() => {
     mock.module("@/lib/identity/drizzle-api-key.repository", () => ({
@@ -36,6 +37,13 @@ beforeAll(() => {
             }
             async revoke(): Promise<boolean> {
                 return false;
+            }
+        },
+    }));
+    mock.module("@/lib/identity/drizzle-member.repository", () => ({
+        DrizzleMemberRepository: class {
+            async findOwnerUserRole(): Promise<string | null> {
+                return ownerRole;
             }
         },
     }));
@@ -74,6 +82,7 @@ const makeRequest = (headers: Record<string, string> = {}): Request =>
 
 const teardown = (): void => {
     apiKeyRow = null;
+    ownerRole = "user";
     setRateLimitDepsForTesting(null);
 };
 
@@ -127,5 +136,32 @@ describe("withSdkAuthz", () => {
         if (blocked.allowed) throw new Error("expected denied");
         expect(blocked.response.status).toBe(429);
         expect(blocked.response.headers.get("X-Bursora-Cap-Hit")).toBe("rate");
+    });
+
+    test("admin-owned workspace bypasses the rate limit even past the cap", async () => {
+        setKnownKey();
+        ownerRole = "admin";
+        setRateLimit({ limit: 1 });
+
+        const first = await withSdkAuthz(makeRequest({ "x-bursora-key": PLAINTEXT }));
+        const second = await withSdkAuthz(makeRequest({ "x-bursora-key": PLAINTEXT }));
+
+        expect(first.allowed).toBe(true);
+        expect(second.allowed).toBe(true);
+        if (!second.allowed) throw new Error("expected allowed");
+        expect(second.rateLimit.response).toBeNull();
+    });
+
+    test("non-admin-owned workspace is still rate-limited at the cap", async () => {
+        setKnownKey();
+        ownerRole = "user";
+        setRateLimit({ limit: 1 });
+
+        await withSdkAuthz(makeRequest({ "x-bursora-key": PLAINTEXT }));
+        const blocked = await withSdkAuthz(makeRequest({ "x-bursora-key": PLAINTEXT }));
+
+        expect(blocked.allowed).toBe(false);
+        if (blocked.allowed) throw new Error("expected denied");
+        expect(blocked.response.status).toBe(429);
     });
 });

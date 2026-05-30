@@ -45,7 +45,7 @@ jobs:
           path: sdk
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: latest
+          bun-version: 1.3.13
       # sdk publishes from dist/ (gitignored), so build it before core installs.
       - name: Build @bursora/sdk
         working-directory: sdk
@@ -85,7 +85,7 @@ jobs:
           path: sdk
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: latest
+          bun-version: 1.3.13
       - name: Build @bursora/sdk
         working-directory: sdk
         run: |

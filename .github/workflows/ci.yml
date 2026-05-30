@@ -51,8 +51,8 @@ jobs:
         working-directory: sdk
         run: |
           bun install
-          bun run prepare
-          test -f dist/index.js
+          bun run build
+          test -f dist/index.mjs
       - name: Install core
         working-directory: core
         run: bun install --frozen-lockfile
@@ -90,8 +90,8 @@ jobs:
         working-directory: sdk
         run: |
           bun install
-          bun run prepare
-          test -f dist/index.js
+          bun run build
+          test -f dist/index.mjs
       - name: Install core
         working-directory: core
         run: bun install --frozen-lockfile

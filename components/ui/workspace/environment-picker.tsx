@@ -138,7 +138,9 @@ function PresetTile({ preset, selected, onClick }: PresetTileProps) {
             aria-pressed={selected}
             className={cn(
                 "flex flex-col items-start gap-1 rounded-md border p-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                selected ? preset.selectedClass : "border-border bg-background hover:border-foreground/30",
+                selected
+                    ? preset.selectedClass
+                    : "border-border bg-background hover:border-foreground/30",
             )}
         >
             <span className="flex items-center gap-1.5">

@@ -1,6 +1,6 @@
+import { CloudPaywallPage } from "@/app/(dashboard)/workspace/[workspaceId]/_components/cloud-paywall-page";
 import { readIssuedKey } from "@/app/(dashboard)/workspace/[workspaceId]/settings/issued-key-cookie";
 import { PageHeader } from "@/components/shell/page-header";
-import { CloudPaywallPage } from "@/app/(dashboard)/workspace/[workspaceId]/_components/cloud-paywall-page";
 import { cloudWorkspaceLocked } from "@/lib/billing-gate/server";
 import { KEYS_FROM_SPEND_EMPTY } from "@/lib/routes";
 import { ApiKeysSection } from "./_components/api-keys-section";

@@ -42,9 +42,7 @@ export default async function ProfilePage() {
                 <Card>
                     <CardHeader>
                         <CardTitle>Display name</CardTitle>
-                        <CardDescription>
-                            Shown next to your avatar across Bursora.
-                        </CardDescription>
+                        <CardDescription>Shown next to your avatar across Bursora.</CardDescription>
                     </CardHeader>
                     <CardContent>
                         <ProfileForm currentName={user.name} />

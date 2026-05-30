@@ -75,9 +75,7 @@ describe("deserializeActivityFilters", () => {
 
     test("parses from/to as Date when ISO is valid", () => {
         const params = deserializeActivityFilters(
-            new URLSearchParams(
-                "from=2025-05-10T00:00:00.000Z&to=2025-05-17T00:00:00.000Z",
-            ),
+            new URLSearchParams("from=2025-05-10T00:00:00.000Z&to=2025-05-17T00:00:00.000Z"),
         );
         expect(params.from?.toISOString()).toBe("2025-05-10T00:00:00.000Z");
         expect(params.to?.toISOString()).toBe("2025-05-17T00:00:00.000Z");

@@ -8,9 +8,9 @@
 
 import { schema } from "@/lib/db";
 import { buildMeteringWhereClause } from "@/lib/metering/usage-events-filters";
+import { describe, expect, test } from "bun:test";
 import { SQL } from "drizzle-orm";
 import type { PgColumn } from "drizzle-orm/pg-core";
-import { describe, expect, test } from "bun:test";
 
 const WORKSPACE = "11111111-2222-3333-4444-555555555555";
 
@@ -123,9 +123,7 @@ describe("buildMeteringWhereClause", () => {
         const providerPred = conditions.find((c) =>
             columnRefs(c).includes(schema.usageEvents.provider),
         );
-        const modelPred = conditions.find((c) =>
-            columnRefs(c).includes(schema.usageEvents.model),
-        );
+        const modelPred = conditions.find((c) => columnRefs(c).includes(schema.usageEvents.model));
 
         expect(providerPred).toBeDefined();
         expect(modelPred).toBeDefined();

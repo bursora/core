@@ -79,7 +79,11 @@ describe("LemonSqueezyApiAdapter.createCheckoutSession", () => {
         expect(headers.get("Content-Type")).toBe("application/vnd.api+json");
 
         const body = JSON.parse(call.init.body as string) as Record<string, unknown>;
-        const data = body.data as { type: string; attributes: Record<string, unknown>; relationships: Record<string, unknown> };
+        const data = body.data as {
+            type: string;
+            attributes: Record<string, unknown>;
+            relationships: Record<string, unknown>;
+        };
         expect(data.type).toBe("checkouts");
         const attrs = data.attributes as Record<string, unknown>;
         const checkoutData = attrs.checkout_data as Record<string, unknown>;
@@ -88,7 +92,10 @@ describe("LemonSqueezyApiAdapter.createCheckoutSession", () => {
         const productOptions = attrs.product_options as Record<string, string>;
         expect(productOptions.redirect_url).toBe("https://app.test/ok");
 
-        const relationships = data.relationships as Record<string, { data: { id: string; type: string } }>;
+        const relationships = data.relationships as Record<
+            string,
+            { data: { id: string; type: string } }
+        >;
         expect(relationships.store?.data.id).toBe(STORE_ID);
         expect(relationships.store?.data.type).toBe("stores");
         expect(relationships.variant?.data.id).toBe(VARIANT_ID);
@@ -154,9 +161,7 @@ describe("LemonSqueezyApiAdapter.createPortalSession", () => {
             returnUrl: "https://app.test/workspace/W/settings",
         });
 
-        expect(result.url).toBe(
-            "https://app.lemonsqueezy.com/billing?expires=1&signature=abc",
-        );
+        expect(result.url).toBe("https://app.lemonsqueezy.com/billing?expires=1&signature=abc");
         expect(calls).toHaveLength(1);
         const call = calls[0]!;
         expect(call.url).toBe("https://api.lemonsqueezy.com/v1/customers/99");
@@ -606,10 +611,10 @@ describe("LemonSqueezyApiAdapter.verifyAndParseEvent two-secret rotation", () =>
 describe("LemonSqueezyApiAdapter.verifyCredentials", () => {
     test("GETs /v1/users/me with the bearer key and reports ok on 200", async () => {
         const { fetcher, calls } = recordingFetch([
-            new Response(
-                JSON.stringify({ data: { id: "1", type: "users", attributes: {} } }),
-                { status: 200, headers: { "content-type": "application/vnd.api+json" } },
-            ),
+            new Response(JSON.stringify({ data: { id: "1", type: "users", attributes: {} } }), {
+                status: 200,
+                headers: { "content-type": "application/vnd.api+json" },
+            }),
         ]);
 
         const adapter = new LemonSqueezyApiAdapter({

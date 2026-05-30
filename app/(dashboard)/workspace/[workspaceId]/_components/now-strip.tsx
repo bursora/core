@@ -1,3 +1,7 @@
+import { NowStripView } from "@/components/ui/dashboard-views/now-strip-view";
+import type { KpiTone } from "@/components/ui/kpi";
+import { BUDGET_USAGE_WARN_THRESHOLD } from "@/lib/budgeting";
+import type { DashboardWindow } from "@/lib/dashboard-window";
 import {
     countActiveBudgets,
     getBudgetHeadroom,
@@ -8,10 +12,6 @@ import {
     getSpendInWindow,
     getSpendSeries,
 } from "@/lib/dashboard/dashboard-stats";
-import { NowStripView } from "@/components/ui/dashboard-views/now-strip-view";
-import type { KpiTone } from "@/components/ui/kpi";
-import { BUDGET_USAGE_WARN_THRESHOLD } from "@/lib/budgeting";
-import type { DashboardWindow } from "@/lib/dashboard-window";
 import { listAlerts } from "@/lib/detection";
 import { formatCount } from "@/lib/format";
 

@@ -18,9 +18,9 @@ import { Button } from "@/components/ui/button";
 import { DashboardSection } from "@/components/ui/workspace/dashboard-section";
 import { StatusTag, type StatusTagTone } from "@/components/ui/workspace/status-tag";
 import { isActiveSubscriptionStatus } from "@/lib/billing-status";
+import type { ReactNode } from "react";
 import { createCheckoutAction, openPortalAction } from "../billing-actions";
 import { getWorkspaceBillingRecord } from "../billing/server";
-import type { ReactNode } from "react";
 import { PastDueBanner } from "./past-due-banner";
 import { RefundPanel } from "./refund-panel";
 

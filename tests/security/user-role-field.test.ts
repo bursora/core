@@ -7,8 +7,8 @@
 
 import { auth } from "@/lib/auth";
 import { schema } from "@/lib/db";
-import { getTableConfig } from "drizzle-orm/pg-core";
 import { describe, expect, test } from "bun:test";
+import { getTableConfig } from "drizzle-orm/pg-core";
 
 describe("users.role column", () => {
     test("exists with text type and a 'user' default", () => {

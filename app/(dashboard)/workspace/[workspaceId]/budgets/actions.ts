@@ -1,14 +1,9 @@
 "use server";
 
-import { type ActionResult, actionFail, actionOk } from "@/lib/action-result";
+import { actionFail, actionOk, type ActionResult } from "@/lib/action-result";
 import { workspaceIdFromForm } from "@/lib/actions/form-fields";
 import { withWorkspace } from "@/lib/actions/with-workspace";
-import {
-    ValidationError,
-    type BudgetMode,
-    type Period,
-    type ScopeType,
-} from "@/lib/budgeting";
+import { ValidationError, type BudgetMode, type Period, type ScopeType } from "@/lib/budgeting";
 import { createBudget, deleteBudget, updateBudget } from "@/lib/budgeting/server";
 import { buildWorkspacePath } from "@/lib/routes";
 import { revalidatePath } from "next/cache";

@@ -26,12 +26,12 @@ export type { Spend } from "./spend-snapshot";
 
 export * from "./queries";
 
+export { BudgetInputSchema, type BudgetInput } from "./budget-input.schema";
 export {
     ValidationError,
     createBudgetUseCase,
     type CreateBudgetUseCaseInput,
 } from "./create-budget.usecase";
-export { BudgetInputSchema, type BudgetInput } from "./budget-input.schema";
 export {
     updateBudgetUseCase,
     type UpdateBudgetPatch,

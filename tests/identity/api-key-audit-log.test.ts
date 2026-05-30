@@ -1,8 +1,4 @@
-import {
-    issueApiKeyUseCase,
-    renameApiKeyUseCase,
-    revokeApiKeyUseCase,
-} from "@/lib/identity";
+import { issueApiKeyUseCase, renameApiKeyUseCase, revokeApiKeyUseCase } from "@/lib/identity";
 import { describe, expect, test } from "bun:test";
 import { InMemoryApiKeyAuditLogRepository } from "./fakes/in-memory-api-key-audit-log.repository";
 import { InMemoryApiKeyRepository } from "./fakes/in-memory-api-key.repository";

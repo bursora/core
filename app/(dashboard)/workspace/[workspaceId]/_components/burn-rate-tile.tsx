@@ -3,12 +3,9 @@
  * window alongside a window-shaped spend spark.
  */
 
-import {
-    getDailyRateInWindow,
-    getSpendSeries,
-} from "@/lib/dashboard/dashboard-stats";
 import { SparkChart } from "@/components/ui/spark-chart";
 import type { DashboardWindow } from "@/lib/dashboard-window";
+import { getDailyRateInWindow, getSpendSeries } from "@/lib/dashboard/dashboard-stats";
 import { formatUsd } from "@/lib/format";
 
 interface BurnRateTileProps {

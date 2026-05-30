@@ -40,13 +40,13 @@ export {
     type SetWorkspaceEnvironmentInput,
 } from "./set-workspace-environment.usecase";
 
-export type { ApiKeyRepository } from "./api-key.repository";
 export type {
     ApiKeyAuditAction,
     ApiKeyAuditLogEntry,
     ApiKeyAuditLogRepository,
     RecordApiKeyAuditLogInput,
 } from "./api-key-audit-log.repository";
+export type { ApiKeyRepository } from "./api-key.repository";
 
 export { generateApiKeyPlaintext, hashApiKey, parseApiKeyPlaintext } from "./api-key.crypto";
 

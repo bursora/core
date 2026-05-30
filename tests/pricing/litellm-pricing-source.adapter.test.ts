@@ -158,15 +158,55 @@ describe("parseFeed", () => {
 // the bare id the vendor's API takes. Each case pairs the LiteLLM feed key with
 // the (provider, model) an event actually carries — the row must match it.
 const VENDOR_CASES = [
-    { feedKey: "gemini/gemini-2.0-flash", litellmProvider: "gemini", provider: "google", eventModel: "gemini-2.0-flash" },
-    { feedKey: "groq/llama-3.1-8b-instant", litellmProvider: "groq", provider: "groq", eventModel: "llama-3.1-8b-instant" },
-    { feedKey: "groq/meta-llama/llama-guard-4-12b", litellmProvider: "groq", provider: "groq", eventModel: "meta-llama/llama-guard-4-12b" },
+    {
+        feedKey: "gemini/gemini-2.0-flash",
+        litellmProvider: "gemini",
+        provider: "google",
+        eventModel: "gemini-2.0-flash",
+    },
+    {
+        feedKey: "groq/llama-3.1-8b-instant",
+        litellmProvider: "groq",
+        provider: "groq",
+        eventModel: "llama-3.1-8b-instant",
+    },
+    {
+        feedKey: "groq/meta-llama/llama-guard-4-12b",
+        litellmProvider: "groq",
+        provider: "groq",
+        eventModel: "meta-llama/llama-guard-4-12b",
+    },
     { feedKey: "xai/grok-2", litellmProvider: "xai", provider: "xai", eventModel: "grok-2" },
-    { feedKey: "mistral/codestral-2405", litellmProvider: "mistral", provider: "mistral", eventModel: "codestral-2405" },
-    { feedKey: "together_ai/baai/bge-base-en-v1.5", litellmProvider: "together_ai", provider: "together", eventModel: "baai/bge-base-en-v1.5" },
-    { feedKey: "fireworks_ai/accounts/fireworks/models/deepseek-r1", litellmProvider: "fireworks_ai", provider: "fireworks", eventModel: "accounts/fireworks/models/deepseek-r1" },
-    { feedKey: "perplexity/llama-3.1-8b-instruct", litellmProvider: "perplexity", provider: "perplexity", eventModel: "llama-3.1-8b-instruct" },
-    { feedKey: "openrouter/anthropic/claude-3.5-sonnet", litellmProvider: "openrouter", provider: "openrouter", eventModel: "anthropic/claude-3.5-sonnet" },
+    {
+        feedKey: "mistral/codestral-2405",
+        litellmProvider: "mistral",
+        provider: "mistral",
+        eventModel: "codestral-2405",
+    },
+    {
+        feedKey: "together_ai/baai/bge-base-en-v1.5",
+        litellmProvider: "together_ai",
+        provider: "together",
+        eventModel: "baai/bge-base-en-v1.5",
+    },
+    {
+        feedKey: "fireworks_ai/accounts/fireworks/models/deepseek-r1",
+        litellmProvider: "fireworks_ai",
+        provider: "fireworks",
+        eventModel: "accounts/fireworks/models/deepseek-r1",
+    },
+    {
+        feedKey: "perplexity/llama-3.1-8b-instruct",
+        litellmProvider: "perplexity",
+        provider: "perplexity",
+        eventModel: "llama-3.1-8b-instruct",
+    },
+    {
+        feedKey: "openrouter/anthropic/claude-3.5-sonnet",
+        litellmProvider: "openrouter",
+        provider: "openrouter",
+        eventModel: "anthropic/claude-3.5-sonnet",
+    },
 ];
 
 const VENDOR_FEED: LiteLLMFeed = Object.fromEntries(
@@ -180,7 +220,16 @@ const VENDOR_FEED: LiteLLMFeed = Object.fromEntries(
     ]),
 );
 
-const asGlobalRows = (rates: readonly { provider: string; model: string; region: string; inputPer1mUsd: string; outputPer1mUsd: string; cachePer1mUsd: string | null }[]): PricingRow[] =>
+const asGlobalRows = (
+    rates: readonly {
+        provider: string;
+        model: string;
+        region: string;
+        inputPer1mUsd: string;
+        outputPer1mUsd: string;
+        cachePer1mUsd: string | null;
+    }[],
+): PricingRow[] =>
     rates.map((r, i) => ({
         id: `row-${i}`,
         workspaceId: null,

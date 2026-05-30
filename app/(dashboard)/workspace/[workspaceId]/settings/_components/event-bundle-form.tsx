@@ -39,7 +39,10 @@ export function EventBundleForm({ eventsCount, bundleEvents, level }: EventBundl
             <div className="flex items-baseline justify-between gap-2 font-mono text-sm tabular-nums">
                 <span>
                     <span className="font-semibold">{formatCount(eventsCount)}</span>
-                    <span className="text-muted-foreground"> / {formatCount(bundleEvents)} events</span>
+                    <span className="text-muted-foreground">
+                        {" "}
+                        / {formatCount(bundleEvents)} events
+                    </span>
                 </span>
                 <span className={cn("text-xs font-medium", PERCENT_CLASS[level])}>
                     {formatDashboardPercent(ratio)}

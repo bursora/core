@@ -74,9 +74,7 @@ describe("getBillingPortalUrlUseCase", () => {
             provider: ls,
         });
 
-        expect(result.url).toBe(
-            "https://app.lemonsqueezy.com/billing?expires=1&signature=abc",
-        );
+        expect(result.url).toBe("https://app.lemonsqueezy.com/billing?expires=1&signature=abc");
     });
 
     test("throws when the workspace has no provider customer id yet", async () => {

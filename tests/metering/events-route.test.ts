@@ -20,9 +20,7 @@
  */
 
 import { InMemoryEventBundleCounterStore } from "@/lib/event-bundle/in-memory.adapter";
-import {
-    resetEventBundleColdWriteTracker,
-} from "@/lib/event-bundle/middleware";
+import { resetEventBundleColdWriteTracker } from "@/lib/event-bundle/middleware";
 import { setEventBundleDepsForTesting } from "@/lib/event-bundle/server";
 import type { ApiKey } from "@/lib/identity";
 import { setMeteringDepsForTesting } from "@/lib/metering/server";
@@ -126,7 +124,12 @@ const setupHarness = (opts: { knownKey?: boolean } = {}): Harness => {
     setEventBundleDepsForTesting({
         enabled: true,
         counter: bundleCounter,
-        usage: { async findMonth() { return null; }, async upsertMonth() {} },
+        usage: {
+            async findMonth() {
+                return null;
+            },
+            async upsertMonth() {},
+        },
         now: () => new Date("2025-05-10T12:00:00.000Z"),
     });
 

@@ -10,14 +10,14 @@
  */
 
 import { schema } from "@/lib/db";
-import type { BillingWebhookEventStore } from "@/lib/ee/billing";
 import type {
+    BillingWebhookEventStore,
     WorkspaceBillingRecord,
     WorkspaceBillingRepository,
     WorkspaceBillingUpdate,
 } from "@/lib/ee/billing";
-import { getTableConfig } from "drizzle-orm/pg-core";
 import { describe, expect, test } from "bun:test";
+import { getTableConfig } from "drizzle-orm/pg-core";
 
 describe("billing schema rename", () => {
     test("workspaces table exposes provider-neutral columns", () => {

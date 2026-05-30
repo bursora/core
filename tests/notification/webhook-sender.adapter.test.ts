@@ -101,9 +101,9 @@ describe("createHttpWebhookSender", () => {
             fetch: async () => new Response(null, { status: 302 }),
             retries: 0,
         });
-        await expect(
-            sender.post("https://hooks.slack.com/abc", { text: "x" }),
-        ).rejects.toThrow(/302/);
+        await expect(sender.post("https://hooks.slack.com/abc", { text: "x" })).rejects.toThrow(
+            /302/,
+        );
     });
 
     test("with random()=0.5 the per-send timeout equals the base (no jitter offset)", async () => {
@@ -168,9 +168,9 @@ describe("createHttpWebhookSender", () => {
                 sleepDelays.push(ms);
             },
         });
-        await expect(
-            sender.post("https://hooks.slack.com/abc", { text: "x" }),
-        ).rejects.toThrow(/500/);
+        await expect(sender.post("https://hooks.slack.com/abc", { text: "x" })).rejects.toThrow(
+            /500/,
+        );
         // 1 initial + 3 retries = 4 attempts
         expect(fetchCalls).toBe(4);
         // 3 delays between the 4 attempts
@@ -192,9 +192,9 @@ describe("createHttpWebhookSender", () => {
             },
             retries: 8,
         });
-        await expect(
-            sender.post("https://hooks.slack.com/abc", { text: "x" }),
-        ).rejects.toThrow(/500/);
+        await expect(sender.post("https://hooks.slack.com/abc", { text: "x" })).rejects.toThrow(
+            /500/,
+        );
         // attempts: 1 + 8 retries = 9, so 8 delays
         expect(fetchCalls).toBe(9);
         // 1s, 2s, 4s, 8s, 16s, 30s (capped), 30s, 30s
@@ -212,9 +212,9 @@ describe("createHttpWebhookSender", () => {
             },
             retries: 2,
         });
-        await expect(
-            sender.post("https://hooks.slack.com/abc", { text: "x" }),
-        ).rejects.toThrow(/500/);
+        await expect(sender.post("https://hooks.slack.com/abc", { text: "x" })).rejects.toThrow(
+            /500/,
+        );
         // 1000 * 0.8 = 800, 2000 * 0.8 = 1600
         expect(sleepDelays).toEqual([800, 1600]);
     });

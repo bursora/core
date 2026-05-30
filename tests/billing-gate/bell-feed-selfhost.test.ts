@@ -7,13 +7,8 @@
  * cloud-only gate never leaks into the self-host path.
  */
 
-import type {
-    NotificationsRepository,
-} from "@/lib/notifications/notifications.repository";
-import {
-    listNotificationsPage,
-    setNotificationsRepoForTesting,
-} from "@/lib/notifications/server";
+import type { NotificationsRepository } from "@/lib/notifications/notifications.repository";
+import { listNotificationsPage, setNotificationsRepoForTesting } from "@/lib/notifications/server";
 import { afterEach, expect, test } from "bun:test";
 import { installSelfHostEnv } from "../support/with-self-host-env";
 

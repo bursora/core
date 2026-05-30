@@ -11,13 +11,13 @@
  * newest first or an empty state.
  */
 
+import { CloudPaywallPage } from "@/app/(dashboard)/workspace/[workspaceId]/_components/cloud-paywall-page";
 import { resolveSpendWindow } from "@/app/(dashboard)/workspace/[workspaceId]/spend/_lib/resolve-window";
 import { PageHeader } from "@/components/shell/page-header";
 import { DashboardSection } from "@/components/ui/workspace/dashboard-section";
 import { DateRangeFilter } from "@/components/ui/workspace/filters/date-range-filter";
 import { MeteringActiveFilters } from "@/components/ui/workspace/filters/metering-active-filters";
 import { StatTile } from "@/components/ui/workspace/stat-tile";
-import { CloudPaywallPage } from "@/app/(dashboard)/workspace/[workspaceId]/_components/cloud-paywall-page";
 import { cloudWorkspaceLocked } from "@/lib/billing-gate/server";
 import type { Alert } from "@/lib/detection";
 import { listAlerts } from "@/lib/detection";

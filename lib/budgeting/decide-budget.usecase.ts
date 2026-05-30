@@ -18,10 +18,10 @@
  * (`server.ts`).
  */
 
+import type { BudgetCrossingRecord } from "../detection/alert.repository";
+import { errMessage } from "../error-message";
 import type { BudgetAlertRaisedEvent } from "../event-bus";
 import { ALERT_RAISED_TOPIC } from "../event-bus";
-import { errMessage } from "../error-message";
-import type { BudgetCrossingRecord } from "../detection/alert.repository";
 import type { Budget, Decision } from "./budget";
 import type { BudgetRepository } from "./budget.repository";
 import type { BudgetTrigger, EvaluateBudgetOptions } from "./evaluate-budget";

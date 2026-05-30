@@ -152,7 +152,9 @@ export function loadEnv(source: Record<string, string | undefined>): Env {
     if (isCloud) {
         const rawMode = (source.LEMONSQUEEZY_MODE ?? "test").trim().toLowerCase();
         if (rawMode !== "test" && rawMode !== "live") {
-            throw new Error(`LEMONSQUEEZY_MODE must be "test" or "live", got: ${source.LEMONSQUEEZY_MODE}`);
+            throw new Error(
+                `LEMONSQUEEZY_MODE must be "test" or "live", got: ${source.LEMONSQUEEZY_MODE}`,
+            );
         }
         lemonSqueezyMode = rawMode;
     }
@@ -187,11 +189,7 @@ export function loadEnv(source: Record<string, string | undefined>): Env {
                 getAlways("NEXT_PUBLIC_APP_URL"),
                 getAlways("BETTER_AUTH_URL"),
                 ...((source.NODE_ENV ?? "development") !== "production"
-                    ? [
-                          "http://localhost:3000",
-                          "http://localhost:3001",
-                          "http://127.0.0.1:3000",
-                      ]
+                    ? ["http://localhost:3000", "http://localhost:3001", "http://127.0.0.1:3000"]
                     : []),
                 ...parseTrustedOrigins(source.BETTER_AUTH_TRUSTED_ORIGINS, []),
             ]),

@@ -46,6 +46,15 @@ beforeAll(() => {
             }
         },
     }));
+    // Owner is a regular user → no admin-owned rate-limit bypass, so the cap
+    // still fires for this workspace.
+    mock.module("@/lib/identity/drizzle-member.repository", () => ({
+        DrizzleMemberRepository: class {
+            async findOwnerUserRole(): Promise<string | null> {
+                return "user";
+            }
+        },
+    }));
 });
 
 const { POST } = await import("@/app/api/v1/events/route");

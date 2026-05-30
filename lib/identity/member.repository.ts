@@ -26,6 +26,14 @@ export interface MemberRepository {
      * columns that `listByWorkspace` carries.
      */
     listMemberUserIds(workspaceId: string): Promise<readonly string[]>;
+
+    /**
+     * Returns the platform role (`admin` | `user`) of the workspace owner —
+     * the `users.role` of the member whose workspace role is `owner` — or
+     * `null` when the workspace has no owner row. Drives the admin-owned
+     * workspace exemptions (rate limit, fair-use cap).
+     */
+    findOwnerUserRole(workspaceId: string): Promise<string | null>;
 }
 
 export interface InviteRepository {

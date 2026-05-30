@@ -18,6 +18,7 @@
 
 import "server-only";
 
+import { getRequestSession } from "@/lib/auth";
 import { isActiveSubscriptionStatus } from "@/lib/billing-status";
 import type { WorkspaceBillingRecord } from "@/lib/ee/billing/workspace-billing.repository";
 import { env } from "@/lib/env";
@@ -26,6 +27,12 @@ export interface BillingGateDeps {
     readonly isCloud: boolean;
     /** Reads the workspace billing record. Only called on the cloud path. */
     readonly readBilling: (workspaceId: string) => Promise<WorkspaceBillingRecord | null>;
+    /**
+     * True when the current session user is a platform admin. Optional: when
+     * absent the gate treats the user as a non-admin. Production wiring reads
+     * the session role; tests omit it (non-admin) or inject a fake.
+     */
+    readonly isCurrentUserAdmin?: () => Promise<boolean>;
 }
 
 let testOverride: BillingGateDeps | null = null;
@@ -46,6 +53,10 @@ function billingGateDeps(): BillingGateDeps {
     if (testOverride !== null) return testOverride;
     return {
         isCloud: env().IS_CLOUD,
+        isCurrentUserAdmin: async () => {
+            const session = await getRequestSession();
+            return session?.user?.role === "admin";
+        },
         readBilling: async (workspaceId) => {
             // Unreachable in the OSS build: that bundle is self-host, so
             // `isCloud` is false and this read is never called.
@@ -66,6 +77,10 @@ function billingGateDeps(): BillingGateDeps {
 export async function cloudWorkspaceLocked(workspaceId: string): Promise<boolean> {
     const deps = billingGateDeps();
     if (!deps.isCloud) return false;
+    // Platform admins never see the paywall: their own dogfood workspaces stay
+    // open regardless of subscription. Checked before the billing read so an
+    // admin skips it entirely.
+    if (await deps.isCurrentUserAdmin?.()) return false;
     const record = await deps.readBilling(workspaceId);
     return !isActiveSubscriptionStatus(record?.subscriptionStatus);
 }

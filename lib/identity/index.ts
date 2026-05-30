@@ -24,6 +24,10 @@ export {
 } from "./create-workspace.usecase";
 export { InviteCapExceededError, MAX_PENDING_INVITES_PER_WORKSPACE } from "./invite-cap";
 export { inviteMemberUseCase, type InviteMemberInput } from "./invite-member.usecase";
+export {
+    isAdminOwnedWorkspaceUseCase,
+    type IsAdminOwnedWorkspaceInput,
+} from "./is-admin-owned-workspace.usecase";
 export { issueApiKeyUseCase, type IssueApiKeyInput } from "./issue-api-key.usecase";
 export {
     listApiKeysUseCase,

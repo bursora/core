@@ -75,3 +75,32 @@ describe("cloudWorkspaceLocked", () => {
         },
     );
 });
+
+describe("cloudWorkspaceLocked — platform admin bypass", () => {
+    test.each(["canceled", "expired", "paused", null])(
+        "cloud admin session is unlocked with %s subscription without reading billing",
+        async (status) => {
+            let reads = 0;
+            setBillingGateDepsForTesting({
+                isCloud: true,
+                isCurrentUserAdmin: async () => true,
+                readBilling: async () => {
+                    reads += 1;
+                    return record(status);
+                },
+            });
+            expect(await cloudWorkspaceLocked(WORKSPACE_ID)).toBe(false);
+            // Admin short-circuits before the billing read.
+            expect(reads).toBe(0);
+        },
+    );
+
+    test("cloud non-admin with inactive subscription stays locked", async () => {
+        setBillingGateDepsForTesting({
+            isCloud: true,
+            isCurrentUserAdmin: async () => false,
+            readBilling: async () => record(null),
+        });
+        expect(await cloudWorkspaceLocked(WORKSPACE_ID)).toBe(true);
+    });
+});

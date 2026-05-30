@@ -16,6 +16,7 @@ import "server-only";
 
 import { db, schema } from "@/lib/db";
 import { env } from "@/lib/env";
+import { USER_ROLE } from "@/lib/identity/user-role";
 import { defaultSmtpMailer, sendMagicLinkEmail } from "@/lib/notification";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
@@ -44,7 +45,7 @@ export const auth = betterAuth({
             role: {
                 type: "string",
                 required: false,
-                defaultValue: "user",
+                defaultValue: USER_ROLE.user,
                 input: false,
             },
         },

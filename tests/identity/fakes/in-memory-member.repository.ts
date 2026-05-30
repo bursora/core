@@ -1,20 +1,22 @@
-import type {
-    Invite,
-    InviteRepository,
-    MemberListRow,
-    MemberRepository,
-    MemberRole,
-    WorkspaceMember,
+import {
+    type Invite,
+    type InviteRepository,
+    type MemberListRow,
+    type MemberRepository,
+    type MemberRole,
+    USER_ROLE,
+    type UserRole,
+    type WorkspaceMember,
 } from "@/lib/identity";
 
 const key = (workspaceId: string, userId: string) => `${workspaceId}:${userId}`;
 
 export class InMemoryMemberRepository implements MemberRepository {
     private readonly rows = new Map<string, WorkspaceMember>();
-    private readonly userRoles = new Map<string, string>();
+    private readonly userRoles = new Map<string, UserRole>();
 
     /** Test-only: set a user's platform role so `findOwnerUserRole` can resolve it. */
-    setUserRole(userId: string, role: string): void {
+    setUserRole(userId: string, role: UserRole): void {
         this.userRoles.set(userId, role);
     }
 
@@ -55,14 +57,15 @@ export class InMemoryMemberRepository implements MemberRepository {
             .map((m) => m.userId);
     }
 
-    async findOwnerUserRole(workspaceId: string): Promise<string | null> {
+    async findOwnerUserRole(workspaceId: string): Promise<UserRole | null> {
         // Mirror the Drizzle repo: prefer an admin owner, else a stable order.
         const [owner] = Array.from(this.rows.values())
             .filter((m) => m.workspaceId === workspaceId && m.role === "owner")
-            .map((m) => ({ ...m, platformRole: this.userRoles.get(m.userId) ?? "user" }))
+            .map((m) => ({ ...m, platformRole: this.userRoles.get(m.userId) ?? USER_ROLE.user }))
             .sort(
                 (a, b) =>
-                    Number(b.platformRole === "admin") - Number(a.platformRole === "admin") ||
+                    Number(b.platformRole === USER_ROLE.admin) -
+                        Number(a.platformRole === USER_ROLE.admin) ||
                     a.createdAt.getTime() - b.createdAt.getTime() ||
                     a.userId.localeCompare(b.userId),
             );

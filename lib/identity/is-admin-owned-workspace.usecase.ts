@@ -8,8 +8,7 @@
  */
 
 import type { MemberRepository } from "./member.repository";
-
-const ADMIN_ROLE = "admin";
+import { USER_ROLE } from "./user-role";
 
 export interface IsAdminOwnedWorkspaceInput {
     readonly workspaceId: string;
@@ -20,5 +19,5 @@ export async function isAdminOwnedWorkspaceUseCase(
     input: IsAdminOwnedWorkspaceInput,
 ): Promise<boolean> {
     const ownerRole = await input.members.findOwnerUserRole(input.workspaceId);
-    return ownerRole === ADMIN_ROLE;
+    return ownerRole === USER_ROLE.admin;
 }

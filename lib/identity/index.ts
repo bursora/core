@@ -56,6 +56,7 @@ export { generateApiKeyPlaintext, hashApiKey, parseApiKeyPlaintext } from "./api
 
 export type { Invite, MemberRole, WorkspaceMember } from "./member";
 export type { InviteRepository, MemberListRow, MemberRepository } from "./member.repository";
+export { USER_ROLE, type UserRole } from "./user-role";
 
 export type { Workspace } from "./workspace";
 export type { WorkspaceCreateInput, WorkspaceRepository } from "./workspace.repository";

@@ -5,6 +5,7 @@ import { schema } from "@/lib/db";
 import { and, asc, count, desc, eq, gt, isNull } from "drizzle-orm";
 import type { Invite, MemberRole, WorkspaceMember } from "./member";
 import type { InviteRepository, MemberListRow, MemberRepository } from "./member.repository";
+import { USER_ROLE, type UserRole } from "./user-role";
 
 export class DrizzleMemberRepository implements MemberRepository {
     constructor(private readonly db: Db) {}
@@ -71,7 +72,7 @@ export class DrizzleMemberRepository implements MemberRepository {
         return rows.map((r) => r.userId);
     }
 
-    async findOwnerUserRole(workspaceId: string): Promise<string | null> {
+    async findOwnerUserRole(workspaceId: string): Promise<UserRole | null> {
         // A workspace may have multiple owners. It counts as admin-owned when
         // any owner is a platform admin, so sort an admin owner first; fall back
         // to a stable order (oldest, then id) so the resolved role never flips
@@ -87,12 +88,16 @@ export class DrizzleMemberRepository implements MemberRepository {
                 ),
             )
             .orderBy(
-                desc(eq(schema.users.role, "admin")),
+                desc(eq(schema.users.role, USER_ROLE.admin)),
                 asc(schema.workspaceMembers.createdAt),
                 asc(schema.workspaceMembers.userId),
             )
             .limit(1);
-        return row?.role ?? null;
+        // `users.role` is a text column, so narrow it to the platform-role union
+        // at this boundary: the column only ever holds admin|user (default +
+        // input:false), and the sole caller checks admin-vs-rest.
+        if (!row) return null;
+        return row.role === USER_ROLE.admin ? USER_ROLE.admin : USER_ROLE.user;
     }
 }
 

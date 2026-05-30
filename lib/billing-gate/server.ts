@@ -22,6 +22,7 @@ import { getRequestSession } from "@/lib/auth";
 import { isActiveSubscriptionStatus } from "@/lib/billing-status";
 import type { WorkspaceBillingRecord } from "@/lib/ee/billing/workspace-billing.repository";
 import { env } from "@/lib/env";
+import { USER_ROLE } from "@/lib/identity/user-role";
 
 export interface BillingGateDeps {
     readonly isCloud: boolean;
@@ -55,7 +56,7 @@ function billingGateDeps(): BillingGateDeps {
         isCloud: env().IS_CLOUD,
         isCurrentUserAdmin: async () => {
             const session = await getRequestSession();
-            return session?.user?.role === "admin";
+            return session?.user?.role === USER_ROLE.admin;
         },
         readBilling: async (workspaceId) => {
             // Unreachable in the OSS build: that bundle is self-host, so

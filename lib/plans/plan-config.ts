@@ -4,14 +4,17 @@
  * description, interval, and currency; it never overrides anything here.
  *
  * One entry per LS product we sell. The sync use case looks up the matching
- * entry by `lsProductId` and merges its `config` onto the row it upserts.
+ * entry by product `name` and merges its `config` onto the row it upserts.
+ * Name is the match key because it's the only product identifier stable across
+ * Lemon Squeezy's test and live modes: product id and slug both differ per mode
+ * (live slugs are random UUIDs), but the name we set carries over unchanged.
  */
 
 import type { PlanConfig } from "./plan";
 
 export interface TrackedPlan {
-    /** Lemon Squeezy product id this plan maps to. */
-    readonly lsProductId: string;
+    /** Lemon Squeezy product name this plan maps to. Must match LS exactly. */
+    readonly name: string;
     /** Bursora-side defaults merged onto the synced row. */
     readonly config: PlanConfig;
 }
@@ -23,7 +26,7 @@ export interface TrackedPlan {
  */
 export const TRACKED_PLANS: readonly TrackedPlan[] = [
     {
-        lsProductId: "1093107",
+        name: "Bursora Cloud",
         config: {
             includedEventsPerMonth: 5_000_000,
         },

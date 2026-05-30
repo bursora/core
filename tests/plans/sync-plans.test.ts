@@ -23,7 +23,7 @@ const NOW = new Date("2026-05-29T12:00:00Z");
 const fetchedPlan = (overrides: Partial<FetchedPlan> = {}): FetchedPlan => ({
     lsProductId: "1093107",
     lsVariantId: "1712197",
-    name: "Default",
+    name: "Bursora Cloud",
     description: "<p>Bursora Cloud</p>",
     priceCents: 2900,
     currency: "USD",
@@ -33,7 +33,7 @@ const fetchedPlan = (overrides: Partial<FetchedPlan> = {}): FetchedPlan => ({
 });
 
 const trackedPlan = (overrides: Partial<TrackedPlan> = {}): TrackedPlan => ({
-    lsProductId: "1093107",
+    name: "Bursora Cloud",
     config: { floorCents: 2900, capCents: 49900 },
     ...overrides,
 });
@@ -70,7 +70,7 @@ describe("syncPlans", () => {
         expect(rows()[0]).toMatchObject({
             lsProductId: "1093107",
             lsVariantId: "1712197",
-            name: "Default",
+            name: "Bursora Cloud",
             description: "<p>Bursora Cloud</p>",
             priceCents: 2900,
             currency: "USD",
@@ -93,9 +93,9 @@ describe("syncPlans", () => {
         );
         const firstId = rows()[0]?.id;
 
-        // Same variant, new price/name → must land on the same logical row.
+        // Same variant, new price → must land on the same logical row.
         await syncPlans(
-            makeSource([fetchedPlan({ priceCents: 3900, name: "Pro" })]),
+            makeSource([fetchedPlan({ priceCents: 3900 })]),
             repo,
             [trackedPlan()],
             later,
@@ -103,14 +103,14 @@ describe("syncPlans", () => {
 
         expect(rows()).toHaveLength(1);
         expect(rows()[0]?.id).toBe(firstId);
-        expect(rows()[0]).toMatchObject({ priceCents: 3900, name: "Pro", syncedAt: later });
+        expect(rows()[0]).toMatchObject({ priceCents: 3900, syncedAt: later });
     });
 
     test("untracked product is skipped, not persisted", async () => {
         const { repo, rows } = makeRepo();
 
         const summary = await syncPlans(
-            makeSource([fetchedPlan({ lsProductId: "9999999", lsVariantId: "8888888" })]),
+            makeSource([fetchedPlan({ name: "Untracked Tier", lsVariantId: "8888888" })]),
             repo,
             [trackedPlan()],
             NOW,

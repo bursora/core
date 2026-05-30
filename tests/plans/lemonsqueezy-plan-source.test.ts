@@ -1,15 +1,14 @@
 /**
  * Tests for the Lemon Squeezy plan source adapter.
  *
- * The adapter fetches, per tracked product: the product (name + description),
- * its default variant (price + interval + variant id), and the store currency.
+ * The adapter lists the store's products, matches each tracked plan by product
+ * name (the only identifier stable across LS test and live modes), then reads
+ * its published variant (price + interval + variant id) and the store currency.
  * It parses the JSON:API payloads at the boundary and returns neutral
  * `FetchedPlan` rows. Tests inject a fake `fetch` keyed by URL — no network.
  *
- * Verified against LS test store 389222:
- *   - product 1093107 "Bursora Cloud": name, description (HTML), price 2900
- *   - variant 1712197 "Default": price 2900, interval "month", interval_count 1
- *   - store 389222: currency "USD"
+ * Fixtures use the live product id 1101649 while tracking by name to prove the
+ * adapter resolves whatever id LS returns and never assumes a hardcoded one.
  */
 
 import { lemonSqueezyPlanSource } from "@/drizzle/plan-sync/lemonsqueezy-plan-source";
@@ -35,12 +34,12 @@ const makeFetch = (routes: Record<string, unknown>) => {
     return { fetcher, calls };
 };
 
-const PRODUCT = {
-    data: { id: "1093107", attributes: { name: "Bursora Cloud", description: "<p>Cloud</p>" } },
+const PRODUCTS = {
+    data: [{ id: "1101649", attributes: { name: "Bursora Cloud", description: "<p>Cloud</p>" } }],
 };
 const VARIANT = {
     data: {
-        id: "1712197",
+        id: "1725367",
         attributes: {
             name: "Default",
             price: 2900,
@@ -53,18 +52,17 @@ const VARIANT = {
 const STORE = { data: { id: "389222", attributes: { currency: "USD" } } };
 
 describe("lemonSqueezyPlanSource", () => {
-    test("fetches product + default variant + store currency into a FetchedPlan", async () => {
+    test("resolves the product by name and returns its published variant", async () => {
         const { fetcher } = makeFetch({
-            "/v1/products/1093107/variants": { data: [VARIANT.data] },
-            "/v1/variants/1712197": VARIANT,
-            "/v1/products/1093107": PRODUCT,
+            "/v1/products/1101649/variants": { data: [VARIANT.data] },
+            "/v1/products?filter": PRODUCTS,
             "/v1/stores/389222": STORE,
         });
 
         const source = lemonSqueezyPlanSource({
             apiKey: "test-key",
             storeId: "389222",
-            trackedProductIds: ["1093107"],
+            trackedProductNames: ["Bursora Cloud"],
             fetch: fetcher,
         });
 
@@ -72,8 +70,8 @@ describe("lemonSqueezyPlanSource", () => {
 
         expect(plans).toEqual([
             {
-                lsProductId: "1093107",
-                lsVariantId: "1712197",
+                lsProductId: "1101649",
+                lsVariantId: "1725367",
                 name: "Bursora Cloud",
                 description: "<p>Cloud</p>",
                 priceCents: 2900,
@@ -85,10 +83,10 @@ describe("lemonSqueezyPlanSource", () => {
     });
 
     test("selects the published variant, ignoring a pending one that sorts first", async () => {
-        // LS product 1093107 carries a pending $0.50 variant (sort 1) alongside
-        // the published $29 one (sort 2); the source must pick the published.
+        // The product carries a pending $0.50 variant (sort 1) alongside the
+        // published $29 one (sort 2); the source must pick the published.
         const pending = {
-            id: "1713167",
+            id: "1725366",
             attributes: {
                 name: "Default",
                 price: 50,
@@ -98,25 +96,25 @@ describe("lemonSqueezyPlanSource", () => {
             },
         };
         const { fetcher } = makeFetch({
-            "/v1/products/1093107/variants": { data: [pending, VARIANT.data] },
-            "/v1/products/1093107": PRODUCT,
+            "/v1/products/1101649/variants": { data: [pending, VARIANT.data] },
+            "/v1/products?filter": PRODUCTS,
             "/v1/stores/389222": STORE,
         });
 
         const [plan] = await lemonSqueezyPlanSource({
             apiKey: "test-key",
             storeId: "389222",
-            trackedProductIds: ["1093107"],
+            trackedProductNames: ["Bursora Cloud"],
             fetch: fetcher,
         }).fetchPlans();
 
-        expect(plan?.lsVariantId).toBe("1712197");
+        expect(plan?.lsVariantId).toBe("1725367");
         expect(plan?.priceCents).toBe(2900);
     });
 
     test("throws when the product has no published variant", async () => {
         const pending = {
-            id: "1713167",
+            id: "1725366",
             attributes: {
                 name: "Default",
                 price: 50,
@@ -126,8 +124,8 @@ describe("lemonSqueezyPlanSource", () => {
             },
         };
         const { fetcher } = makeFetch({
-            "/v1/products/1093107/variants": { data: [pending] },
-            "/v1/products/1093107": PRODUCT,
+            "/v1/products/1101649/variants": { data: [pending] },
+            "/v1/products?filter": PRODUCTS,
             "/v1/stores/389222": STORE,
         });
 
@@ -135,10 +133,26 @@ describe("lemonSqueezyPlanSource", () => {
             lemonSqueezyPlanSource({
                 apiKey: "k",
                 storeId: "389222",
-                trackedProductIds: ["1093107"],
+                trackedProductNames: ["Bursora Cloud"],
                 fetch: fetcher,
             }).fetchPlans(),
         ).rejects.toThrow(/no published variant/);
+    });
+
+    test("throws when no product matches the tracked name", async () => {
+        const { fetcher } = makeFetch({
+            "/v1/products?filter": PRODUCTS,
+            "/v1/stores/389222": STORE,
+        });
+
+        await expect(
+            lemonSqueezyPlanSource({
+                apiKey: "k",
+                storeId: "389222",
+                trackedProductNames: ["Nonexistent Plan"],
+                fetch: fetcher,
+            }).fetchPlans(),
+        ).rejects.toThrow(/no product named "Nonexistent Plan"/);
     });
 
     test("sends Bearer auth + JSON:API accept header", async () => {
@@ -149,10 +163,9 @@ describe("lemonSqueezyPlanSource", () => {
         ): Promise<Response> => {
             seen.push(init ?? {});
             const url = typeof _input === "string" ? _input : _input.toString();
-            if (url.includes("/variants/1712197")) return jsonResponse(VARIANT);
-            if (url.includes("/products/1093107/variants"))
+            if (url.includes("/products/1101649/variants"))
                 return jsonResponse({ data: [VARIANT.data] });
-            if (url.includes("/products/1093107")) return jsonResponse(PRODUCT);
+            if (url.includes("/products?filter")) return jsonResponse(PRODUCTS);
             if (url.includes("/stores/389222")) return jsonResponse(STORE);
             return new Response("nope", { status: 404 });
         };
@@ -160,7 +173,7 @@ describe("lemonSqueezyPlanSource", () => {
         await lemonSqueezyPlanSource({
             apiKey: "secret-key",
             storeId: "389222",
-            trackedProductIds: ["1093107"],
+            trackedProductNames: ["Bursora Cloud"],
             fetch: fetcher,
         }).fetchPlans();
 
@@ -175,7 +188,7 @@ describe("lemonSqueezyPlanSource", () => {
         const source = lemonSqueezyPlanSource({
             apiKey: "k",
             storeId: "389222",
-            trackedProductIds: ["1093107"],
+            trackedProductNames: ["Bursora Cloud"],
             fetch: fetcher,
         });
 

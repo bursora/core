@@ -1,8 +1,10 @@
 /**
  * Lemon Squeezy plan source — seed-only.
  *
- * Implements the `PlanSource` port by hitting the LS JSON:API. For each tracked
- * product it reads the product (name + description), the product's published
+ * Implements the `PlanSource` port by hitting the LS JSON:API. Lists the store's
+ * products and matches each tracked plan by product name — the only identifier
+ * stable across LS test and live modes (product id and slug both differ per
+ * mode). For each match it reads name + description, the product's published
  * variant (price + interval + interval_count + variant id), and the store
  * currency. Returns neutral `FetchedPlan` rows the sync use case upserts.
  *
@@ -25,7 +27,7 @@ export type LemonSqueezyFetcher = (
 export interface LemonSqueezyPlanSourceConfig {
     readonly apiKey: string;
     readonly storeId: string;
-    readonly trackedProductIds: readonly string[];
+    readonly trackedProductNames: readonly string[];
     /** Injected for tests. Defaults to the runtime global `fetch`. */
     readonly fetch?: LemonSqueezyFetcher;
 }
@@ -53,12 +55,20 @@ export function lemonSqueezyPlanSource(config: LemonSqueezyPlanSourceConfig): Pl
     return {
         fetchPlans: async () => {
             const currency = parseCurrency(await get(`/v1/stores/${config.storeId}`));
+            const productsByName = parseProductList(
+                await get(`/v1/products?filter[store_id]=${config.storeId}&page[size]=100`),
+            );
             const plans: FetchedPlan[] = [];
-            for (const productId of config.trackedProductIds) {
-                const product = parseProduct(await get(`/v1/products/${productId}`));
-                const variant = parseVariant(await get(`/v1/products/${productId}/variants`));
+            for (const name of config.trackedProductNames) {
+                const product = productsByName.get(name);
+                if (product === undefined) {
+                    throw new Error(
+                        `lemonsqueezy plan source: no product named "${name}" in store ${config.storeId}`,
+                    );
+                }
+                const variant = parseVariant(await get(`/v1/products/${product.id}/variants`));
                 plans.push({
-                    lsProductId: productId,
+                    lsProductId: product.id,
                     lsVariantId: variant.id,
                     name: product.name,
                     description: product.description,
@@ -108,12 +118,29 @@ function parseCurrency(payload: unknown): string {
     return requireString(attributesOf(payload, "store").currency, "store currency");
 }
 
-function parseProduct(payload: unknown): { name: string; description: string | null } {
-    const attrs = attributesOf(payload, "product");
-    return {
-        name: requireString(attrs.name, "product name"),
-        description: typeof attrs.description === "string" ? attrs.description : null,
-    };
+interface ParsedProduct {
+    readonly id: string;
+    readonly name: string;
+    readonly description: string | null;
+}
+
+function parseProductList(payload: unknown): Map<string, ParsedProduct> {
+    const data = asRecord(payload, "products").data;
+    if (!Array.isArray(data)) {
+        throw new Error("lemonsqueezy plan source: expected array for products.data");
+    }
+    const byName = new Map<string, ParsedProduct>();
+    for (const entry of data) {
+        const product = asRecord(entry, "product");
+        const attrs = asRecord(product.attributes, "product.attributes");
+        const name = requireString(attrs.name, "product name");
+        byName.set(name, {
+            id: requireString(product.id, "product id"),
+            name,
+            description: typeof attrs.description === "string" ? attrs.description : null,
+        });
+    }
+    return byName;
 }
 
 function parseVariant(payload: unknown): {

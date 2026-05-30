@@ -130,14 +130,14 @@ if (shouldSyncPlans({ isCloud, apiKey: lsApiKey, storeId: lsStoreId })) {
     const planSource = lemonSqueezyPlanSource({
         apiKey: lsApiKey,
         storeId: lsStoreId,
-        trackedProductIds: TRACKED_PLANS.map((p) => p.lsProductId),
+        trackedProductNames: TRACKED_PLANS.map((p) => p.name),
     });
 
     const { upserted, skipped } = await syncPlans(planSource, planRepo, TRACKED_PLANS, new Date());
     console.log(`Plan sync: ${upserted} upserted, ${skipped} skipped`);
     if (upserted < TRACKED_PLANS.length) {
         console.warn(
-            `Plan sync: only ${upserted}/${TRACKED_PLANS.length} tracked plans synced — check TRACKED_PLANS product ids against Lemon Squeezy`,
+            `Plan sync: only ${upserted}/${TRACKED_PLANS.length} tracked plans synced — check TRACKED_PLANS names against Lemon Squeezy`,
         );
     }
 } else {

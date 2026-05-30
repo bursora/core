@@ -9,7 +9,7 @@
 import { setBillingGateDepsForTesting } from "@/lib/billing-gate/server";
 import { setActivityDepsForTesting } from "@/lib/compose/activity";
 import type { AnomalyAlert } from "@/lib/detection";
-import { afterEach, beforeAll, describe, expect, mock, test } from "bun:test";
+import { afterAll, afterEach, beforeAll, describe, expect, mock, test } from "bun:test";
 
 const USER_ID = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
 const WORKSPACE = "11111111-2222-3333-4444-555555555555";
@@ -33,6 +33,11 @@ beforeAll(async () => {
         headers: async () => new Headers(),
     }));
 });
+
+// mock.module is process-global; restore at file end so the @/lib/auth stub
+// doesn't leak into later files that import the real auth (e.g. the user-role
+// schema test reading auth.options).
+afterAll(() => mock.restore());
 
 const setupActivity = () => {
     setActivityDepsForTesting({

@@ -27,6 +27,8 @@ import { setEventBundleDepsForTesting } from "@/lib/event-bundle/server";
 import type { ApiKey } from "@/lib/identity";
 import { setMeteringDepsForTesting } from "@/lib/metering/server";
 import { setSetupErrorsDepsForTesting } from "@/lib/setup-errors/server";
+import { InMemorySpikeStateStore } from "@/lib/spike-protection/in-memory.adapter";
+import { setSpikeProtectionDepsForTesting } from "@/lib/spike-protection/server";
 import { InMemoryNotificationsRepository } from "@/tests/notifications/fakes/in-memory-notifications.repository";
 import { InMemorySetupErrorRepository } from "@/tests/setup-errors/fakes/in-memory-setup-error.repository";
 import { afterEach, beforeAll, describe, expect, mock, spyOn, test } from "bun:test";
@@ -135,6 +137,29 @@ const setupHarness = (opts: { knownKey?: boolean } = {}): Harness => {
         listMemberUserIds: async () => [],
     });
 
+    // Spike protection is irrelevant here, but unstubbed it falls through to the
+    // real Drizzle settings repo and queries the DB. Stub it disabled so these
+    // tests stay hermetic (the sister rate-limit integration test does the same).
+    setSpikeProtectionDepsForTesting({
+        enabled: false,
+        isCloud: false,
+        state: new InMemorySpikeStateStore(),
+        baseline: {
+            async fetch7DayMinuteSeries() {
+                return [];
+            },
+        },
+        settings: {
+            async findByWorkspaceId() {
+                return null;
+            },
+            async upsert() {},
+        },
+        defaultMultiplier: 5,
+        cooldownMs: 30 * 60 * 1000,
+        now: () => new Date(),
+    });
+
     return { events, pricing, bundleCounter };
 };
 
@@ -144,6 +169,7 @@ const teardown = () => {
     setEventBundleDepsForTesting(null);
     resetEventBundleColdWriteTracker();
     setSetupErrorsDepsForTesting(null);
+    setSpikeProtectionDepsForTesting(null);
 };
 
 const makeRequest = (body: string, headers: Record<string, string> = {}): Request =>

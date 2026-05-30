@@ -5,7 +5,7 @@
 
 import { setNotificationsRepoForTesting } from "@/lib/notifications/server";
 import { InMemoryNotificationsRepository } from "@/tests/notifications/fakes/in-memory-notifications.repository";
-import { afterEach, beforeAll, describe, expect, mock, test } from "bun:test";
+import { afterAll, afterEach, beforeAll, describe, expect, mock, test } from "bun:test";
 
 const USER_ID = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
 const WORKSPACE_A = "11111111-2222-3333-4444-555555555555";
@@ -21,6 +21,11 @@ beforeAll(() => {
     }));
     mock.module("next/headers", () => ({ headers: async () => new Headers() }));
 });
+
+// mock.module is process-global; restore at file end so the @/lib/auth stub
+// doesn't leak into later files that import the real auth (e.g. the user-role
+// schema test reading auth.options).
+afterAll(() => mock.restore());
 
 let repo: InMemoryNotificationsRepository;
 

@@ -13,7 +13,7 @@
 import { setBillingGateDepsForTesting } from "@/lib/billing-gate/server";
 import { setActivityDepsForTesting } from "@/lib/compose/activity";
 import type { AnomalyAlert } from "@/lib/detection";
-import { afterEach, beforeAll, describe, expect, mock, test } from "bun:test";
+import { afterAll, afterEach, beforeAll, describe, expect, mock, test } from "bun:test";
 
 const USER_ID = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
 const WORKSPACE = "11111111-2222-3333-4444-555555555555";
@@ -28,8 +28,17 @@ const state: AuthState = {
     memberOf: new Set(),
 };
 
+let realAuth: Record<string, unknown>;
+let realIdentity: Record<string, unknown>;
+let realHeaders: Record<string, unknown>;
+
 beforeAll(async () => {
-    const realIdentity = (await import("@/lib/identity/server")) as Record<string, unknown>;
+    // Snapshot the real exports BEFORE mocking. `await import` returns a live
+    // namespace object that mock.module mutates in place, so spread into a plain
+    // object to freeze the real values for restoration in afterAll.
+    realAuth = { ...(await import("@/lib/auth")) };
+    realIdentity = { ...(await import("@/lib/identity/server")) };
+    realHeaders = { ...(await import("next/headers")) };
     mock.module("@/lib/auth", () => ({
         auth: {
             api: {
@@ -51,6 +60,17 @@ beforeAll(async () => {
     mock.module("next/headers", () => ({
         headers: async () => new Headers(),
     }));
+});
+
+// mock.module is process-global; restore the hijacked specifiers at file end so
+// the @/lib/auth stub (which lacks `.options`) can't leak into later files that
+// read the real auth — e.g. the user-role schema test asserting
+// auth.options.user. mock.restore() does not reliably revert mock.module once
+// the route under test has imported it, so re-point at the real snapshots.
+afterAll(() => {
+    mock.module("@/lib/auth", () => realAuth);
+    mock.module("@/lib/identity/server", () => realIdentity);
+    mock.module("next/headers", () => realHeaders);
 });
 
 const setupActivity = () => {

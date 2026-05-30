@@ -6,7 +6,9 @@ import {
 } from "@/app/(dashboard)/workspace/[workspaceId]/budgets/actions";
 import { PageHeader } from "@/components/shell/page-header";
 import { DashboardSection } from "@/components/ui/workspace/dashboard-section";
+import { CloudPaywallPage } from "@/app/(dashboard)/workspace/[workspaceId]/_components/cloud-paywall-page";
 import { requireSessionUI } from "@/lib/auth";
+import { cloudWorkspaceLocked } from "@/lib/billing-gate/server";
 import { buildBudgetDetailView } from "@/lib/budgeting";
 import { getBudget, getBudgetStats } from "@/lib/budgeting/server";
 import { formatPercent, formatUsd } from "@/lib/format";
@@ -33,6 +35,14 @@ interface BudgetDetailPageProps {
 
 export default async function BudgetDetailPage({ params, searchParams }: BudgetDetailPageProps) {
     const { workspaceId, budgetId } = await params;
+
+    // Secure gate: bail before loading the budget so a locked cloud workspace
+    // never has its cap, spend, or blocked-event history fetched. Locking even
+    // an unknown budget id keeps the paywall from leaking which budgets exist.
+    if (await cloudWorkspaceLocked(workspaceId)) {
+        return <CloudPaywallPage workspaceId={workspaceId} title="Budget" />;
+    }
+
     const search = await searchParams;
     await requireSessionUI();
 

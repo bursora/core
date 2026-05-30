@@ -2,9 +2,11 @@ import { PageHeader } from "@/components/shell/page-header";
 import { SpendCompositionPanel } from "@/components/ui/dashboard-views/spend-composition-panel";
 import { WhatsBreakingPanel } from "@/components/ui/dashboard-views/whats-breaking";
 import { Skeleton } from "@/components/ui/skeleton";
+import { CloudPaywallPage } from "@/app/(dashboard)/workspace/[workspaceId]/_components/cloud-paywall-page";
 import { WindowFilter } from "@/components/ui/workspace/filters/window-filter";
 import { RefreshControls } from "@/components/ui/workspace/refresh-controls";
 import { requireSessionUI } from "@/lib/auth";
+import { cloudWorkspaceLocked } from "@/lib/billing-gate/server";
 import { parseWindowKey, resolveWindow, type DashboardWindow } from "@/lib/dashboard-window";
 import { buildWorkspacePath } from "@/lib/routes";
 import { FACETS, type Facet } from "@/lib/spend-types";
@@ -30,6 +32,20 @@ interface DashboardPageProps {
 export default async function DashboardPage({ params, searchParams }: DashboardPageProps) {
     const session = await requireSessionUI();
     const { workspaceId } = await params;
+
+    // Secure gate: bail before reading searchParams or instantiating any of the
+    // data-fetching child components, so a locked cloud workspace never has its
+    // real spend or event numbers fetched, computed, or sent to the client.
+    if (await cloudWorkspaceLocked(workspaceId)) {
+        return (
+            <CloudPaywallPage
+                workspaceId={workspaceId}
+                title="Dashboard"
+                subtitle={`Welcome, ${session.user.email}.`}
+            />
+        );
+    }
+
     const { window: rawWindow, facet: rawFacet } = await searchParams;
     const windowKey = parseWindowKey(rawWindow);
     const dashboardWindow = resolveWindow(windowKey, new Date());

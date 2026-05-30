@@ -1,6 +1,8 @@
 import { PageHeader } from "@/components/shell/page-header";
+import { CloudPaywallPage } from "@/app/(dashboard)/workspace/[workspaceId]/_components/cloud-paywall-page";
 import { actionFail, actionOk, type ActionResult } from "@/lib/action-result";
 import { getRequestSession, requireSessionUI } from "@/lib/auth";
+import { cloudWorkspaceLocked } from "@/lib/billing-gate/server";
 import {
     assertWorkspaceMember,
     cancelPendingInvite,
@@ -19,6 +21,19 @@ interface PageProps {
 
 export default async function MembersPage({ params }: PageProps) {
     const { workspaceId } = await params;
+
+    // Secure gate: bail before listing members or pending invites so a locked
+    // cloud workspace never has its roster or invited emails fetched.
+    if (await cloudWorkspaceLocked(workspaceId)) {
+        return (
+            <CloudPaywallPage
+                workspaceId={workspaceId}
+                title="Members"
+                subtitle="Invite teammates and manage workspace access."
+            />
+        );
+    }
+
     await requireSessionUI();
 
     const [members, pending] = await Promise.all([

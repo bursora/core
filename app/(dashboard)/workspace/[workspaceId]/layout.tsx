@@ -1,5 +1,6 @@
 import { AppShell } from "@/components/shell/app-shell";
 import { requireSessionUI } from "@/lib/auth";
+import { cloudWorkspaceLocked } from "@/lib/billing-gate/server";
 import { assertWorkspaceMemberOrNotFound } from "@/lib/identity/server";
 import { Suspense, type ReactNode } from "react";
 import { EventBundleBanner } from "./_components/event-bundle-banner";
@@ -27,17 +28,29 @@ export default async function WorkspaceLayout({ children, params }: LayoutProps)
         workspaceId,
         userId: session.user.id,
     });
+    // A locked cloud workspace sees only the paywall. Suppress the data banners
+    // (event-bundle usage counts, rate-limit/spike rates, alert notifications) so
+    // no real workspace data reaches a locked client. Self-host is never locked,
+    // so this short-circuits with no billing read there.
+    const locked = await cloudWorkspaceLocked(workspaceId);
     return (
         <AppShell urlWorkspaceId={workspaceId}>
-            <Suspense fallback={null}>
-                <WorkspaceBannerNotifications workspaceId={workspaceId} userId={session.user.id} />
-            </Suspense>
-            <Suspense fallback={null}>
-                <RateLimitBanner workspaceId={workspaceId} />
-            </Suspense>
-            <Suspense fallback={null}>
-                <EventBundleBanner workspaceId={workspaceId} />
-            </Suspense>
+            {locked ? null : (
+                <>
+                    <Suspense fallback={null}>
+                        <WorkspaceBannerNotifications
+                            workspaceId={workspaceId}
+                            userId={session.user.id}
+                        />
+                    </Suspense>
+                    <Suspense fallback={null}>
+                        <RateLimitBanner workspaceId={workspaceId} />
+                    </Suspense>
+                    <Suspense fallback={null}>
+                        <EventBundleBanner workspaceId={workspaceId} />
+                    </Suspense>
+                </>
+            )}
             {children}
         </AppShell>
     );

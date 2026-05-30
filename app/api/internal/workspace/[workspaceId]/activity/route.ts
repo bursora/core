@@ -15,6 +15,7 @@
  */
 
 import { getRequestSession } from "@/lib/auth";
+import { cloudWorkspaceLocked } from "@/lib/billing-gate/server";
 import { listActivity, listActivityPage } from "@/lib/compose/activity";
 import { assertWorkspaceMember } from "@/lib/identity/server";
 import {
@@ -65,6 +66,13 @@ export async function GET(request: Request, { params }: RouteContext): Promise<N
         await assertWorkspaceMember({ workspaceId, userId: session.user.id });
     } catch {
         return NextResponse.json({ error: "forbidden" }, { status: 403 });
+    }
+
+    // Activity (incl. alert_raised rows) is gated workspace data. The Settings
+    // activity tab is paywalled in the UI; this is its backing endpoint, so a
+    // locked cloud workspace is denied here too — no direct-hit bypass.
+    if (await cloudWorkspaceLocked(workspaceId)) {
+        return NextResponse.json({ error: "subscription_required" }, { status: 403 });
     }
 
     const url = new URL(request.url);

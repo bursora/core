@@ -33,7 +33,22 @@ export const auth = betterAuth({
     trustedOrigins: [...env().BETTER_AUTH_TRUSTED_ORIGINS],
     database: drizzleAdapter(db(), { provider: "pg", schema }),
     advanced: { database: { generateId: "uuid" } },
-    user: { modelName: "users" },
+    user: {
+        modelName: "users",
+        additionalFields: {
+            // Global platform role surfaced on the session user object.
+            // `input: false` makes it non-writable from any client input
+            // (signup, profile update, or any API), so only server-side code
+            // can ever change it. Per-workspace roles live separately on
+            // workspace_members.role.
+            role: {
+                type: "string",
+                required: false,
+                defaultValue: "user",
+                input: false,
+            },
+        },
+    },
     emailAndPassword: { enabled: false },
     socialProviders: {
         google: {

@@ -1,5 +1,7 @@
 import { PageHeader } from "@/components/shell/page-header";
+import { CloudPaywall } from "@/components/ui/workspace/cloud-paywall";
 import { requireSessionUI } from "@/lib/auth";
+import { cloudWorkspaceLocked } from "@/lib/billing-gate/server";
 import { env } from "@/lib/env";
 import { assertWorkspaceMemberOrNotFound } from "@/lib/identity/server";
 import { ActivityTab } from "./_components/activity-tab";
@@ -34,6 +36,9 @@ export default async function SettingsPage({ params, searchParams }: SettingsPag
     });
 
     const isCloud = env().IS_CLOUD;
+    // Settings stays reachable so a locked workspace can pay (Billing tab), but
+    // the Activity log is real workspace data (incl. alert_raised) — gate it.
+    const locked = await cloudWorkspaceLocked(workspaceId);
     const channelsSaved = search.channelsSaved === "1";
     const billingStatus =
         search.billing === "ok" || search.billing === "cancel"
@@ -88,7 +93,9 @@ export default async function SettingsPage({ params, searchParams }: SettingsPag
                     channels: (
                         <AlertChannelsSection workspaceId={workspaceId} saved={channelsSaved} />
                     ),
-                    activity: (
+                    activity: locked ? (
+                        <CloudPaywall workspaceId={workspaceId} />
+                    ) : (
                         <ActivityTab
                             workspaceId={workspaceId}
                             searchParams={{

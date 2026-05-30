@@ -17,6 +17,8 @@ import { DashboardSection } from "@/components/ui/workspace/dashboard-section";
 import { DateRangeFilter } from "@/components/ui/workspace/filters/date-range-filter";
 import { MeteringActiveFilters } from "@/components/ui/workspace/filters/metering-active-filters";
 import { StatTile } from "@/components/ui/workspace/stat-tile";
+import { CloudPaywallPage } from "@/app/(dashboard)/workspace/[workspaceId]/_components/cloud-paywall-page";
+import { cloudWorkspaceLocked } from "@/lib/billing-gate/server";
 import type { Alert } from "@/lib/detection";
 import { listAlerts } from "@/lib/detection";
 import { listDistinctMeteringValuesBulk } from "@/lib/metering/server";
@@ -35,6 +37,19 @@ interface AlertsPageProps {
 
 export default async function AlertsPage({ params, searchParams }: AlertsPageProps) {
     const { workspaceId } = await params;
+
+    // Secure gate: bail before listing alerts so a locked cloud workspace never
+    // has its anomaly or budget-block history fetched.
+    if (await cloudWorkspaceLocked(workspaceId)) {
+        return (
+            <CloudPaywallPage
+                workspaceId={workspaceId}
+                title="Alerts"
+                subtitle="Spend spikes and budget blocks across tenants and agents."
+            />
+        );
+    }
+
     const search = await searchParams;
 
     const { from, to } = resolveSpendWindow({

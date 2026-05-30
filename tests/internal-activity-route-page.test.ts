@@ -6,6 +6,7 @@
  * shape. With any filter param it returns `{ items, nextCursor }`.
  */
 
+import { setBillingGateDepsForTesting } from "@/lib/billing-gate/server";
 import { setActivityDepsForTesting } from "@/lib/compose/activity";
 import type { AnomalyAlert } from "@/lib/detection";
 import { afterEach, beforeAll, describe, expect, mock, test } from "bun:test";
@@ -57,6 +58,9 @@ const setupActivity = () => {
         },
         fetchKeyEvents: async () => [],
     });
+    // Exercise activity behavior, not the paywall — pin the workspace UNLOCKED
+    // (ambient dev env may be IS_CLOUD=true). Locked path tested separately.
+    setBillingGateDepsForTesting({ isCloud: false, readBilling: async () => null });
 };
 
 const callRoute = async (qs: string) => {
@@ -66,7 +70,10 @@ const callRoute = async (qs: string) => {
 };
 
 describe("GET /api/internal/workspace/.../activity (filtered)", () => {
-    afterEach(() => setActivityDepsForTesting(null));
+    afterEach(() => {
+        setActivityDepsForTesting(null);
+        setBillingGateDepsForTesting(null);
+    });
 
     test("legacy shape when no filter params supplied", async () => {
         setupActivity();
@@ -115,5 +122,14 @@ describe("GET /api/internal/workspace/.../activity (filtered)", () => {
         expect(res.status).toBe(200);
         const body = (await res.json()) as { items?: unknown; nextCursor?: unknown };
         expect(Array.isArray(body.items)).toBe(true);
+    });
+
+    test("403 with subscription_required when the cloud workspace is locked", async () => {
+        setupActivity();
+        setBillingGateDepsForTesting({ isCloud: true, readBilling: async () => null });
+        const res = await callRoute("?kind=alert_raised");
+        expect(res.status).toBe(403);
+        const body = (await res.json()) as { error?: string };
+        expect(body.error).toBe("subscription_required");
     });
 });

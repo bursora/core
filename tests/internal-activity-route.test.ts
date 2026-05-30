@@ -10,6 +10,7 @@
  * through the existing `setActivityDepsForTesting` hook.
  */
 
+import { setBillingGateDepsForTesting } from "@/lib/billing-gate/server";
 import { setActivityDepsForTesting } from "@/lib/compose/activity";
 import type { AnomalyAlert } from "@/lib/detection";
 import { afterEach, beforeAll, describe, expect, mock, test } from "bun:test";
@@ -58,10 +59,16 @@ const setupActivity = () => {
         fetchAlerts: async (): Promise<readonly AnomalyAlert[]> => [],
         fetchKeyEvents: async () => [],
     });
+    // These tests exercise activity behavior, not the paywall: force the
+    // workspace UNLOCKED so the cloud gate doesn't 403. The ambient dev env may
+    // have IS_CLOUD=true, so pin it deterministically. The locked path has its
+    // own test below.
+    setBillingGateDepsForTesting({ isCloud: false, readBilling: async () => null });
 };
 
 const teardown = () => {
     setActivityDepsForTesting(null);
+    setBillingGateDepsForTesting(null);
     state.session = null;
     state.memberOf.clear();
 };
@@ -105,5 +112,17 @@ describe("GET /api/internal/workspace/[workspaceId]/activity", () => {
         const body = (await res.json()) as { activity: { kind: string }[] };
         expect(Array.isArray(body.activity)).toBe(true);
         expect(body.activity.map((i) => i.kind)).toContain("event_ingested");
+    });
+
+    test("403 when the cloud workspace is locked (no active subscription)", async () => {
+        setupActivity();
+        // Override: cloud + no billing record → locked. Activity is gated data.
+        setBillingGateDepsForTesting({ isCloud: true, readBilling: async () => null });
+        state.session = { user: { id: USER_ID } };
+        state.memberOf.add(`${USER_ID}:${WORKSPACE}`);
+        const res = await callRoute(WORKSPACE);
+        expect(res.status).toBe(403);
+        const body = (await res.json()) as { error?: string };
+        expect(body.error).toBe("subscription_required");
     });
 });

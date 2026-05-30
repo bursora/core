@@ -7,13 +7,9 @@
  * timeline needs for its prior-month-matched tick (so it does not re-query).
  */
 
-import {
-    getBudgetHeadroom,
-    getProjectedEom,
-    getSpendMtd,
-} from "@/lib/dashboard/dashboard-stats";
-import { withRequestMemo } from "@/lib/dashboard/per-request-cache";
 import { computeWhatsBreaking, type WhatsBreakingRow } from "@/lib/budgeting";
+import { getBudgetHeadroom, getProjectedEom, getSpendMtd } from "@/lib/dashboard/dashboard-stats";
+import { withRequestMemo } from "@/lib/dashboard/per-request-cache";
 
 const HEADROOM_FETCH_LIMIT = 50;
 

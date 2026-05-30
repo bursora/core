@@ -22,8 +22,8 @@ export function PastDueBanner({ workspaceId }: PastDueBannerProps) {
             <AlertTitle>Payment failed</AlertTitle>
             <AlertDescription>
                 <p>
-                    Your last subscription charge did not go through. Update your payment method
-                    to keep Bursora cloud features.
+                    Your last subscription charge did not go through. Update your payment method to
+                    keep Bursora cloud features.
                 </p>
                 <form action={openPortalAction} className="mt-3">
                     <input type="hidden" name="workspaceId" value={workspaceId} />

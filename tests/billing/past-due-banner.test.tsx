@@ -22,8 +22,7 @@ const WORKSPACE_ID = "11111111-2222-3333-4444-555555555555";
 // Imported inside each test, after installSelfHostEnv's beforeEach has set the
 // self-host baseline. The EE component's transitive `env()` (via lib/auth)
 // runs eagerly on first import, so the env must exist before that import.
-const loadBanner = async () =>
-    (await import("@/lib/ee/components/past-due-banner")).PastDueBanner;
+const loadBanner = async () => (await import("@/lib/ee/components/past-due-banner")).PastDueBanner;
 
 describe("PastDueBanner", () => {
     test("renders a warning alert flagging the failed payment", async () => {

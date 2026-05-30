@@ -19,8 +19,8 @@
 import "server-only";
 
 import { isActiveSubscriptionStatus } from "@/lib/billing-status";
-import { env } from "@/lib/env";
 import type { WorkspaceBillingRecord } from "@/lib/ee/billing/workspace-billing.repository";
+import { env } from "@/lib/env";
 
 export interface BillingGateDeps {
     readonly isCloud: boolean;

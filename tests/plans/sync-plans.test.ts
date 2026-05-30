@@ -85,7 +85,12 @@ describe("syncPlans", () => {
         const { repo, rows } = makeRepo();
         const later = new Date("2026-06-01T00:00:00Z");
 
-        await syncPlans(makeSource([fetchedPlan({ priceCents: 2900 })]), repo, [trackedPlan()], NOW);
+        await syncPlans(
+            makeSource([fetchedPlan({ priceCents: 2900 })]),
+            repo,
+            [trackedPlan()],
+            NOW,
+        );
         const firstId = rows()[0]?.id;
 
         // Same variant, new price/name → must land on the same logical row.

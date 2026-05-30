@@ -38,11 +38,7 @@ const FilterSchema = z.object({
     kind: z.enum(ACTIVITY_KIND_VALUES).optional(),
     severity: z.enum(ACTIVITY_SEVERITY_VALUES).optional(),
     range: z.enum(ACTIVITY_RANGE_VALUES).optional(),
-    cursor: z
-        .string()
-        .max(500)
-        .regex(/^\d+$/)
-        .optional(),
+    cursor: z.string().max(500).regex(/^\d+$/).optional(),
 });
 
 function hasAnyFilterParam(url: URL): boolean {

@@ -18,10 +18,7 @@ import type {
     NotificationRow,
     NotificationsRepository,
 } from "@/lib/notifications/notifications.repository";
-import {
-    listNotificationsPage,
-    setNotificationsRepoForTesting,
-} from "@/lib/notifications/server";
+import { listNotificationsPage, setNotificationsRepoForTesting } from "@/lib/notifications/server";
 import { afterEach, expect, test } from "bun:test";
 import { installCloudEnv } from "../support/with-cloud-env";
 
@@ -62,9 +59,7 @@ function repoWithStatuses(
         listForUser: async (input) => {
             if (input.subscriptionStatuses === undefined) return seed.map((s) => s.row);
             const allowed = new Set(input.subscriptionStatuses);
-            return seed
-                .filter((s) => s.status !== null && allowed.has(s.status))
-                .map((s) => s.row);
+            return seed.filter((s) => s.status !== null && allowed.has(s.status)).map((s) => s.row);
         },
     };
 }

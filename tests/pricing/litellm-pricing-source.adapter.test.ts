@@ -6,12 +6,14 @@
  * shape both throw and surface upward to syncPricing.
  */
 
+import { findPricingRow } from "@/lib/metering/pricing/find-pricing-row";
 import {
     fetchFeed,
     litellmPricingSource,
     parseFeed,
     type LiteLLMFeed,
 } from "@/lib/metering/pricing/litellm-pricing-source.adapter";
+import type { PricingRow } from "@/lib/metering/pricing/pricing-row";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
 const FIXTURE: LiteLLMFeed = {
@@ -149,6 +151,150 @@ describe("parseFeed", () => {
             outputPer1mUsd: "15",
             cachePer1mUsd: "0.3",
         });
+    });
+});
+
+// LiteLLM namespaces these vendors as `${provider}/<id>`, but the SDK reports
+// the bare id the vendor's API takes. Each case pairs the LiteLLM feed key with
+// the (provider, model) an event actually carries — the row must match it.
+const VENDOR_CASES = [
+    {
+        feedKey: "gemini/gemini-2.0-flash",
+        litellmProvider: "gemini",
+        provider: "google",
+        eventModel: "gemini-2.0-flash",
+    },
+    {
+        feedKey: "groq/llama-3.1-8b-instant",
+        litellmProvider: "groq",
+        provider: "groq",
+        eventModel: "llama-3.1-8b-instant",
+    },
+    {
+        feedKey: "groq/meta-llama/llama-guard-4-12b",
+        litellmProvider: "groq",
+        provider: "groq",
+        eventModel: "meta-llama/llama-guard-4-12b",
+    },
+    { feedKey: "xai/grok-2", litellmProvider: "xai", provider: "xai", eventModel: "grok-2" },
+    {
+        feedKey: "mistral/codestral-2405",
+        litellmProvider: "mistral",
+        provider: "mistral",
+        eventModel: "codestral-2405",
+    },
+    {
+        feedKey: "together_ai/baai/bge-base-en-v1.5",
+        litellmProvider: "together_ai",
+        provider: "together",
+        eventModel: "baai/bge-base-en-v1.5",
+    },
+    {
+        feedKey: "fireworks_ai/accounts/fireworks/models/deepseek-r1",
+        litellmProvider: "fireworks_ai",
+        provider: "fireworks",
+        eventModel: "accounts/fireworks/models/deepseek-r1",
+    },
+    {
+        feedKey: "perplexity/llama-3.1-8b-instruct",
+        litellmProvider: "perplexity",
+        provider: "perplexity",
+        eventModel: "llama-3.1-8b-instruct",
+    },
+    {
+        feedKey: "openrouter/anthropic/claude-3.5-sonnet",
+        litellmProvider: "openrouter",
+        provider: "openrouter",
+        eventModel: "anthropic/claude-3.5-sonnet",
+    },
+];
+
+const VENDOR_FEED: LiteLLMFeed = Object.fromEntries(
+    VENDOR_CASES.map((c) => [
+        c.feedKey,
+        {
+            litellm_provider: c.litellmProvider,
+            input_cost_per_token: 0.000001,
+            output_cost_per_token: 0.000002,
+        },
+    ]),
+);
+
+const asGlobalRows = (
+    rates: readonly {
+        provider: string;
+        model: string;
+        region: string;
+        inputPer1mUsd: string;
+        outputPer1mUsd: string;
+        cachePer1mUsd: string | null;
+    }[],
+): PricingRow[] =>
+    rates.map((r, i) => ({
+        id: `row-${i}`,
+        workspaceId: null,
+        ...r,
+        effectiveFrom: new Date("2026-01-01T00:00:00Z"),
+        effectiveTo: null,
+    }));
+
+describe("parseFeed new-vendor model normalization", () => {
+    // The bug this guards: synced rows kept LiteLLM's `provider/` model prefix
+    // while events carry the bare id, so price matching (exact on provider,
+    // model, region) never hit and every new-vendor call landed unpriced at $0.
+    test.each(VENDOR_CASES)(
+        "$provider event $eventModel resolves a non-$0 synced price",
+        ({ provider, eventModel }) => {
+            const candidates = asGlobalRows(parseFeed(VENDOR_FEED));
+
+            const row = findPricingRow({
+                candidates,
+                provider,
+                model: eventModel,
+                region: "global",
+                ts: new Date("2026-02-01T00:00:00Z"),
+                workspaceId: "ws-1",
+            });
+
+            expect(row).not.toBeNull();
+            expect(Number.parseFloat(row?.inputPer1mUsd ?? "0")).toBeGreaterThan(0);
+            expect(Number.parseFloat(row?.outputPer1mUsd ?? "0")).toBeGreaterThan(0);
+        },
+    );
+
+    test("preserves OpenRouter's required vendor segment after stripping its prefix", () => {
+        const models = parseFeed(VENDOR_FEED).map((r) => r.model);
+
+        expect(models).toContain("anthropic/claude-3.5-sonnet");
+    });
+
+    test("leaves size-bucket pseudo-models unchanged (no bare id to map to)", () => {
+        const row = parseFeed({
+            "together-ai-4.1b-8b": {
+                litellm_provider: "together_ai",
+                input_cost_per_token: 0.0000002,
+                output_cost_per_token: 0.0000002,
+            },
+        })[0];
+
+        expect(row?.model).toBe("together-ai-4.1b-8b");
+    });
+
+    test("dedupes bare + prefixed keys that normalize to the same model", () => {
+        const rows = parseFeed({
+            "gemini-flash-latest": {
+                litellm_provider: "gemini",
+                input_cost_per_token: 0.0000003,
+                output_cost_per_token: 0.0000025,
+            },
+            "gemini/gemini-flash-latest": {
+                litellm_provider: "gemini",
+                input_cost_per_token: 0.0000003,
+                output_cost_per_token: 0.0000025,
+            },
+        }).filter((r) => r.model === "gemini-flash-latest");
+
+        expect(rows).toHaveLength(1);
     });
 });
 

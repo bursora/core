@@ -8,11 +8,11 @@
  */
 
 import { TopSpendersSnapshot } from "@/app/(dashboard)/workspace/[workspaceId]/_components/top-spenders-snapshot";
+import type { DashboardWindow } from "@/lib/dashboard-window";
 import {
     setDashboardStatsDepsForTesting,
     type DashboardStatsDeps,
 } from "@/lib/dashboard/dashboard-stats";
-import type { DashboardWindow } from "@/lib/dashboard-window";
 import type {
     MeteringReadRepository,
     TopSpenderRow,

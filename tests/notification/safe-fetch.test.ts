@@ -8,11 +8,7 @@
  * alert payload.
  */
 
-import {
-    assertSafeUrl,
-    isPrivateIp,
-    SafeFetchUrlError,
-} from "@/lib/notification/safe-fetch";
+import { assertSafeUrl, isPrivateIp, SafeFetchUrlError } from "@/lib/notification/safe-fetch";
 import { describe, expect, test } from "bun:test";
 
 describe("isPrivateIp", () => {
@@ -152,21 +148,21 @@ describe("assertSafeUrl", () => {
     });
 
     test("file:// scheme rejected", async () => {
-        await expect(
-            assertSafeUrl("file:///etc/passwd", publicDns),
-        ).rejects.toBeInstanceOf(SafeFetchUrlError);
+        await expect(assertSafeUrl("file:///etc/passwd", publicDns)).rejects.toBeInstanceOf(
+            SafeFetchUrlError,
+        );
     });
 
     test("ftp:// scheme rejected", async () => {
-        await expect(
-            assertSafeUrl("ftp://example.com/", publicDns),
-        ).rejects.toBeInstanceOf(SafeFetchUrlError);
+        await expect(assertSafeUrl("ftp://example.com/", publicDns)).rejects.toBeInstanceOf(
+            SafeFetchUrlError,
+        );
     });
 
     test("gopher:// scheme rejected", async () => {
-        await expect(
-            assertSafeUrl("gopher://example.com/", publicDns),
-        ).rejects.toBeInstanceOf(SafeFetchUrlError);
+        await expect(assertSafeUrl("gopher://example.com/", publicDns)).rejects.toBeInstanceOf(
+            SafeFetchUrlError,
+        );
     });
 
     test("hostname == 127.0.0.1 rejected without DNS lookup", async () => {
@@ -188,9 +184,9 @@ describe("assertSafeUrl", () => {
     });
 
     test("hostname is private IPv4 literal (10.0.0.1) rejected", async () => {
-        await expect(
-            assertSafeUrl("http://10.0.0.1/", publicDns),
-        ).rejects.toBeInstanceOf(SafeFetchUrlError);
+        await expect(assertSafeUrl("http://10.0.0.1/", publicDns)).rejects.toBeInstanceOf(
+            SafeFetchUrlError,
+        );
     });
 
     test("hostname is cloud metadata literal (169.254.169.254) rejected", async () => {
@@ -226,9 +222,9 @@ describe("assertSafeUrl", () => {
         const resolveThrow = async (): Promise<readonly string[]> => {
             throw new Error("ENOTFOUND");
         };
-        await expect(
-            assertSafeUrl("http://nx.example.com/", resolveThrow),
-        ).rejects.toBeInstanceOf(SafeFetchUrlError);
+        await expect(assertSafeUrl("http://nx.example.com/", resolveThrow)).rejects.toBeInstanceOf(
+            SafeFetchUrlError,
+        );
     });
 
     test("trailing-dot host resolving to a private IP rejected", async () => {

@@ -39,11 +39,7 @@ const CHECK_SCRIPT = [
 const CHECK_COMMAND = "bursoraRateLimitCheck";
 
 type RedisWithCheckCommand = Redis & {
-    [CHECK_COMMAND]: (
-        key: string,
-        windowMs: string,
-        limit: string,
-    ) => Promise<[number, number]>;
+    [CHECK_COMMAND]: (key: string, windowMs: string, limit: string) => Promise<[number, number]>;
 };
 
 export class RedisRateLimiter implements RateLimiter {

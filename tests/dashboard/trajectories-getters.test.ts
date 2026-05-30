@@ -11,12 +11,12 @@
  *   - `setDashboardStatsDepsForTesting` to fake `getBudgetList`
  */
 
+import { getCustomerTrajectories, getModelTrajectories } from "@/lib/compose/trajectories";
+import type { DashboardWindow } from "@/lib/dashboard-window";
 import {
     setDashboardStatsDepsForTesting,
     type DashboardStatsDeps,
 } from "@/lib/dashboard/dashboard-stats";
-import { getCustomerTrajectories, getModelTrajectories } from "@/lib/compose/trajectories";
-import type { DashboardWindow } from "@/lib/dashboard-window";
 import type {
     MeteringReadRepository,
     SpendSeriesQuery,

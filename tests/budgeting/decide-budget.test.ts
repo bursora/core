@@ -17,12 +17,7 @@
  * No DB. No Redis. Fakes the repo + aggregator ports.
  */
 
-import type {
-    BudgetRepository,
-    PeriodResolver,
-    RawBudget,
-    SpendAggregator,
-} from "@/lib/budgeting";
+import type { BudgetRepository, PeriodResolver, RawBudget, SpendAggregator } from "@/lib/budgeting";
 import { decideBudgetUseCase } from "@/lib/budgeting";
 import { ALERT_RAISED_TOPIC } from "@/lib/event-bus";
 import { describe, expect, test } from "bun:test";
@@ -580,4 +575,3 @@ describe("decideBudgetUseCase periodResolver injection", () => {
         expect(decision.resetAt).toBe(fixedTo.toISOString());
     });
 });
-

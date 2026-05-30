@@ -6,6 +6,7 @@
  * shape the dashboard page expects.
  */
 
+import { resolveWindow } from "@/lib/dashboard-window";
 import {
     computeDelta,
     confidenceLabel,
@@ -32,7 +33,6 @@ import {
     setDashboardStatsDepsForTesting,
     type DashboardStatsDeps,
 } from "@/lib/dashboard/dashboard-stats";
-import { resolveWindow } from "@/lib/dashboard-window";
 import type { MeteringFilters } from "@/lib/metering/metering-read.repository";
 import { afterEach, describe, expect, test } from "bun:test";
 

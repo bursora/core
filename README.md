@@ -1,29 +1,27 @@
 # Bursora
 
-Single Next.js 16 app (App Router + Turbopack) hosting marketing and dashboard via route groups.
+Next.js 16 app (App Router + Turbopack) for the Bursora dashboard on `app.bursora.com`. Also publishes the `@bursora/core` package: shared UI primitives and pure helpers consumed by the sibling `site/` marketing app.
 
 ## Layout
 
 ```
 app/
-  (marketing)/   # bursora.com surface — landing, privacy, terms, changelog, docs
   (dashboard)/   # app.bursora.com surface — workspace, profile, alerts, budgets, etc.
   login/, invite/
   api/           # v1, auth, internal, cron, webhooks
 components/
   ui/            # shadcn primitives + dashboard-views, workspace, brand, filters, hooks, shell subdirs
   shell/         # dashboard chrome (app-shell, sidebar-nav, user-menu, command-palette, ...)
-  landing/       # marketing components
 lib/
-  ee/            # source-available Enterprise module (billing). See lib/ee/LICENSE.
+  ee/            # source-available Enterprise module (Lemon Squeezy billing). See lib/ee/LICENSE.
   db/            # drizzle schema + client
-  docs/          # docs renderer (tree, markdown helpers)
-  budgeting/, metering/, identity/, pricing/, notification/, rate-limit/, spike-protection/, event-bundle/, detection/, ...
+  budgeting/, metering/, identity/, notification/, rate-limit/, spike-protection/, event-bundle/, detection/, plans/, ...
 drizzle/         # migrations + seed/setup scripts
-docs/            # product docs (.md, source of truth for plain-English behavior)
 tests/           # all tests (audits, unit, integration, billing fakes, ...)
 public/
 ```
+
+Product docs live in the sibling `site/docs/` (rendered at bursora.com/docs).
 
 ## Run
 

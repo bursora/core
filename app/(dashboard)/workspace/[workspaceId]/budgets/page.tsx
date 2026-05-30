@@ -1,6 +1,6 @@
+import { CloudPaywallPage } from "@/app/(dashboard)/workspace/[workspaceId]/_components/cloud-paywall-page";
 import { PageHeader } from "@/components/shell/page-header";
 import { MeteringActiveFilters } from "@/components/ui/workspace/filters/metering-active-filters";
-import { CloudPaywallPage } from "@/app/(dashboard)/workspace/[workspaceId]/_components/cloud-paywall-page";
 import { cloudWorkspaceLocked } from "@/lib/billing-gate/server";
 import { MODES, type BudgetListFilter, type BudgetMode } from "@/lib/budgeting";
 import { getBudgetStats, listBudgets } from "@/lib/budgeting/server";

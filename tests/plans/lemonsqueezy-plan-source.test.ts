@@ -143,11 +143,15 @@ describe("lemonSqueezyPlanSource", () => {
 
     test("sends Bearer auth + JSON:API accept header", async () => {
         const seen: RequestInit[] = [];
-        const fetcher = async (_input: URL | RequestInfo, init?: RequestInit): Promise<Response> => {
+        const fetcher = async (
+            _input: URL | RequestInfo,
+            init?: RequestInit,
+        ): Promise<Response> => {
             seen.push(init ?? {});
             const url = typeof _input === "string" ? _input : _input.toString();
             if (url.includes("/variants/1712197")) return jsonResponse(VARIANT);
-            if (url.includes("/products/1093107/variants")) return jsonResponse({ data: [VARIANT.data] });
+            if (url.includes("/products/1093107/variants"))
+                return jsonResponse({ data: [VARIANT.data] });
             if (url.includes("/products/1093107")) return jsonResponse(PRODUCT);
             if (url.includes("/stores/389222")) return jsonResponse(STORE);
             return new Response("nope", { status: 404 });

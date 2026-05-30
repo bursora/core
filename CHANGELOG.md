@@ -1,22 +1,13 @@
 # Changelog
 
-All notable changes to Bursora are recorded here. Newest first.
+Notable changes to Bursora, newest first. Pre-launch; entries get versioned once we ship.
 
-## [2026-05-19] — Legal pages, group-by facet, sub-cent precision
+## [2026-05-30] - Pre-launch
 
-- Privacy and Terms pages live under the landing chrome.
-- Spend dashboard adds a group-by facet so you can slice by customer, agent, workflow, or model in one click.
-- Cost math keeps sub-cent precision end to end; rounding only at the display layer.
-- Project renamed from Bursar to Bursora across the codebase.
-
-## [2026-05-18] — Unified workspace banner and blocked-call attribution
-
-- One banner pipeline for setup hints, plan limits, and alerts; no more stacking surfaces.
-- Budget detail page shows which customer, agent, or workflow tripped the limit.
-- Notifications now route through a single channel so Slack and Discord stay in sync.
-
-## [2026-05-17] — Live data refresh on the dashboard
-
-- Spend view refreshes on a configurable interval; no more manual reloads.
-- Status filter on /spend separates allowed, blocked, and errored calls.
-- Per-budget detail page surfaces recent activity inline.
+- Wrap one AI client in a single line: OpenAI, Anthropic, and Google Gemini natively, plus any OpenAI-compatible vendor (DeepSeek, Groq, xAI, Mistral, and more) by base URL. Vercel AI SDK supported through middleware.
+- Pre-call budget checks block any call that would breach a hard limit; actual tokens and cost are metered right after.
+- Budgets scope to workspace, customer, agent, or workflow over daily, weekly, or monthly windows, in block or alert-only mode.
+- Live spend dashboard groups by customer, agent, workflow, or model, with status and date filters plus CSV export.
+- Anomaly and spike alerts route to Slack, Discord, or email.
+- Model prices sync daily from the LiteLLM feed; per-workspace overrides cover negotiated rates. Cost math keeps sub-cent precision.
+- Cloud is a flat $29/mo with a 5M-events/month fair-use ceiling (alert-only past it); self-host is free under Apache 2.0.

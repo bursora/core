@@ -1,3 +1,4 @@
+import { CloudPaywallPage } from "@/app/(dashboard)/workspace/[workspaceId]/_components/cloud-paywall-page";
 import { BudgetDetailActions } from "@/app/(dashboard)/workspace/[workspaceId]/budgets/_components/budget-detail-actions";
 import { BudgetHeader } from "@/app/(dashboard)/workspace/[workspaceId]/budgets/_components/budget-header";
 import {
@@ -6,7 +7,6 @@ import {
 } from "@/app/(dashboard)/workspace/[workspaceId]/budgets/actions";
 import { PageHeader } from "@/components/shell/page-header";
 import { DashboardSection } from "@/components/ui/workspace/dashboard-section";
-import { CloudPaywallPage } from "@/app/(dashboard)/workspace/[workspaceId]/_components/cloud-paywall-page";
 import { requireSessionUI } from "@/lib/auth";
 import { cloudWorkspaceLocked } from "@/lib/billing-gate/server";
 import { buildBudgetDetailView } from "@/lib/budgeting";

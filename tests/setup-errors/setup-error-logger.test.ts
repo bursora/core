@@ -116,9 +116,7 @@ describe("setup error logger seam", () => {
         await flush();
 
         expect(res.status).toBe(400);
-        expect(logger.calls).toEqual([
-            { kind: "ingest_invalid_body", workspaceId: WORKSPACE },
-        ]);
+        expect(logger.calls).toEqual([{ kind: "ingest_invalid_body", workspaceId: WORKSPACE }]);
     });
 
     test("POST /api/v1/setup-error 202 valid sdk_unknown_provider forwards to the logger with workspaceId", async () => {
@@ -136,8 +134,6 @@ describe("setup error logger seam", () => {
         await flush();
 
         expect(res.status).toBe(202);
-        expect(logger.calls).toEqual([
-            { kind: "sdk_unknown_provider", workspaceId: WORKSPACE },
-        ]);
+        expect(logger.calls).toEqual([{ kind: "sdk_unknown_provider", workspaceId: WORKSPACE }]);
     });
 });

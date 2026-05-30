@@ -89,9 +89,7 @@ function normalizeHostname(hostname: string): string {
     // host but can dodge exact-hostname WAF/firewall rules, so it never reaches
     // resolution or IP classification.
     const unbracketed =
-        hostname.startsWith("[") && hostname.endsWith("]")
-            ? hostname.slice(1, -1)
-            : hostname;
+        hostname.startsWith("[") && hostname.endsWith("]") ? hostname.slice(1, -1) : hostname;
     return unbracketed.replace(/\.$/, "");
 }
 

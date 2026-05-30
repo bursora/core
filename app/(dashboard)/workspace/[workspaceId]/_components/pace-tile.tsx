@@ -4,12 +4,12 @@
  * directional label (accelerating, steady, or cooling) with the signed delta.
  */
 
+import type { DashboardWindow } from "@/lib/dashboard-window";
 import {
     getSpendPaceInWindow,
     paceDirection,
     type PaceDirection,
 } from "@/lib/dashboard/dashboard-stats";
-import type { DashboardWindow } from "@/lib/dashboard-window";
 import { formatSignedPercent } from "@/lib/format";
 import { cn } from "@/lib/utils";
 

@@ -25,10 +25,7 @@
  */
 
 import { UnknownPricingError } from "./pricing/calculate-cost";
-import {
-    createDrizzlePricingResolver,
-    type PricingResolver,
-} from "./pricing/pricing-resolver";
+import { createDrizzlePricingResolver, type PricingResolver } from "./pricing/pricing-resolver";
 import type { PricingRepository } from "./pricing/pricing-row";
 import type { UsageEventInput, UsageEventRow } from "./usage-event";
 import type { UsageEventRepository } from "./usage-event.repository";
@@ -67,8 +64,7 @@ export async function ingestEventsUseCase(input: IngestEventsInput): Promise<Ing
     }
 
     const resolver =
-        input.pricingResolver ??
-        createDrizzlePricingResolver({ pricingRepo: input.pricingRepo });
+        input.pricingResolver ?? createDrizzlePricingResolver({ pricingRepo: input.pricingRepo });
 
     const resolved: ResolvedEvent[] = await Promise.all(
         input.events.map(async (event): Promise<ResolvedEvent> => {

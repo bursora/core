@@ -22,11 +22,11 @@ import {
 import type { PlanSyncRepository, PlanUpsert } from "@/lib/plans/plan";
 import { TRACKED_PLANS } from "@/lib/plans/plan-config";
 import { shouldSyncPlans, syncPlans } from "@/lib/plans/sync-plans.usecase";
-import { and, desc, eq, isNull, sql as dsql } from "drizzle-orm";
+import { and, desc, sql as dsql, eq, isNull } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
+import { plans, pricing } from "../lib/db/schema";
 import { lemonSqueezyPlanSource } from "./plan-sync/lemonsqueezy-plan-source";
-import { pricing, plans } from "../lib/db/schema";
 
 const url = process.env.DATABASE_URL;
 if (!url) throw new Error("DATABASE_URL is required");

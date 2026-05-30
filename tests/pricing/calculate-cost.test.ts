@@ -156,9 +156,9 @@ describe("calculateCost", () => {
         // The ingest path catches it and reports the unpriced (provider, model)
         // pair so unknown models surface to the customer instead of silently
         // billing 0; priced events in the same batch still persist.
-        expect(() =>
-            calculateCost({ promptTokens: 100, completionTokens: 50 }, null),
-        ).toThrowError(UnknownPricingError);
+        expect(() => calculateCost({ promptTokens: 100, completionTokens: 50 }, null)).toThrowError(
+            UnknownPricingError,
+        );
     });
 
     test("does not mutate inputs", () => {
@@ -239,10 +239,7 @@ describe("calculateCost precision (#911)", () => {
             outputPer1mUsd: "0",
             cachePer1mUsd: null,
         });
-        const cost = calculateCost(
-            { promptTokens: 999_999_999_999, completionTokens: 0 },
-            row,
-        );
+        const cost = calculateCost({ promptTokens: 999_999_999_999, completionTokens: 0 }, row);
         expect(cost.usd).toBe("5000.00000000");
     });
 
@@ -276,10 +273,7 @@ describe("calculateCost precision (#911)", () => {
 
         for (const promptTokens of tokenSweep) {
             for (const rate of rateSweep) {
-                const expected = (
-                    (promptTokens * Number.parseFloat(rate)) /
-                    1_000_000
-                ).toFixed(8);
+                const expected = ((promptTokens * Number.parseFloat(rate)) / 1_000_000).toFixed(8);
                 const actual = calculateCost(
                     { promptTokens, completionTokens: 0 },
                     baseRow({ inputPer1mUsd: rate, outputPer1mUsd: "0", cachePer1mUsd: null }),

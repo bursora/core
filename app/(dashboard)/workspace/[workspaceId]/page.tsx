@@ -1,12 +1,15 @@
+import { CloudPaywallPage } from "@/app/(dashboard)/workspace/[workspaceId]/_components/cloud-paywall-page";
 import { PageHeader } from "@/components/shell/page-header";
 import { SpendCompositionPanel } from "@/components/ui/dashboard-views/spend-composition-panel";
 import { WhatsBreakingPanel } from "@/components/ui/dashboard-views/whats-breaking";
 import { Skeleton } from "@/components/ui/skeleton";
-import { CloudPaywallPage } from "@/app/(dashboard)/workspace/[workspaceId]/_components/cloud-paywall-page";
 import { WindowFilter } from "@/components/ui/workspace/filters/window-filter";
 import { RefreshControls } from "@/components/ui/workspace/refresh-controls";
 import { requireSessionUI } from "@/lib/auth";
 import { cloudWorkspaceLocked } from "@/lib/billing-gate/server";
+import { getSpendComposition } from "@/lib/compose/spend-composition";
+import { getCustomerTrajectories, getModelTrajectories } from "@/lib/compose/trajectories";
+import { getWhatsBreaking } from "@/lib/compose/whats-breaking";
 import { parseWindowKey, resolveWindow, type DashboardWindow } from "@/lib/dashboard-window";
 import { buildWorkspacePath } from "@/lib/routes";
 import { FACETS, type Facet } from "@/lib/spend-types";
@@ -20,9 +23,6 @@ import { RunwayProjection } from "./_components/runway-projection";
 import { StatusStrip } from "./_components/status-strip";
 import { TopSpendersSnapshot } from "./_components/top-spenders-snapshot";
 import { TrajectoriesToWatchPanel } from "./_components/trajectories-to-watch";
-import { getSpendComposition } from "@/lib/compose/spend-composition";
-import { getCustomerTrajectories, getModelTrajectories } from "@/lib/compose/trajectories";
-import { getWhatsBreaking } from "@/lib/compose/whats-breaking";
 
 interface DashboardPageProps {
     params: Promise<{ workspaceId: string }>;

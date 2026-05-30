@@ -43,7 +43,9 @@ export function lemonSqueezyPlanSource(config: LemonSqueezyPlanSourceConfig): Pl
         });
         if (!response.ok) {
             const errorText = await response.text().catch(() => "");
-            throw new Error(`lemonsqueezy plan source ${path} failed: ${response.status} ${errorText}`);
+            throw new Error(
+                `lemonsqueezy plan source ${path} failed: ${response.status} ${errorText}`,
+            );
         }
         return response.json();
     };
@@ -128,7 +130,9 @@ function parseVariant(payload: unknown): {
     // superseded price). Only a published variant is sellable, so select that
     // one rather than the first in sort order.
     const published = data.find(
-        (v) => asRecord(asRecord(v, "variant").attributes, "variant.attributes").status === "published",
+        (v) =>
+            asRecord(asRecord(v, "variant").attributes, "variant.attributes").status ===
+            "published",
     );
     if (published === undefined) {
         throw new Error("lemonsqueezy plan source: product has no published variant");

@@ -7,7 +7,7 @@
  * partition rollover service used by the retention cron.
  */
 
-export { calculateCost, UnknownPricingError, type Usage } from "./pricing/calculate-cost";
+export { UnknownPricingError, calculateCost, type Usage } from "./pricing/calculate-cost";
 export { money, zeroMoney, type Money } from "./pricing/money";
 export {
     createDrizzlePricingResolver,

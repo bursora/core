@@ -5,7 +5,7 @@
 
 import { setNotificationsRepoForTesting } from "@/lib/notifications/server";
 import { InMemoryNotificationsRepository } from "@/tests/notifications/fakes/in-memory-notifications.repository";
-import { afterEach, beforeAll, describe, expect, mock, test } from "bun:test";
+import { afterAll, afterEach, beforeAll, describe, expect, mock, test } from "bun:test";
 
 const USER_ID = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
 const WORKSPACE_A = "11111111-2222-3333-4444-555555555555";
@@ -13,13 +13,26 @@ const WORKSPACE_B = "22222222-3333-4444-5555-666666666666";
 
 let session: { user: { id: string } } | null = null;
 
-beforeAll(() => {
+let realAuth: Record<string, unknown>;
+let realHeaders: Record<string, unknown>;
+
+beforeAll(async () => {
+    realAuth = { ...(await import("@/lib/auth")) };
+    realHeaders = { ...(await import("next/headers")) };
     mock.module("@/lib/auth", () => ({
         auth: { api: { getSession: async () => session } },
         getRequestSession: async () => session,
         requireSessionUI: async () => session,
     }));
     mock.module("next/headers", () => ({ headers: async () => new Headers() }));
+});
+
+// mock.module is process-global; restore at file end so the @/lib/auth stub
+// doesn't leak into later files that import the real auth (e.g. the user-role
+// schema test reading auth.options).
+afterAll(() => {
+    mock.module("@/lib/auth", () => realAuth);
+    mock.module("next/headers", () => realHeaders);
 });
 
 let repo: InMemoryNotificationsRepository;

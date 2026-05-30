@@ -7,10 +7,7 @@
  * plans, so the feed is an empty array there.
  */
 
-import {
-    GET,
-    setPlansRepoForTesting,
-} from "@/app/api/public/plans/route";
+import { GET, setPlansRepoForTesting } from "@/app/api/public/plans/route";
 import { InMemoryPlanRepository } from "@/tests/billing/fakes/in-memory-plan.repository";
 import { afterEach, describe, expect, test } from "bun:test";
 

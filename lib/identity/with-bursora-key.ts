@@ -18,12 +18,12 @@
 
 import "server-only";
 
+import { clientIpFromHeaders } from "@/lib/client-ip";
 import { NextResponse } from "next/server";
 import { setupErrorLogger } from "../setup-errors/server";
 import type { ApiKeyLookup } from "./api-key";
 import { apiKeyHashPrefix } from "./api-key.crypto";
 import { lookupApiKey } from "./server";
-import { clientIpFromHeaders } from "@/lib/client-ip";
 
 export interface AuthFailureInfo {
     /** Eight-char SHA-256 prefix of the offered plaintext; null when the header was missing. */

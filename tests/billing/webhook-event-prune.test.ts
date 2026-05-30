@@ -13,10 +13,7 @@
  * Both use in-memory fakes / pure helpers — no DB, no time-of-day flakiness.
  */
 
-import {
-    BILLING_WEBHOOK_RETENTION_DAYS,
-    billingWebhookPruneCutoff,
-} from "@/lib/ee/billing";
+import { BILLING_WEBHOOK_RETENTION_DAYS, billingWebhookPruneCutoff } from "@/lib/ee/billing";
 import { describe, expect, test } from "bun:test";
 import { InMemoryBillingWebhookEventStore } from "./fakes/in-memory-billing-webhook-event.store";
 

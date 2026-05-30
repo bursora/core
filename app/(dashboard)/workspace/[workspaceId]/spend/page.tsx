@@ -8,7 +8,9 @@ import { GroupByFilter } from "@/components/ui/workspace/filters/group-by-filter
 import { MeteringActiveFilters } from "@/components/ui/workspace/filters/metering-active-filters";
 import { StatusFilter } from "@/components/ui/workspace/filters/status-filter";
 import { StatusTag } from "@/components/ui/workspace/status-tag";
+import { CloudPaywallPage } from "@/app/(dashboard)/workspace/[workspaceId]/_components/cloud-paywall-page";
 import { requireSessionUI } from "@/lib/auth";
+import { cloudWorkspaceLocked } from "@/lib/billing-gate/server";
 import { getBlockedCallsLastDay } from "@/lib/budgeting/blocked-calls";
 import { db } from "@/lib/db";
 import { flattenScope, listAlerts } from "@/lib/detection";
@@ -51,6 +53,13 @@ const TOP_LIMIT = 10;
 
 export default async function SpendPage({ params, searchParams }: SpendPageProps) {
     const { workspaceId } = await params;
+
+    // Secure gate: bail before reading searchParams or fetching any spend so a
+    // locked cloud workspace never has its real numbers computed or sent down.
+    if (await cloudWorkspaceLocked(workspaceId)) {
+        return <CloudPaywallPage workspaceId={workspaceId} title="Spend" />;
+    }
+
     const search = await searchParams;
     await requireSessionUI();
 

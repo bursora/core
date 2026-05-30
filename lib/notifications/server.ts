@@ -1,6 +1,8 @@
 import "server-only";
 
+import { ACTIVE_SUBSCRIPTION_STATUSES } from "@/lib/billing-status";
 import { db } from "@/lib/db";
+import { env } from "@/lib/env";
 import { drizzleAlertChannelRepository } from "../notification/drizzle-alert-channel.repository";
 import type { ChannelHealthRow } from "./channel-health";
 import { channelHealthFromSources } from "./channel-health-query";
@@ -96,6 +98,11 @@ export async function listNotificationsPage(
         userId: input.userId,
         limit: limit + 1,
         ...(cursor !== null ? { cursor } : {}),
+        // On cloud the bell is cross-workspace: never surface notifications from
+        // a workspace without an active subscription, so a locked dashboard's
+        // alert content never leaks through the bell. Self-host has no
+        // subscriptions, so it shows everything.
+        ...(env().IS_CLOUD ? { subscriptionStatuses: [...ACTIVE_SUBSCRIPTION_STATUSES] } : {}),
     });
     const hasMore = rows.length > limit;
     const page = hasMore ? rows.slice(0, limit) : rows;

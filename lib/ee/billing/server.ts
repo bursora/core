@@ -10,6 +10,7 @@
 
 import "server-only";
 
+import { cache } from "react";
 import { db } from "@/lib/db";
 import { env } from "@/lib/env";
 import { drizzlePlanRepository } from "@/lib/plans/drizzle-plan.repository";
@@ -180,12 +181,15 @@ export async function handleWebhook(input: {
     });
 }
 
-/** Read a workspace's billing record. Returns `null` if the workspace does not exist. */
-export async function getWorkspaceBillingRecord(
-    workspaceId: string,
-): Promise<WorkspaceBillingRecord | null> {
-    return billingDeps().workspaces.findById(workspaceId);
-}
+/**
+ * Read a workspace's billing record. Returns `null` if the workspace does not
+ * exist. Wrapped in React `cache()` so the readers in one render — the
+ * view-paywall gate and `BillingSection` — share a single query per request.
+ */
+export const getWorkspaceBillingRecord = cache(
+    async (workspaceId: string): Promise<WorkspaceBillingRecord | null> =>
+        billingDeps().workspaces.findById(workspaceId),
+);
 
 /**
  * Delete `billing_webhook_events` rows older than the retention window. The

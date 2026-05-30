@@ -66,6 +66,11 @@ export interface NotificationsRepository {
      * `limit` caps how many rows the repository returns. `cursor` enables
      * keyset pagination over the `(createdAt DESC, id DESC)` ordering; rows
      * strictly older than the cursor are returned.
+     *
+     * `subscriptionStatuses`, when set, restricts results to workspaces whose
+     * `subscription_status` is in the set. The cloud bell passes the active
+     * set so a locked workspace's alert content never reaches the user through
+     * the cross-workspace feed. Omit on self-host (no subscriptions).
      */
     listForUser(input: {
         userId: string;
@@ -75,6 +80,7 @@ export interface NotificationsRepository {
         display?: NotificationDisplay;
         limit?: number;
         cursor?: NotificationsCursor;
+        subscriptionStatuses?: readonly string[];
     }): Promise<readonly NotificationRow[]>;
     markRead(input: { userId: string; ids: readonly string[]; now: Date }): Promise<void>;
     markAllRead(input: { userId: string; now: Date }): Promise<void>;
@@ -116,10 +122,20 @@ export function drizzleNotificationsRepository(db: Db): NotificationsRepository 
             display,
             limit,
             cursor,
+            subscriptionStatuses,
         }) {
             const conditions = [eq(notifications.userId, userId)];
             if (workspaceId !== undefined) {
                 conditions.push(eq(notifications.workspaceId, workspaceId));
+            }
+            if (subscriptionStatuses !== undefined) {
+                // Cloud bell feed: only surface notifications from workspaces
+                // with an active subscription. A locked workspace has a NULL or
+                // non-active status, which `inArray` excludes, so its alert
+                // content never leaks through the cross-workspace bell.
+                conditions.push(
+                    inArray(workspaces.subscriptionStatus, [...subscriptionStatuses]),
+                );
             }
             if (sources && sources.length > 0) {
                 conditions.push(inArray(notifications.source, [...sources]));

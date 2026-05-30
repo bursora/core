@@ -34,6 +34,11 @@ export const users = pgTable("users", {
     email: text("email").notNull().unique(),
     emailVerified: boolean("email_verified").notNull().default(false),
     image: text("image"),
+    // Global platform role (admin | user). Distinct from the per-workspace
+    // workspace_members.role (owner | member). Owned by better-auth via an
+    // `additionalFields` entry in lib/auth.ts; `input: false` there blocks
+    // client writes so signup/profile/API input can never set it.
+    role: text("role").notNull().default("user"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

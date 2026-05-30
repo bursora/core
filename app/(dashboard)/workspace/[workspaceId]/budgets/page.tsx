@@ -1,5 +1,7 @@
 import { PageHeader } from "@/components/shell/page-header";
 import { MeteringActiveFilters } from "@/components/ui/workspace/filters/metering-active-filters";
+import { CloudPaywallPage } from "@/app/(dashboard)/workspace/[workspaceId]/_components/cloud-paywall-page";
+import { cloudWorkspaceLocked } from "@/lib/billing-gate/server";
 import { MODES, type BudgetListFilter, type BudgetMode } from "@/lib/budgeting";
 import { getBudgetStats, listBudgets } from "@/lib/budgeting/server";
 import { listDistinctMeteringValuesBulk } from "@/lib/metering/server";
@@ -20,6 +22,19 @@ interface BudgetsPageProps {
 
 export default async function BudgetsPage({ params, searchParams }: BudgetsPageProps) {
     const { workspaceId } = await params;
+
+    // Secure gate: bail before reading searchParams or listing budgets so a
+    // locked cloud workspace never has its caps or spend fetched.
+    if (await cloudWorkspaceLocked(workspaceId)) {
+        return (
+            <CloudPaywallPage
+                workspaceId={workspaceId}
+                title="Budgets"
+                subtitle="Set spend limits per workspace, tenant, agent, or workflow. Block stops requests; throttle slows them; notify pages you."
+            />
+        );
+    }
+
     const search = await searchParams;
     // Membership is guarded by the parent workspace layout.
 

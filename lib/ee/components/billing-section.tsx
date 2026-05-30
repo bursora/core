@@ -17,6 +17,7 @@
 import { Button } from "@/components/ui/button";
 import { DashboardSection } from "@/components/ui/workspace/dashboard-section";
 import { StatusTag, type StatusTagTone } from "@/components/ui/workspace/status-tag";
+import { isActiveSubscriptionStatus } from "@/lib/billing-status";
 import { createCheckoutAction, openPortalAction } from "../billing-actions";
 import { getWorkspaceBillingRecord } from "../billing/server";
 import type { ReactNode } from "react";
@@ -29,8 +30,6 @@ interface BillingSectionProps {
     /** Rendered between the plan card and the money-back panel — the usage section. */
     children?: ReactNode;
 }
-
-const ACTIVE_STATUSES = new Set(["active", "past_due", "unpaid"]);
 
 const STATUS_PILL: Record<string, { label: string; tone: StatusTagTone }> = {
     active: { label: "Active", tone: "success" },
@@ -46,12 +45,9 @@ export async function BillingSection({ workspaceId, status, children }: BillingS
     // file, even if the subscription is cancelled. Lemon Squeezy's portal lets
     // the user see invoices and re-subscribe, so the entry point is useful
     // beyond active status.
-    const hasProviderCustomer =
-        record?.providerCustomerId !== null && record?.providerCustomerId !== undefined;
+    const hasProviderCustomer = record?.providerCustomerId != null;
     const hasActiveSubscription =
-        hasProviderCustomer &&
-        record?.subscriptionStatus !== null &&
-        ACTIVE_STATUSES.has(record?.subscriptionStatus ?? "");
+        hasProviderCustomer && isActiveSubscriptionStatus(record?.subscriptionStatus);
     // eslint-disable-next-line react-hooks/purity -- server-rendered once per request; current time is the eligibility cutoff
     const now = Date.now();
     const refundEligibleUntil =

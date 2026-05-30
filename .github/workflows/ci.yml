@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+# Dummy build/test env. The self-host flavor (IS_CLOUD unset) needs no real
+# secrets; these throwaway values only satisfy lib/env.ts validation so
+# `next build`, `bun test`, and the OSS bundle scan can run. None are real
+# credentials.
+env:
+  DATABASE_URL: postgres://bursora:bursora@localhost:5432/bursora
+  BURSORA_API_KEY_PEPPER: ci-dummy-pepper
+  BETTER_AUTH_SECRET: ci-dummy-secret
+  BETTER_AUTH_URL: http://localhost:3000
+  SMTP_HOST: localhost
+  SMTP_PORT: "1025"
+  CRON_SECRET: ci-dummy-cron
+  NEXT_PUBLIC_APP_URL: http://localhost:3000
+  GOOGLE_CLIENT_ID: ci-dummy-google-id
+  GOOGLE_CLIENT_SECRET: ci-dummy-google-secret
+
+jobs:
+  quality:
+    name: Lint, typecheck, test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+      - run: bun run lint
+      - run: bun run typecheck
+      - run: bun test
+
+  oss-build:
+    name: No EE symbols in OSS bundle
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+      - name: Verify OSS bundle excludes lib/ee
+        run: ./scripts/verify-oss-build.sh

@@ -7,6 +7,7 @@
 import { isAdminOwnedWorkspaceUseCase } from "@/lib/identity";
 import type { MemberRepository } from "@/lib/identity";
 import { describe, expect, test } from "bun:test";
+import { InMemoryMemberRepository } from "./fakes/in-memory-member.repository";
 
 const repoWithOwnerRole = (role: string | null): MemberRepository =>
     ({
@@ -37,6 +38,37 @@ describe("isAdminOwnedWorkspaceUseCase", () => {
             workspaceId: "ws-1",
             members: repoWithOwnerRole(null),
         });
+        expect(result).toBe(false);
+    });
+
+    // A workspace can have two owners (the invite form allows a second). The
+    // bypass must not flip based on which owner row the DB returns first: an
+    // admin owner always wins, regardless of insertion order.
+    test("two owners, one admin → true regardless of insertion order", async () => {
+        for (const adminFirst of [true, false]) {
+            const members = new InMemoryMemberRepository();
+            const ws = "ws-multi";
+            const order = adminFirst
+                ? ["admin-user", "regular-user"]
+                : ["regular-user", "admin-user"];
+            for (const userId of order) {
+                await members.addMember({ workspaceId: ws, userId, role: "owner" });
+            }
+            members.setUserRole("admin-user", "admin");
+            members.setUserRole("regular-user", "user");
+
+            const result = await isAdminOwnedWorkspaceUseCase({ workspaceId: ws, members });
+            expect(result).toBe(true);
+        }
+    });
+
+    test("two non-admin owners → false", async () => {
+        const members = new InMemoryMemberRepository();
+        const ws = "ws-regular";
+        await members.addMember({ workspaceId: ws, userId: "u1", role: "owner" });
+        await members.addMember({ workspaceId: ws, userId: "u2", role: "owner" });
+
+        const result = await isAdminOwnedWorkspaceUseCase({ workspaceId: ws, members });
         expect(result).toBe(false);
     });
 });

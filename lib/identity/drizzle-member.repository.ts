@@ -2,7 +2,7 @@ import "server-only";
 
 import type { Db } from "@/lib/db";
 import { schema } from "@/lib/db";
-import { and, count, desc, eq, gt, isNull } from "drizzle-orm";
+import { and, asc, count, desc, eq, gt, isNull } from "drizzle-orm";
 import type { Invite, MemberRole, WorkspaceMember } from "./member";
 import type { InviteRepository, MemberListRow, MemberRepository } from "./member.repository";
 
@@ -72,6 +72,10 @@ export class DrizzleMemberRepository implements MemberRepository {
     }
 
     async findOwnerUserRole(workspaceId: string): Promise<string | null> {
+        // A workspace may have multiple owners. It counts as admin-owned when
+        // any owner is a platform admin, so sort an admin owner first; fall back
+        // to a stable order (oldest, then id) so the resolved role never flips
+        // between calls when no admin owner exists.
         const [row] = await this.db
             .select({ role: schema.users.role })
             .from(schema.workspaceMembers)
@@ -81,6 +85,11 @@ export class DrizzleMemberRepository implements MemberRepository {
                     eq(schema.workspaceMembers.workspaceId, workspaceId),
                     eq(schema.workspaceMembers.role, "owner"),
                 ),
+            )
+            .orderBy(
+                desc(eq(schema.users.role, "admin")),
+                asc(schema.workspaceMembers.createdAt),
+                asc(schema.workspaceMembers.userId),
             )
             .limit(1);
         return row?.role ?? null;

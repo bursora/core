@@ -56,11 +56,17 @@ export class InMemoryMemberRepository implements MemberRepository {
     }
 
     async findOwnerUserRole(workspaceId: string): Promise<string | null> {
-        const owner = Array.from(this.rows.values()).find(
-            (m) => m.workspaceId === workspaceId && m.role === "owner",
-        );
-        if (!owner) return null;
-        return this.userRoles.get(owner.userId) ?? "user";
+        // Mirror the Drizzle repo: prefer an admin owner, else a stable order.
+        const [owner] = Array.from(this.rows.values())
+            .filter((m) => m.workspaceId === workspaceId && m.role === "owner")
+            .map((m) => ({ ...m, platformRole: this.userRoles.get(m.userId) ?? "user" }))
+            .sort(
+                (a, b) =>
+                    Number(b.platformRole === "admin") - Number(a.platformRole === "admin") ||
+                    a.createdAt.getTime() - b.createdAt.getTime() ||
+                    a.userId.localeCompare(b.userId),
+            );
+        return owner?.platformRole ?? null;
     }
 }
 

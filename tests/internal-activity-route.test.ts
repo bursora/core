@@ -33,9 +33,9 @@ let realIdentity: Record<string, unknown>;
 let realHeaders: Record<string, unknown>;
 
 beforeAll(async () => {
-    // Snapshot real exports BEFORE mocking. `await import` returns a live
-    // namespace object that mock.module mutates in place, so spread into a
-    // plain object to freeze the real values for restoration in afterAll.
+    // Snapshot the real exports BEFORE mocking. `await import` returns a live
+    // namespace object that mock.module mutates in place, so spread into a plain
+    // object to freeze the real values for restoration in afterAll.
     realAuth = { ...(await import("@/lib/auth")) };
     realIdentity = { ...(await import("@/lib/identity/server")) };
     realHeaders = { ...(await import("next/headers")) };
@@ -62,9 +62,11 @@ beforeAll(async () => {
     }));
 });
 
-// mock.module is process-global; restore at file end so the @/lib/auth stub
-// doesn't leak into later files that import the real auth (e.g. the user-role
-// schema test reading auth.options).
+// mock.module is process-global; restore the hijacked specifiers at file end so
+// the @/lib/auth stub (which lacks `.options`) can't leak into later files that
+// read the real auth — e.g. the user-role schema test asserting
+// auth.options.user. mock.restore() does not reliably revert mock.module once
+// the route under test has imported it, so re-point at the real snapshots.
 afterAll(() => {
     mock.module("@/lib/auth", () => realAuth);
     mock.module("@/lib/identity/server", () => realIdentity);

@@ -17,9 +17,6 @@ let realAuth: Record<string, unknown>;
 let realHeaders: Record<string, unknown>;
 
 beforeAll(async () => {
-    // Snapshot real exports BEFORE mocking. `await import` returns a live
-    // namespace object that mock.module mutates in place, so spread into a
-    // plain object to freeze the real values for restoration in afterAll.
     realAuth = { ...(await import("@/lib/auth")) };
     realHeaders = { ...(await import("next/headers")) };
     mock.module("@/lib/auth", () => ({

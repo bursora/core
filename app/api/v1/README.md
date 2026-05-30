@@ -19,7 +19,8 @@ When in doubt: server action. Promoting to a route handler later is cheap; rippi
 
 ## Current handlers
 
-- `GET /api/v1/budget` — budget status
+- `GET /api/v1/budget` — pre-call budget decision
 - `GET /api/v1/activity` — usage rows
 - `POST /api/v1/events` — ingest usage events
-- `/api/v1/test` — connectivity check
+- `POST /api/v1/setup-error` — SDK setup-error reporter (e.g. unknown provider)
+- `POST /api/v1/test` — connectivity check

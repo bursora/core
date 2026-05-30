@@ -1,7 +1,19 @@
 import { Server } from "lucide-react";
 import type { ReactNode } from "react";
 import type { FacetedFilterOption } from "./filter-option";
-import { AnthropicLogo, DeepSeekLogo, OpenAILogo } from "./icons/brand-logos";
+import {
+    AnthropicLogo,
+    DeepSeekLogo,
+    FireworksLogo,
+    GoogleLogo,
+    GroqLogo,
+    MistralLogo,
+    OpenAILogo,
+    OpenRouterLogo,
+    PerplexityLogo,
+    TogetherLogo,
+    XaiLogo,
+} from "./icons/brand-logos";
 
 const PROVIDER_LABELS: Readonly<Record<string, string>> = {
     openai: "OpenAI",
@@ -9,16 +21,38 @@ const PROVIDER_LABELS: Readonly<Record<string, string>> = {
     deepseek: "DeepSeek",
     google: "Google",
     azure: "Azure OpenAI",
+    groq: "Groq",
+    xai: "xAI",
+    mistral: "Mistral",
+    together: "Together AI",
+    fireworks: "Fireworks AI",
+    perplexity: "Perplexity",
+    openrouter: "OpenRouter",
 };
 
 export function providerLabel(id: string): string {
     return PROVIDER_LABELS[id] ?? id.charAt(0).toUpperCase() + id.slice(1);
 }
 
+const PROVIDER_ICONS: Readonly<
+    Record<string, (props: { className?: string | undefined }) => ReactNode>
+> = {
+    openai: OpenAILogo,
+    anthropic: AnthropicLogo,
+    deepseek: DeepSeekLogo,
+    google: GoogleLogo,
+    groq: GroqLogo,
+    xai: XaiLogo,
+    mistral: MistralLogo,
+    together: TogetherLogo,
+    fireworks: FireworksLogo,
+    perplexity: PerplexityLogo,
+    openrouter: OpenRouterLogo,
+};
+
 export function ProviderIcon({ id, className }: { id: string; className?: string }): ReactNode {
-    if (id === "openai") return <OpenAILogo className={className} />;
-    if (id === "anthropic") return <AnthropicLogo className={className} />;
-    if (id === "deepseek") return <DeepSeekLogo className={className} />;
+    const Logo = PROVIDER_ICONS[id];
+    if (Logo) return <Logo className={className} />;
     return <Server className={className} aria-hidden />;
 }
 

@@ -1,4 +1,5 @@
 import type { Invite, MemberRole, WorkspaceMember } from "./member";
+import type { UserRole } from "./user-role";
 
 export interface MemberListRow {
     readonly workspaceId: string;
@@ -33,7 +34,7 @@ export interface MemberRepository {
      * `null` when the workspace has no owner row. Drives the admin-owned
      * workspace exemptions (rate limit, fair-use cap).
      */
-    findOwnerUserRole(workspaceId: string): Promise<string | null>;
+    findOwnerUserRole(workspaceId: string): Promise<UserRole | null>;
 }
 
 export interface InviteRepository {

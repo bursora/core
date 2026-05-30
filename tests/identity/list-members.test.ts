@@ -1,4 +1,10 @@
-import type { MemberListRow, MemberRepository, MemberRole, WorkspaceMember } from "@/lib/identity";
+import type {
+    MemberListRow,
+    MemberRepository,
+    MemberRole,
+    UserRole,
+    WorkspaceMember,
+} from "@/lib/identity";
 import { listMembersUseCase } from "@/lib/identity";
 import { describe, expect, test } from "bun:test";
 
@@ -17,7 +23,7 @@ class FakeMemberRepository implements MemberRepository {
     async listMemberUserIds(workspaceId: string): Promise<readonly string[]> {
         return this.rows.filter((r) => r.workspaceId === workspaceId).map((r) => r.userId);
     }
-    async findOwnerUserRole(): Promise<string | null> {
+    async findOwnerUserRole(): Promise<UserRole | null> {
         return null;
     }
 }

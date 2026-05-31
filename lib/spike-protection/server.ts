@@ -48,6 +48,16 @@ export interface SpikeProtectionDeps {
 const DEFAULT_MULTIPLIER = 5;
 const DEFAULT_COOLDOWN_MS = 30 * 60 * 1000;
 
+/**
+ * Minimum sustained baseline (events/min) before spike protection engages. A
+ * 7-day baseline below this is too small to define a "normal": at the default
+ * 5x multiplier the threshold would sit under ~5 events/min, and because event
+ * counts are integers a single ordinary minute would trip the cap. New and
+ * idle workspaces sit below this until real volume accumulates, so they're
+ * exempt rather than tripped on their first calls.
+ */
+export const MIN_BASELINE_EVENTS_PER_MIN = 1;
+
 let testOverride: SpikeProtectionDeps | null = null;
 
 export function setSpikeProtectionDepsForTesting(deps: SpikeProtectionDeps | null): void {

@@ -11,9 +11,10 @@
  *   6. Else allow.
  *
  * The baseline read is cached in-process for 15 minutes (see
- * `baseline-cache.ts`) so the hot path doesn't hammer Postgres. Zero baseline
- * (a brand-new workspace with no history) disables the check until enough
- * traffic accumulates — we don't want to deny the very first batch.
+ * `baseline-cache.ts`) so the hot path doesn't hammer Postgres. A baseline
+ * below `MIN_BASELINE_EVENTS_PER_MIN` disables the check until enough traffic
+ * accumulates: a baseline that small can't define a meaningful spike, so a
+ * new or idle workspace would otherwise get tripped on its very first calls.
  *
  * Redis failure policy splits by deploy mode:
  *   - Cloud (`IS_CLOUD=true`): fail-closed; return a deny decision with a
@@ -29,7 +30,7 @@ import "server-only";
 import { errMessage } from "../error-message";
 import { getCachedBaseline } from "./baseline-cache";
 import type { SpikeProtectionDeps } from "./server";
-import { mergeSettings, spikeProtectionDeps } from "./server";
+import { MIN_BASELINE_EVENTS_PER_MIN, mergeSettings, spikeProtectionDeps } from "./server";
 import type { SpikeDecision } from "./types";
 
 const FAIL_CLOSED_RETRY_AFTER_MS = 5_000;
@@ -67,9 +68,10 @@ export async function applySpikeProtection(input: {
             return deny(cooldown.untilMs - nowMs);
         }
 
-        // No baseline yet (brand-new workspace) → skip the check; let traffic
-        // accumulate so future minutes have something to compare against.
-        if (baselineEventsPerMin <= 0) return { allowed: true };
+        // Too little sustained traffic for a meaningful baseline → skip the
+        // check. Below this floor the threshold would round toward a single
+        // event and trip on normal use; let volume accumulate first.
+        if (baselineEventsPerMin < MIN_BASELINE_EVENTS_PER_MIN) return { allowed: true };
 
         const bucketMs = Math.floor(nowMs / 60_000) * 60_000;
         const incremented = await deps.state.incrementMinute({

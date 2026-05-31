@@ -4,6 +4,7 @@
  * Patterns covered:
  *   - disabled workspace → always allow.
  *   - zero baseline → allow even when burst is large.
+ *   - sub-minimum baseline → allow (too little traffic to define a spike).
  *   - under threshold → allow.
  *   - over threshold → deny with spike reason, cooldown set.
  *   - inside cooldown → deny without re-checking baseline.
@@ -102,6 +103,18 @@ describe("applySpikeProtection", () => {
 
     test("zero baseline → allow (new workspace, nothing to compare against)", async () => {
         setSpikeProtectionDepsForTesting(baseDeps({ baseline: fakeBaseline(0) }));
+        const decision = await applySpikeProtection({
+            workspaceId: WORKSPACE,
+            eventCount: 5_000,
+        });
+        expect(decision.allowed).toBe(true);
+    });
+
+    test("sub-minimum baseline → allow (idle/new workspace, burst still passes)", async () => {
+        // Baseline 0.5/min is below MIN_BASELINE_EVENTS_PER_MIN, so a naive
+        // threshold (0.5 * 5 = 2.5) would trip on a single normal minute.
+        // Spike protection stays off until real volume accumulates.
+        setSpikeProtectionDepsForTesting(baseDeps({ baseline: fakeBaseline(0.5) }));
         const decision = await applySpikeProtection({
             workspaceId: WORKSPACE,
             eventCount: 5_000,

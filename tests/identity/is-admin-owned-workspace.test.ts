@@ -4,40 +4,33 @@
  * exemptions for admin-run workspaces. Pure: repo injected, no DB.
  */
 
-import type { MemberRepository } from "@/lib/identity";
 import { isAdminOwnedWorkspaceUseCase } from "@/lib/identity";
 import { describe, expect, test } from "bun:test";
 import { InMemoryMemberRepository } from "./fakes/in-memory-member.repository";
 
-const repoWithOwnerRole = (role: string | null): MemberRepository =>
-    ({
-        async findOwnerUserRole(): Promise<string | null> {
-            return role;
-        },
-    }) as unknown as MemberRepository;
-
 describe("isAdminOwnedWorkspaceUseCase", () => {
     test("owner is a platform admin → true", async () => {
-        const result = await isAdminOwnedWorkspaceUseCase({
-            workspaceId: "ws-1",
-            members: repoWithOwnerRole("admin"),
-        });
+        const members = new InMemoryMemberRepository();
+        await members.addMember({ workspaceId: "ws-1", userId: "u1", role: "owner" });
+        members.setUserRole("u1", "admin");
+
+        const result = await isAdminOwnedWorkspaceUseCase({ workspaceId: "ws-1", members });
         expect(result).toBe(true);
     });
 
     test("owner is a regular user → false", async () => {
-        const result = await isAdminOwnedWorkspaceUseCase({
-            workspaceId: "ws-1",
-            members: repoWithOwnerRole("user"),
-        });
+        const members = new InMemoryMemberRepository();
+        await members.addMember({ workspaceId: "ws-1", userId: "u1", role: "owner" });
+        members.setUserRole("u1", "user");
+
+        const result = await isAdminOwnedWorkspaceUseCase({ workspaceId: "ws-1", members });
         expect(result).toBe(false);
     });
 
     test("no owner row found → false", async () => {
-        const result = await isAdminOwnedWorkspaceUseCase({
-            workspaceId: "ws-1",
-            members: repoWithOwnerRole(null),
-        });
+        const members = new InMemoryMemberRepository();
+
+        const result = await isAdminOwnedWorkspaceUseCase({ workspaceId: "ws-1", members });
         expect(result).toBe(false);
     });
 

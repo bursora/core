@@ -71,7 +71,7 @@ describe("api key audit log", () => {
         expect(entry.ip).toBe(IP);
     });
 
-    test("renameApiKeyUseCase records a 'rename' entry with old + new name metadata", async () => {
+    test("renameApiKeyUseCase records a 'rename' entry with the new name in metadata", async () => {
         const keys = new InMemoryApiKeyRepository();
         const audit = new InMemoryApiKeyAuditLogRepository();
 

@@ -27,6 +27,8 @@ concurrency:
 env:
     DATABASE_URL: postgres://bursora:bursora@localhost:5432/bursora
     BURSORA_API_KEY_PEPPER: ci-dummy-pepper
+    # Base64 of 32 throwaway bytes; only satisfies parseEncryptionKey's length check.
+    BURSORA_KEY: Y2ktZHVtbXktZW5jcnlwdGlvbi1rZXktMzItYnl0ZXM=
     BETTER_AUTH_SECRET: ci-dummy-secret
     BETTER_AUTH_URL: http://localhost:3000
     SMTP_HOST: localhost

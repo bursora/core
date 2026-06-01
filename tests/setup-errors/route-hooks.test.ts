@@ -17,12 +17,16 @@ import type {
 import { setBudgetingDepsForTesting } from "@/lib/budgeting/server";
 import type { ApiKey } from "@/lib/identity";
 import { setMeteringDepsForTesting } from "@/lib/metering/server";
-import { setSetupErrorsDepsForTesting } from "@/lib/setup-errors/server";
+import {
+    setSetupErrorLoggerForTesting,
+    setSetupErrorsDepsForTesting,
+} from "@/lib/setup-errors/server";
 import { InMemoryUsageEventRepository } from "@/tests/metering/fakes/in-memory-usage-event.repository";
 import { StubPricingRepository } from "@/tests/metering/fakes/stub-pricing.repository";
 import { InMemoryNotificationsRepository } from "@/tests/notifications/fakes/in-memory-notifications.repository";
 import { afterEach, beforeAll, describe, expect, mock, test } from "bun:test";
 import { InMemorySetupErrorRepository } from "./fakes/in-memory-setup-error.repository";
+import { TrackingSetupErrorLogger } from "./tracking-logger";
 
 const WORKSPACE = "11111111-2222-3333-4444-555555555555";
 const API_KEY_ID = "00000000-1111-2222-3333-444444444444";
@@ -91,6 +95,7 @@ class FakeAggregator implements SpendAggregator {
 
 interface Harness {
     setupErrors: InMemorySetupErrorRepository;
+    logger: TrackingSetupErrorLogger;
 }
 
 const setup = (opts: { existingWorkspaces?: readonly string[] } = {}): Harness => {
@@ -102,6 +107,8 @@ const setup = (opts: { existingWorkspaces?: readonly string[] } = {}): Harness =
         notifications: new InMemoryNotificationsRepository(),
         listMemberUserIds: async () => [],
     });
+    const logger = new TrackingSetupErrorLogger();
+    setSetupErrorLoggerForTesting(logger);
 
     apiKeyRow = existing.has(WORKSPACE)
         ? {
@@ -128,7 +135,7 @@ const setup = (opts: { existingWorkspaces?: readonly string[] } = {}): Harness =
         pricingRepo: new StubPricingRepository(),
     });
 
-    return { setupErrors };
+    return { setupErrors, logger };
 };
 
 const teardown = () => {
@@ -136,18 +143,17 @@ const teardown = () => {
     setBudgetingDepsForTesting(null);
     setMeteringDepsForTesting(null);
     setSetupErrorsDepsForTesting(null);
+    setSetupErrorLoggerForTesting(null);
 };
-
-const flush = (): Promise<void> => new Promise((r) => setTimeout(r, 0));
 
 describe("setup-error route hooks", () => {
     afterEach(() => teardown());
 
     test("GET /api/v1/budget 401 missing key → records auth_unknown globally", async () => {
-        const { setupErrors } = setup();
+        const { setupErrors, logger } = setup();
 
         const res = await getBudget(new Request("http://localhost/api/v1/budget"));
-        await flush();
+        await logger.settled();
 
         expect(res.status).toBe(401);
         expect(setupErrors.rows.length).toBe(1);
@@ -156,7 +162,7 @@ describe("setup-error route hooks", () => {
     });
 
     test("GET /api/v1/budget 401 with key whose workspace fragment matches a real workspace → still global auth_unknown (no victim pollution)", async () => {
-        const { setupErrors } = setup();
+        const { setupErrors, logger } = setup();
         // Key fragment matches an existing workspace, but the api_keys row
         // is missing. Pre-fix this attributed the bucket to that workspace
         // (an unverified field), letting a forged key trigger banners on a
@@ -169,7 +175,7 @@ describe("setup-error route hooks", () => {
                 headers: { "x-bursora-key": PLAINTEXT },
             }),
         );
-        await flush();
+        await logger.settled();
 
         expect(res.status).toBe(401);
         expect(setupErrors.rows.length).toBe(1);
@@ -178,7 +184,7 @@ describe("setup-error route hooks", () => {
     });
 
     test("POST /api/v1/events 401 missing key → records auth_unknown globally", async () => {
-        const { setupErrors } = setup();
+        const { setupErrors, logger } = setup();
 
         const res = await postEvents(
             new Request("http://localhost/api/v1/events", {
@@ -186,7 +192,7 @@ describe("setup-error route hooks", () => {
                 body: "{}",
             }),
         );
-        await flush();
+        await logger.settled();
 
         expect(res.status).toBe(401);
         expect(setupErrors.rows[0]?.workspaceId).toBeNull();
@@ -194,7 +200,7 @@ describe("setup-error route hooks", () => {
     });
 
     test("POST /api/v1/events 400 after valid key → records ingest_invalid_body for workspace", async () => {
-        const { setupErrors } = setup();
+        const { setupErrors, logger } = setup();
 
         const res = await postEvents(
             new Request("http://localhost/api/v1/events", {
@@ -203,7 +209,7 @@ describe("setup-error route hooks", () => {
                 body: JSON.stringify({ events: [] }),
             }),
         );
-        await flush();
+        await logger.settled();
 
         expect(res.status).toBe(400);
         expect(setupErrors.rows.length).toBe(1);
@@ -212,7 +218,7 @@ describe("setup-error route hooks", () => {
     });
 
     test("POST /api/v1/events with bsk_ for nonexistent workspace → auth_unknown global", async () => {
-        const { setupErrors } = setup({ existingWorkspaces: [] });
+        const { setupErrors, logger } = setup({ existingWorkspaces: [] });
 
         const res = await postEvents(
             new Request("http://localhost/api/v1/events", {
@@ -221,7 +227,7 @@ describe("setup-error route hooks", () => {
                 body: "{}",
             }),
         );
-        await flush();
+        await logger.settled();
 
         expect(res.status).toBe(401);
         expect(setupErrors.rows[0]?.workspaceId).toBeNull();
@@ -245,9 +251,11 @@ describe("setup-error route hooks", () => {
             spend: new FakeAggregator(),
             now: () => new Date(),
         });
+        const logger = new TrackingSetupErrorLogger();
+        setSetupErrorLoggerForTesting(logger);
 
         const res = await getBudget(new Request("http://localhost/api/v1/budget"));
-        await flush();
+        await logger.settled();
 
         // The 401 still lands cleanly.
         expect(res.status).toBe(401);

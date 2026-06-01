@@ -23,7 +23,8 @@ const SCOPE_FILES = [
 
 // Match Tailwind class tokens like `bg-slate-100`, `text-gray-500/40`,
 // `dark:border-zinc-700`, `hover:bg-neutral-200`.
-const FORBIDDEN_PALETTE = /\b(?:gray|slate|zinc|neutral|stone)-\d+\b/;
+const FORBIDDEN_PALETTE =
+    /(?:^|[\s"'`(:])(?:bg|text|border|ring|fill|stroke|from|to|via|outline|divide|placeholder|caret|accent|decoration|shadow)-(?:gray|slate|zinc|neutral|stone)-\d+(?:\/\d+)?(?=[\s"'`)/]|$)/;
 const NAKED_WHITE_BLACK =
     /(?:^|[\s"'`(:])(?:bg|text|border|ring|fill|stroke|from|to|via|outline|divide|placeholder|caret|accent|decoration|shadow)-(?:white|black)(?=[\s"'`)/]|$)/;
 
@@ -56,6 +57,19 @@ describe("members surface dark audit", () => {
             );
         }
         expect(match).toBeNull();
+    });
+});
+
+describe("dark-audit regex anchoring", () => {
+    test("FORBIDDEN_PALETTE matches anchored offenders", () => {
+        expect(FORBIDDEN_PALETTE.test(`className="bg-slate-300"`)).toBe(true);
+        expect(FORBIDDEN_PALETTE.test(`className="dark:text-gray-500/40"`)).toBe(true);
+    });
+
+    test("FORBIDDEN_PALETTE ignores semantic tokens and bare words", () => {
+        expect(FORBIDDEN_PALETTE.test(`className="bg-muted text-foreground"`)).toBe(false);
+        expect(FORBIDDEN_PALETTE.test(`// note: slate-300 is bad`)).toBe(false);
+        expect(FORBIDDEN_PALETTE.test(`const slate300 = "neutral"`)).toBe(false);
     });
 });
 

@@ -57,7 +57,10 @@ const COLOR_UTILITIES = [
 function findForbidden(source: string): string[] {
     const hits: string[] = [];
 
-    const rampPattern = new RegExp(String.raw`\b(?:${FORBIDDEN_RAMPS.join("|")})-\d{2,3}\b`, "g");
+    const rampPattern = new RegExp(
+        String.raw`\b(?:${COLOR_UTILITIES.join("|")})-(?:${FORBIDDEN_RAMPS.join("|")})-\d{2,3}(?:\/\d+)?\b`,
+        "g",
+    );
     hits.push(...(source.match(rampPattern) ?? []));
 
     const literalPattern = new RegExp(
@@ -77,4 +80,18 @@ describe("profile + workspace landing dark-audit", () => {
             expect(offenders).toEqual([]);
         });
     }
+});
+
+describe("findForbidden regex anchoring", () => {
+    test("catches real palette + literal offenders", () => {
+        expect(findForbidden(`className="bg-slate-300"`)).toEqual(["bg-slate-300"]);
+        expect(findForbidden(`className="dark:text-gray-500/40"`)).toEqual(["text-gray-500/40"]);
+        expect(findForbidden(`className="bg-white"`)).toEqual(["bg-white"]);
+    });
+
+    test("ignores semantic tokens and unanchored bare words", () => {
+        expect(findForbidden(`className="bg-muted text-foreground"`)).toEqual([]);
+        expect(findForbidden(`// note: slate-300 is bad`)).toEqual([]);
+        expect(findForbidden(`const slate300 = "neutral palette"`)).toEqual([]);
+    });
 });

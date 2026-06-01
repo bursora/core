@@ -15,10 +15,14 @@
  */
 
 import type { ApiKey } from "@/lib/identity";
-import { setSetupErrorsDepsForTesting } from "@/lib/setup-errors/server";
+import {
+    setSetupErrorLoggerForTesting,
+    setSetupErrorsDepsForTesting,
+} from "@/lib/setup-errors/server";
 import { InMemoryNotificationsRepository } from "@/tests/notifications/fakes/in-memory-notifications.repository";
 import { afterEach, beforeAll, describe, expect, mock, spyOn, test } from "bun:test";
 import { InMemorySetupErrorRepository } from "./fakes/in-memory-setup-error.repository";
+import { TrackingSetupErrorLogger } from "./tracking-logger";
 
 const WORKSPACE = "11111111-2222-3333-4444-555555555555";
 const API_KEY_ID = "00000000-1111-2222-3333-444444444444";
@@ -52,6 +56,7 @@ const { POST } = await import("@/app/api/v1/setup-error/route");
 
 interface Harness {
     setupErrors: InMemorySetupErrorRepository;
+    logger: TrackingSetupErrorLogger;
 }
 
 const setup = (opts: { knownKey?: boolean } = {}): Harness => {
@@ -62,6 +67,8 @@ const setup = (opts: { knownKey?: boolean } = {}): Harness => {
         notifications: new InMemoryNotificationsRepository(),
         listMemberUserIds: async () => [],
     });
+    const logger = new TrackingSetupErrorLogger();
+    setSetupErrorLoggerForTesting(logger);
 
     apiKeyRow =
         opts.knownKey === false
@@ -78,15 +85,14 @@ const setup = (opts: { knownKey?: boolean } = {}): Harness => {
                   revokedAt: null,
               };
 
-    return { setupErrors };
+    return { setupErrors, logger };
 };
 
 const teardown = () => {
     apiKeyRow = null;
     setSetupErrorsDepsForTesting(null);
+    setSetupErrorLoggerForTesting(null);
 };
-
-const flush = (): Promise<void> => new Promise((r) => setTimeout(r, 0));
 
 const makeRequest = (body: string, headers: Record<string, string> = {}): Request =>
     new Request("http://localhost/api/v1/setup-error", {
@@ -102,14 +108,14 @@ describe("POST /api/v1/setup-error", () => {
     afterEach(() => teardown());
 
     test("202 with valid key + kind sdk_unknown_provider → records bucket for workspace", async () => {
-        const { setupErrors } = setup();
+        const { setupErrors, logger } = setup();
 
         const res = await POST(
             makeRequest(JSON.stringify({ kind: "sdk_unknown_provider" }), {
                 "x-bursora-key": PLAINTEXT,
             }),
         );
-        await flush();
+        await logger.settled();
 
         expect(res.status).toBe(202);
         expect(setupErrors.rows.length).toBe(1);
@@ -118,10 +124,10 @@ describe("POST /api/v1/setup-error", () => {
     });
 
     test("401 on missing X-Bursora-Key → records auth_unknown globally via fan-out", async () => {
-        const { setupErrors } = setup();
+        const { setupErrors, logger } = setup();
 
         const res = await POST(makeRequest(JSON.stringify({ kind: "sdk_unknown_provider" })));
-        await flush();
+        await logger.settled();
 
         expect(res.status).toBe(401);
         expect(setupErrors.rows.length).toBe(1);
@@ -130,14 +136,14 @@ describe("POST /api/v1/setup-error", () => {
     });
 
     test("401 on unknown api key", async () => {
-        const { setupErrors } = setup({ knownKey: false });
+        const { setupErrors, logger } = setup({ knownKey: false });
 
         const res = await POST(
             makeRequest(JSON.stringify({ kind: "sdk_unknown_provider" }), {
                 "x-bursora-key": PLAINTEXT,
             }),
         );
-        await flush();
+        await logger.settled();
 
         expect(res.status).toBe(401);
         // No sdk_unknown_provider row recorded — auth failed before the body
@@ -150,7 +156,7 @@ describe("POST /api/v1/setup-error", () => {
         // is a real workspace, but the secret half doesn't match anything in
         // the api_keys table. The auth-failure log must not be attributed to
         // the victim workspace — it lands in the global auth_unknown bucket.
-        const { setupErrors } = setup({ knownKey: false });
+        const { setupErrors, logger } = setup({ knownKey: false });
 
         const res = await POST(
             makeRequest(JSON.stringify({ kind: "sdk_unknown_provider" }), {
@@ -158,7 +164,7 @@ describe("POST /api/v1/setup-error", () => {
                 "x-forwarded-for": "203.0.113.7",
             }),
         );
-        await flush();
+        await logger.settled();
 
         expect(res.status).toBe(401);
         // Critical: zero rows attributed to the victim workspace.
@@ -170,31 +176,31 @@ describe("POST /api/v1/setup-error", () => {
     });
 
     test("400 on malformed JSON body", async () => {
-        const { setupErrors } = setup();
+        const { setupErrors, logger } = setup();
 
         const res = await POST(makeRequest("{not json", { "x-bursora-key": PLAINTEXT }));
-        await flush();
+        await logger.settled();
 
         expect(res.status).toBe(400);
         expect(setupErrors.rows.length).toBe(0);
     });
 
     test("400 on unsupported kind", async () => {
-        const { setupErrors } = setup();
+        const { setupErrors, logger } = setup();
 
         const res = await POST(
             makeRequest(JSON.stringify({ kind: "not_a_real_kind" }), {
                 "x-bursora-key": PLAINTEXT,
             }),
         );
-        await flush();
+        await logger.settled();
 
         expect(res.status).toBe(400);
         expect(setupErrors.rows.length).toBe(0);
     });
 
     test("400 invalid_body logs sanitized Zod issues with workspace + apiKey id, no raw payload", async () => {
-        setup();
+        const { logger } = setup();
         const warn = spyOn(console, "warn").mockImplementation(() => {});
         const rawPayload = "definitely_not_a_real_kind_marker_xyz";
 
@@ -203,7 +209,7 @@ describe("POST /api/v1/setup-error", () => {
                 "x-bursora-key": PLAINTEXT,
             }),
         );
-        await flush();
+        await logger.settled();
         const json = await res.json();
 
         expect(res.status).toBe(400);

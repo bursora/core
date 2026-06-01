@@ -141,9 +141,7 @@ describe("runAnomalyDetection", () => {
         expect(event.workspaceId).toBe("ws-1");
         expect(event.tenantId).toBe("tenant-a");
         expect(event.agentId).toBe("agent-x");
-        expect(event.alertId).toMatch(
-            /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
-        );
+        expect(event.alertId).toBe("00000000-0000-0000-0000-000000000001");
     });
 
     test("per-scope independence: spike in tenantA does NOT alert tenantB", async () => {
@@ -247,7 +245,7 @@ describe("runAnomalyDetection", () => {
             bus,
         });
         expect(bus.published.length).toBe(1);
-        expect(firstId).toBeDefined();
+        expect(firstId).toBe("00000000-0000-0000-0000-000000000001");
     });
 
     test("published event carries the 5-min window and aggregate cost", async () => {

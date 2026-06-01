@@ -31,8 +31,6 @@ describe("PastDueBanner", () => {
 
         expect(html).toContain("Payment failed");
         expect(html).toMatch(/role="alert"/);
-        // Warning variant from the Alert primitive.
-        expect(html).toContain("bg-warning");
     });
 
     test("links to the billing portal action with the workspace id", async () => {

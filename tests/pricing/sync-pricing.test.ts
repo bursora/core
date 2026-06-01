@@ -316,12 +316,9 @@ describe("syncPricing", () => {
             called = true;
         };
 
-        try {
-            await syncPricing([failing, ok], repo, NOW, { recordHeartbeat });
-        } catch {
-            // Expected.
-        }
-
+        await expect(
+            syncPricing([failing, ok], repo, NOW, { recordHeartbeat }),
+        ).rejects.toBeInstanceOf(PricingSyncPartialFailure);
         expect(called).toBe(false);
     });
 });

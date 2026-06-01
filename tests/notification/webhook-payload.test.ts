@@ -89,8 +89,11 @@ describe("renderWebhookPayload anomaly", () => {
             expect(text).toContain("12:00");
             expect(text).toContain("12:05");
         }
-        // The window/cost line is rendered separately from the reason.
-        expect(slack.text.split("\n").length).toBeGreaterThanOrEqual(3);
+        // The cost figure and the time-window range share one line, kept
+        // separate from the reason.
+        const costLine = slack.text.split("\n").find((line) => line.includes("$1.23"));
+        expect(costLine).toContain("12:00-12:05");
+        expect(slack.text).not.toContain(`$1.23 ${anomalyEvent.reason}`);
     });
 
     test("severity surface in payload (warning vs critical)", () => {

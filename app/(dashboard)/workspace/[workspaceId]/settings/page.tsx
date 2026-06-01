@@ -24,6 +24,11 @@ interface SettingsPageProps {
         from?: string;
         to?: string;
         cursor?: string;
+        pricing_q?: string;
+        pricing_provider?: string;
+        pricing_status?: string;
+        pricing_source?: string;
+        pricing_page?: string;
     }>;
 }
 
@@ -88,7 +93,28 @@ export default async function SettingsPage({ params, searchParams }: SettingsPag
                               ),
                           }
                         : {}),
-                    pricing: <PricingOverrideSection workspaceId={workspaceId} />,
+                    pricing: (
+                        <PricingOverrideSection
+                            workspaceId={workspaceId}
+                            searchParams={{
+                                ...(search.pricing_q !== undefined
+                                    ? { pricing_q: search.pricing_q }
+                                    : {}),
+                                ...(search.pricing_provider !== undefined
+                                    ? { pricing_provider: search.pricing_provider }
+                                    : {}),
+                                ...(search.pricing_status !== undefined
+                                    ? { pricing_status: search.pricing_status }
+                                    : {}),
+                                ...(search.pricing_source !== undefined
+                                    ? { pricing_source: search.pricing_source }
+                                    : {}),
+                                ...(search.pricing_page !== undefined
+                                    ? { pricing_page: search.pricing_page }
+                                    : {}),
+                            }}
+                        />
+                    ),
                     channels: (
                         <AlertChannelsSection workspaceId={workspaceId} saved={channelsSaved} />
                     ),

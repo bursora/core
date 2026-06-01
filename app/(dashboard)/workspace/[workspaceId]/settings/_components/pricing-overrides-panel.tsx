@@ -22,7 +22,17 @@ import {
     DialogTrigger,
 } from "@/components/ui/dialog";
 import { FacetedFilter, type FacetedFilterOption } from "@/components/ui/filters/faceted-filter";
+import { useUrlParamCommit } from "@/components/ui/hooks/use-url-param-commit";
 import { Input } from "@/components/ui/input";
+import {
+    Pagination,
+    PaginationContent,
+    PaginationEllipsis,
+    PaginationItem,
+    PaginationLink,
+    PaginationNext,
+    PaginationPrevious,
+} from "@/components/ui/pagination";
 import {
     Table,
     TableBody,
@@ -48,15 +58,17 @@ import {
     SearchX,
     Server,
 } from "lucide-react";
-import { useDeferredValue, useMemo, useState } from "react";
+import { usePathname, useSearchParams } from "next/navigation";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { PricingOverrideForm } from "./pricing-override-form";
 import {
-    filterRows,
-    isRowStatus,
+    pageWindow,
+    parsePricingSearch,
+    PRICING_PARAMS,
     rowStatus,
-    sortRows,
-    summarizePricingRows,
     toEditInitialValues,
+    type PageToken,
+    type PricingRowCounts,
     type PricingRowView,
     type RowStatus,
     type SourceFilter,
@@ -65,6 +77,11 @@ import {
 interface Props {
     workspaceId: string;
     rows: ReadonlyArray<PricingRowView>;
+    counts: PricingRowCounts;
+    providers: readonly string[];
+    total: number;
+    page: number;
+    pageCount: number;
 }
 
 const STATUS_TONE: Record<RowStatus, StatusTagTone> = {
@@ -118,38 +135,68 @@ function rowKey(row: PricingRowView): string {
     return row.overrideId ?? `global:${row.provider}|${row.model}|${row.region}`;
 }
 
-export function PricingOverridesPanel({ workspaceId, rows }: Props) {
+export function PricingOverridesPanel({
+    workspaceId,
+    rows,
+    counts,
+    providers,
+    total,
+    page,
+    pageCount,
+}: Props) {
     const [formOpen, setFormOpen] = useState(false);
     const [editing, setEditing] = useState<PricingRowView | null>(null);
-    const [search, setSearch] = useState("");
-    const debouncedSearch = useDeferredValue(search);
-    const [source, setSource] = useState<SourceFilter>("all");
-    const [provider, setProvider] = useState<string>("all");
-    const [statusFilter, setStatusFilter] = useState<ReadonlySet<RowStatus>>(
-        () => new Set<RowStatus>(["active"]),
+
+    const searchParams = useSearchParams();
+    const parsed = useMemo(
+        () => parsePricingSearch(new URLSearchParams(searchParams.toString())),
+        [searchParams],
     );
-    // eslint-disable-next-line react-hooks/purity -- roll over status counts at window boundary without a ticking timer
+    const { commit } = useUrlParamCommit();
+    const commitRef = useRef(commit);
+    useEffect(() => {
+        commitRef.current = commit;
+    });
+
+    // Local input drives a debounced commit to the URL `pricing_q`, so each
+    // keystroke doesn't push a navigation. Seeded once from the URL (deep links
+    // and refresh); the reset handler clears it back.
+    const [search, setSearch] = useState(parsed.search);
+    useEffect(() => {
+        if (search === parsed.search) return;
+        const t = setTimeout(() => {
+            const v = search.trim();
+            commitRef.current(
+                v === ""
+                    ? { delete: [PRICING_PARAMS.search, PRICING_PARAMS.page] }
+                    : { set: { [PRICING_PARAMS.search]: v }, delete: [PRICING_PARAMS.page] },
+            );
+        }, 300);
+        return () => clearTimeout(t);
+    }, [search, parsed.search]);
+
+    // eslint-disable-next-line react-hooks/purity -- roll over status badges at window boundary without a ticking timer
     const now = Date.now();
-    const counts = summarizePricingRows(rows);
-
-    const providerOptions = useMemo(
-        () => Array.from(new Set(rows.map((r) => r.provider))).sort(),
-        [rows],
-    );
-
-    const visibleRows = sortRows(
-        filterRows(rows, { search: debouncedSearch, source, provider, status: statusFilter }, now),
-        now,
-    );
 
     const toggleSource = (next: SourceFilter) => {
-        setSource((prev) => (prev === next ? "all" : next));
+        const value = parsed.source === next ? "all" : next;
+        commit(
+            value === "all"
+                ? { delete: [PRICING_PARAMS.source, PRICING_PARAMS.page] }
+                : { set: { [PRICING_PARAMS.source]: value }, delete: [PRICING_PARAMS.page] },
+        );
     };
     const resetFilters = () => {
         setSearch("");
-        setSource("all");
-        setProvider("all");
-        setStatusFilter(new Set<RowStatus>(["active", "scheduled", "expired"]));
+        commit({
+            set: { [PRICING_PARAMS.status]: "active,scheduled,expired" },
+            delete: [
+                PRICING_PARAMS.search,
+                PRICING_PARAMS.source,
+                PRICING_PARAMS.provider,
+                PRICING_PARAMS.page,
+            ],
+        });
     };
 
     const editingIsOverride = editing !== null && editing.source === "override";
@@ -192,26 +239,26 @@ export function PricingOverridesPanel({ workspaceId, rows }: Props) {
                     label="Total"
                     value={counts.total}
                     tone="foreground"
-                    pressed={source === "all"}
+                    pressed={parsed.source === "all"}
                     onClick={() => toggleSource("all")}
                 />
                 <StatTile
                     label="Global"
                     value={counts.global}
                     tone="muted"
-                    pressed={source === "global"}
+                    pressed={parsed.source === "global"}
                     onClick={() => toggleSource("global")}
                 />
                 <StatTile
                     label="Overrides"
                     value={counts.override}
                     tone="success"
-                    pressed={source === "override"}
+                    pressed={parsed.source === "override"}
                     onClick={() => toggleSource("override")}
                 />
             </div>
 
-            {rows.length === 0 ? (
+            {counts.total === 0 ? (
                 <EmptyStateCard
                     icon={CircleDollarSign}
                     title="No pricing rows yet"
@@ -241,26 +288,26 @@ export function PricingOverridesPanel({ workspaceId, rows }: Props) {
                             />
                         </div>
                         <FacetedFilter
-                            paramKey="pricing_provider"
+                            paramKey={PRICING_PARAMS.provider}
                             label="Provider"
                             icon={Server}
                             options={decorateProviderOptions(
-                                providerOptions.map((p) => ({ value: p, count: 0 })),
+                                providers.map((p) => ({ value: p, count: 0 })),
                             )}
-                            selected={provider === "all" ? [] : [provider]}
+                            selected={parsed.provider === "all" ? [] : [parsed.provider]}
                             single
-                            onChange={(next) => setProvider(next[0] ?? "all")}
+                            clearOnChange={[PRICING_PARAMS.page]}
                         />
                         <FacetedFilter
-                            paramKey="pricing_status"
+                            paramKey={PRICING_PARAMS.status}
                             label="Status"
                             icon={CalendarClock}
                             options={STATUS_FILTER_OPTIONS}
-                            selected={Array.from(statusFilter)}
-                            onChange={(next) => setStatusFilter(new Set(next.filter(isRowStatus)))}
+                            selected={Array.from(parsed.status)}
+                            clearOnChange={[PRICING_PARAMS.page]}
                         />
                     </div>
-                    {visibleRows.length === 0 ? (
+                    {total === 0 ? (
                         <EmptyStateCard
                             icon={SearchX}
                             title="No rows match these filters"
@@ -272,33 +319,38 @@ export function PricingOverridesPanel({ workspaceId, rows }: Props) {
                             }}
                         />
                     ) : (
-                        <DashboardSection label="Pricing rows" bodyClassName="-mx-5">
-                            <Table>
-                                <TableHeader className="sticky top-0 z-10 bg-background">
-                                    <TableRow>
-                                        <TableHead>Provider / Model</TableHead>
-                                        <TableHead>Region</TableHead>
-                                        <TableHead className="text-right">Input</TableHead>
-                                        <TableHead className="text-right">Output</TableHead>
-                                        <TableHead className="text-right">Cached input</TableHead>
-                                        <TableHead>Effective</TableHead>
-                                        <TableHead>Source</TableHead>
-                                        <TableHead className="text-right">Actions</TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {visibleRows.map((row) => (
-                                        <PricingRow
-                                            key={rowKey(row)}
-                                            row={row}
-                                            workspaceId={workspaceId}
-                                            status={rowStatus(row, now)}
-                                            onEdit={() => setEditing(row)}
-                                        />
-                                    ))}
-                                </TableBody>
-                            </Table>
-                        </DashboardSection>
+                        <>
+                            <DashboardSection label="Pricing rows" bodyClassName="-mx-5">
+                                <Table>
+                                    <TableHeader className="sticky top-0 z-10 bg-background">
+                                        <TableRow>
+                                            <TableHead>Provider / Model</TableHead>
+                                            <TableHead>Region</TableHead>
+                                            <TableHead className="text-right">Input</TableHead>
+                                            <TableHead className="text-right">Output</TableHead>
+                                            <TableHead className="text-right">
+                                                Cached input
+                                            </TableHead>
+                                            <TableHead>Effective</TableHead>
+                                            <TableHead>Source</TableHead>
+                                            <TableHead className="text-right">Actions</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {rows.map((row) => (
+                                            <PricingRow
+                                                key={rowKey(row)}
+                                                row={row}
+                                                workspaceId={workspaceId}
+                                                status={rowStatus(row, now)}
+                                                onEdit={() => setEditing(row)}
+                                            />
+                                        ))}
+                                    </TableBody>
+                                </Table>
+                            </DashboardSection>
+                            <PricingPagination page={page} pageCount={pageCount} total={total} />
+                        </>
                     )}
                 </>
             )}
@@ -333,6 +385,82 @@ export function PricingOverridesPanel({ workspaceId, rows }: Props) {
                     ) : null}
                 </DialogContent>
             </Dialog>
+        </div>
+    );
+}
+
+function PricingPagination({
+    page,
+    pageCount,
+    total,
+}: {
+    page: number;
+    pageCount: number;
+    total: number;
+}) {
+    const searchParams = useSearchParams();
+    const pathname = usePathname();
+    const { commit } = useUrlParamCommit();
+
+    if (pageCount <= 1) return null;
+
+    const hrefFor = (n: number): string => {
+        const p = new URLSearchParams(searchParams.toString());
+        p.set(PRICING_PARAMS.page, String(n));
+        return `${pathname}?${p.toString()}`;
+    };
+    const go = (e: React.MouseEvent<HTMLAnchorElement>, n: number): void => {
+        e.preventDefault();
+        commit({ set: { [PRICING_PARAMS.page]: String(n) } });
+    };
+    const tokens: readonly PageToken[] = pageWindow(page, pageCount);
+    const prevDisabled = page <= 1;
+    const nextDisabled = page >= pageCount;
+
+    return (
+        <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="font-mono text-xs text-muted-foreground tabular-nums">
+                {total.toLocaleString()} row{total === 1 ? "" : "s"} · page {page} of {pageCount}
+            </p>
+            <Pagination className="mx-0 w-auto justify-end">
+                <PaginationContent>
+                    <PaginationItem>
+                        <PaginationPrevious
+                            href={prevDisabled ? undefined : hrefFor(page - 1)}
+                            aria-disabled={prevDisabled}
+                            tabIndex={prevDisabled ? -1 : undefined}
+                            className={prevDisabled ? "pointer-events-none opacity-50" : undefined}
+                            onClick={prevDisabled ? undefined : (e) => go(e, page - 1)}
+                        />
+                    </PaginationItem>
+                    {tokens.map((token, i) =>
+                        token === "ellipsis" ? (
+                            <PaginationItem key={`ellipsis-${i}`}>
+                                <PaginationEllipsis />
+                            </PaginationItem>
+                        ) : (
+                            <PaginationItem key={token}>
+                                <PaginationLink
+                                    href={hrefFor(token)}
+                                    isActive={token === page}
+                                    onClick={(e) => go(e, token)}
+                                >
+                                    {token}
+                                </PaginationLink>
+                            </PaginationItem>
+                        ),
+                    )}
+                    <PaginationItem>
+                        <PaginationNext
+                            href={nextDisabled ? undefined : hrefFor(page + 1)}
+                            aria-disabled={nextDisabled}
+                            tabIndex={nextDisabled ? -1 : undefined}
+                            className={nextDisabled ? "pointer-events-none opacity-50" : undefined}
+                            onClick={nextDisabled ? undefined : (e) => go(e, page + 1)}
+                        />
+                    </PaginationItem>
+                </PaginationContent>
+            </Pagination>
         </div>
     );
 }

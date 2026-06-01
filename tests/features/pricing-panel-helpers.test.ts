@@ -1,5 +1,9 @@
 import {
+    buildPricingPage,
+    DEFAULT_PRICING_PAGE_SIZE,
     filterRows,
+    pageWindow,
+    parsePricingSearch,
     rowStatus,
     sortRows,
     summarizePricingRows,
@@ -495,5 +499,153 @@ describe("filterRows", () => {
             );
             expect(result.map((r) => r.overrideId)).toEqual(["ovr-1"]);
         });
+    });
+});
+
+describe("parsePricingSearch", () => {
+    const parse = (qs: string) => parsePricingSearch(new URLSearchParams(qs));
+
+    test("empty params default to active-only status, all source, page 1", () => {
+        const p = parse("");
+        expect(p.search).toBe("");
+        expect(p.source).toBe("all");
+        expect(p.provider).toBe("all");
+        expect(Array.from(p.status)).toEqual(["active"]);
+        expect(p.page).toBe(1);
+    });
+
+    test("reads and trims search, reads provider and page", () => {
+        const p = parse("pricing_q=%20gpt%20&pricing_provider=openai&pricing_page=3");
+        expect(p.search).toBe("gpt");
+        expect(p.provider).toBe("openai");
+        expect(p.page).toBe(3);
+    });
+
+    test("parses comma-joined status and drops unknown tokens", () => {
+        const p = parse("pricing_status=active,expired,bogus");
+        expect(Array.from(p.status).sort()).toEqual(["active", "expired"]);
+    });
+
+    test("empty status param yields an empty set (explicitly nothing)", () => {
+        const p = parse("pricing_status=");
+        expect(Array.from(p.status)).toEqual([]);
+    });
+
+    test("only global/override are valid source values", () => {
+        expect(parse("pricing_source=override").source).toBe("override");
+        expect(parse("pricing_source=nonsense").source).toBe("all");
+    });
+
+    test("non-positive or non-numeric page falls back to 1", () => {
+        expect(parse("pricing_page=0").page).toBe(1);
+        expect(parse("pricing_page=-2").page).toBe(1);
+        expect(parse("pricing_page=abc").page).toBe(1);
+    });
+});
+
+describe("buildPricingPage", () => {
+    const now = new Date("2025-06-01T00:00:00Z").getTime();
+    const allActive = (n: number): PricingRowView[] =>
+        Array.from({ length: n }, (_, i) =>
+            mkRow({
+                source: "override",
+                overrideId: `ovr-${i}`,
+                model: `m-${String(i).padStart(3, "0")}`,
+                effectiveFrom: "2024-01-01T00:00:00.000Z",
+                effectiveTo: null,
+            }),
+        );
+
+    test("counts are grand totals, independent of filters", () => {
+        const rows = [globalRow, overrideRow];
+        const page = buildPricingPage(rows, parsePricingSearch(new URLSearchParams()), now);
+        expect(page.counts).toEqual({ global: 1, override: 1, total: 2 });
+    });
+
+    test("providers are the distinct sorted set across all rows", () => {
+        const rows = [
+            mkRow({ provider: "openai", overrideId: null }),
+            mkRow({ provider: "anthropic", overrideId: null, model: "claude" }),
+            mkRow({ provider: "openai", overrideId: null, model: "gpt-4" }),
+        ];
+        const page = buildPricingPage(rows, parsePricingSearch(new URLSearchParams()), now);
+        expect(page.providers).toEqual(["anthropic", "openai"]);
+    });
+
+    test("defaults to 100 rows per page and reports pageCount", () => {
+        const page = buildPricingPage(
+            allActive(150),
+            parsePricingSearch(new URLSearchParams()),
+            now,
+        );
+        expect(page.rows).toHaveLength(DEFAULT_PRICING_PAGE_SIZE);
+        expect(page.total).toBe(150);
+        expect(page.page).toBe(1);
+        expect(page.pageCount).toBe(2);
+    });
+
+    test("second page returns the remainder", () => {
+        const page = buildPricingPage(
+            allActive(150),
+            parsePricingSearch(new URLSearchParams("pricing_page=2")),
+            now,
+        );
+        expect(page.rows).toHaveLength(50);
+        expect(page.page).toBe(2);
+    });
+
+    test("page beyond the end clamps to the last page", () => {
+        const page = buildPricingPage(
+            allActive(150),
+            parsePricingSearch(new URLSearchParams("pricing_page=99")),
+            now,
+        );
+        expect(page.page).toBe(2);
+        expect(page.rows).toHaveLength(50);
+    });
+
+    test("total reflects the filtered set, not the grand total", () => {
+        const rows = [
+            mkRow({ provider: "openai", overrideId: null, model: "gpt-4o" }),
+            mkRow({ provider: "anthropic", overrideId: null, model: "claude" }),
+        ];
+        const page = buildPricingPage(
+            rows,
+            parsePricingSearch(new URLSearchParams("pricing_provider=openai")),
+            now,
+        );
+        expect(page.total).toBe(1);
+        expect(page.counts.total).toBe(2);
+        expect(page.rows.map((r) => r.provider)).toEqual(["openai"]);
+    });
+
+    test("respects an explicit page size", () => {
+        const page = buildPricingPage(
+            allActive(10),
+            parsePricingSearch(new URLSearchParams()),
+            now,
+            4,
+        );
+        expect(page.rows).toHaveLength(4);
+        expect(page.pageCount).toBe(3);
+    });
+});
+
+describe("pageWindow", () => {
+    test("returns every page when there are 7 or fewer", () => {
+        expect(pageWindow(1, 1)).toEqual([1]);
+        expect(pageWindow(3, 7)).toEqual([1, 2, 3, 4, 5, 6, 7]);
+    });
+
+    test("truncates the tail near the start", () => {
+        expect(pageWindow(2, 20)).toEqual([1, 2, 3, "ellipsis", 20]);
+    });
+
+    test("truncates both ends in the middle", () => {
+        expect(pageWindow(10, 20)).toEqual([1, "ellipsis", 9, 10, 11, "ellipsis", 20]);
+    });
+
+    test("truncates the head near the end", () => {
+        expect(pageWindow(19, 20)).toEqual([1, "ellipsis", 18, 19, 20]);
     });
 });

@@ -145,3 +145,117 @@ export function sortRows(
     });
     return decorated.map((d) => d.row);
 }
+
+/** Server-side page size for the pricing table. */
+export const DEFAULT_PRICING_PAGE_SIZE = 100;
+
+/** URL search-param keys that drive the pricing table's filters and page. */
+export const PRICING_PARAMS = {
+    search: "pricing_q",
+    provider: "pricing_provider",
+    status: "pricing_status",
+    source: "pricing_source",
+    page: "pricing_page",
+} as const;
+
+export interface ParsedPricingParams {
+    readonly search: string;
+    readonly source: SourceFilter;
+    readonly provider: string;
+    readonly status: ReadonlySet<RowStatus>;
+    readonly page: number;
+}
+
+/**
+ * Reads the pricing table's filter + page state from URL params. Shared by the
+ * server component (which filters/paginates) and the client panel (which shows
+ * the matching control state), so both agree on a single source of truth.
+ * Absent status defaults to active-only — the table opens on what's live now.
+ */
+export function parsePricingSearch(params: URLSearchParams): ParsedPricingParams {
+    const search = params.get(PRICING_PARAMS.search)?.trim() ?? "";
+    const sourceRaw = params.get(PRICING_PARAMS.source);
+    const source: SourceFilter =
+        sourceRaw === "global" || sourceRaw === "override" ? sourceRaw : "all";
+    const provider = params.get(PRICING_PARAMS.provider) ?? "all";
+    const statusRaw = params.get(PRICING_PARAMS.status);
+    const status: ReadonlySet<RowStatus> =
+        statusRaw === null
+            ? new Set<RowStatus>(["active"])
+            : new Set(statusRaw.split(",").filter(isRowStatus));
+    const pageRaw = Number.parseInt(params.get(PRICING_PARAMS.page) ?? "1", 10);
+    const page = Number.isFinite(pageRaw) && pageRaw > 0 ? pageRaw : 1;
+    return { search, source, provider, status, page };
+}
+
+export interface PricingPage {
+    /** Current page of rows, filtered then sorted. */
+    readonly rows: ReadonlyArray<PricingRowView>;
+    /** Grand totals across every row, ignoring filters (drives stat tiles). */
+    readonly counts: PricingRowCounts;
+    /** Distinct providers across every row, sorted (drives the provider filter). */
+    readonly providers: readonly string[];
+    /** Count of rows matching the filters, across all pages. */
+    readonly total: number;
+    /** Clamped 1-based page index. */
+    readonly page: number;
+    readonly pageCount: number;
+}
+
+/**
+ * Filters, sorts, and slices the full pricing set into one page. Runs on the
+ * server so the browser only ever holds a single page of rows.
+ */
+export function buildPricingPage(
+    allRows: ReadonlyArray<PricingRowView>,
+    parsed: ParsedPricingParams,
+    now: number,
+    pageSize: number = DEFAULT_PRICING_PAGE_SIZE,
+): PricingPage {
+    const counts = summarizePricingRows(allRows);
+    const providers = Array.from(new Set(allRows.map((r) => r.provider))).sort();
+    const filtered = sortRows(
+        filterRows(
+            allRows,
+            {
+                search: parsed.search,
+                source: parsed.source,
+                provider: parsed.provider,
+                status: parsed.status,
+            },
+            now,
+        ),
+        now,
+    );
+    const total = filtered.length;
+    const pageCount = Math.max(1, Math.ceil(total / pageSize));
+    const page = Math.min(parsed.page, pageCount);
+    const start = (page - 1) * pageSize;
+    return {
+        rows: filtered.slice(start, start + pageSize),
+        counts,
+        providers,
+        total,
+        page,
+        pageCount,
+    };
+}
+
+export type PageToken = number | "ellipsis";
+
+/**
+ * Page numbers to render: always first and last, the current page with one
+ * neighbour either side, and "ellipsis" gaps. Returns every page when there
+ * are few enough to show without truncation.
+ */
+export function pageWindow(page: number, pageCount: number): readonly PageToken[] {
+    if (pageCount <= 7) return Array.from({ length: pageCount }, (_, i) => i + 1);
+    const tokens: PageToken[] = [1];
+    const left = Math.max(2, page - 1);
+    const right = Math.min(pageCount - 1, page + 1);
+    if (left > 2) tokens.push("ellipsis");
+    for (let p = left; p <= right; p += 1) tokens.push(p);
+    if (right < pageCount - 1) tokens.push("ellipsis");
+    tokens.push(pageCount);
+    return tokens;
+}

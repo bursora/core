@@ -1,12 +1,16 @@
 import { listEffectivePricingForWorkspace } from "@/lib/compose/settings";
 import { PricingOverridesPanel } from "./pricing-overrides-panel";
-import type { PricingRowView } from "./pricing-panel-helpers";
+import { buildPricingPage, parsePricingSearch, type PricingRowView } from "./pricing-panel-helpers";
 
 interface PricingOverrideSectionProps {
     workspaceId: string;
+    searchParams: Record<string, string | undefined>;
 }
 
-export async function PricingOverrideSection({ workspaceId }: PricingOverrideSectionProps) {
+export async function PricingOverrideSection({
+    workspaceId,
+    searchParams,
+}: PricingOverrideSectionProps) {
     const effective = await listEffectivePricingForWorkspace(workspaceId);
 
     const rows: PricingRowView[] = effective.map((e) => {
@@ -25,5 +29,21 @@ export async function PricingOverrideSection({ workspaceId }: PricingOverrideSec
             : { ...base, source: "global", overrideId: null };
     });
 
-    return <PricingOverridesPanel workspaceId={workspaceId} rows={rows} />;
+    const params = new URLSearchParams();
+    for (const [k, v] of Object.entries(searchParams)) {
+        if (v !== undefined) params.set(k, v);
+    }
+    const page = buildPricingPage(rows, parsePricingSearch(params), new Date().getTime());
+
+    return (
+        <PricingOverridesPanel
+            workspaceId={workspaceId}
+            rows={page.rows}
+            counts={page.counts}
+            providers={page.providers}
+            total={page.total}
+            page={page.page}
+            pageCount={page.pageCount}
+        />
+    );
 }

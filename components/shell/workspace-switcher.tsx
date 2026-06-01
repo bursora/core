@@ -1,5 +1,6 @@
 "use client";
 
+import { Button } from "@/components/ui/button";
 import {
     Command,
     CommandEmpty,
@@ -45,17 +46,18 @@ export function WorkspaceSwitcher({
     return (
         <Popover open={open} onOpenChange={setOpen}>
             <PopoverTrigger asChild>
-                <button
+                <Button
                     type="button"
+                    variant="ghost"
                     role="combobox"
                     aria-label="Switch workspace"
                     aria-expanded={open}
                     aria-controls={listboxId}
-                    className="flex w-full items-center gap-2.5 rounded-md px-1 py-1 text-left transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    className="h-auto w-full justify-start gap-2.5 px-1 py-1 text-left font-normal has-[>svg]:px-1"
                 >
                     {children}
                     <ChevronsUpDown className="h-4 w-4 shrink-0 text-muted-foreground" />
-                </button>
+                </Button>
             </PopoverTrigger>
             <PopoverContent className="w-64 p-0" align="end" id={listboxId}>
                 <Command>

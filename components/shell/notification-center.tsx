@@ -209,15 +209,17 @@ function NotificationRow({ item, onNavigate, onMarkRead }: NotificationRowProps)
                 )}
 
                 {isUnread ? (
-                    <button
+                    <Button
                         type="button"
+                        variant="ghost"
+                        size="icon-xs"
                         onClick={onMarkRead}
                         aria-label="Mark as read"
                         title="Mark as read"
-                        className="size-6 shrink-0 rounded-md border border-transparent text-muted-foreground opacity-0 transition hover:border-border hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100"
+                        className="shrink-0 border border-transparent text-muted-foreground opacity-0 hover:border-border hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100"
                     >
-                        <Check aria-hidden="true" className="m-auto size-3.5" />
-                    </button>
+                        <Check aria-hidden="true" className="size-3.5" />
+                    </Button>
                 ) : null}
             </div>
         </li>

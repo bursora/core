@@ -12,6 +12,7 @@ import {
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog";
+import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
 
 interface ShortcutCheatsheetProps {
     open: boolean;
@@ -39,20 +40,22 @@ export function ShortcutCheatsheet({ open, onOpenChange }: ShortcutCheatsheetPro
                         Press these keys anywhere outside an input field.
                     </DialogDescription>
                 </DialogHeader>
-                <table className="w-full text-sm">
-                    <tbody>
+                <Table>
+                    <TableBody>
                         {SHORTCUTS.map((row) => (
-                            <tr key={row.keys} className="border-b last:border-b-0">
-                                <td className="py-2 pr-4">
+                            <TableRow key={row.keys}>
+                                <TableCell className="py-2 pr-4">
                                     <kbd className="rounded border bg-muted px-2 py-0.5 font-mono text-xs">
                                         {row.keys}
                                     </kbd>
-                                </td>
-                                <td className="py-2 text-muted-foreground">{row.label}</td>
-                            </tr>
+                                </TableCell>
+                                <TableCell className="py-2 text-muted-foreground">
+                                    {row.label}
+                                </TableCell>
+                            </TableRow>
                         ))}
-                    </tbody>
-                </table>
+                    </TableBody>
+                </Table>
             </DialogContent>
         </Dialog>
     );

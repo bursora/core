@@ -10,12 +10,13 @@ import { Button } from "@/components/ui/button";
 import { CodeBlock } from "@/components/ui/code-block";
 import { CopyButton } from "@/components/ui/copy-button";
 import { FirstEventPanel } from "@/components/ui/first-event-poll";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { env } from "@/lib/env";
 import { SNIPPET_TEMPLATES, type ProviderSnippet } from "@/lib/onboarding/snippets";
-import { ProviderIcon } from "@/lib/providers";
 import { buildWorkspacePath } from "@/lib/routes";
 import Link from "next/link";
+
+import { ProviderTabList } from "./provider-tablist";
 
 interface ConnectStepProps {
     readonly workspaceId: string;
@@ -43,19 +44,7 @@ export function ConnectStep({ workspaceId, apiKeyId }: ConnectStepProps) {
             </p>
 
             <Tabs defaultValue={first.id}>
-                <TabsList className="flex-wrap justify-start group-data-[orientation=horizontal]/tabs:h-auto">
-                    {snippets.map((s, i) => (
-                        <TabsTrigger
-                            key={s.id}
-                            value={s.id}
-                            autoFocus={i === 0}
-                            className="flex-none"
-                        >
-                            <ProviderIcon id={s.id} className="size-4" />
-                            {s.label}
-                        </TabsTrigger>
-                    ))}
-                </TabsList>
+                <ProviderTabList snippets={snippets} />
                 {snippets.map((s) => (
                     <TabsContent key={s.id} value={s.id}>
                         <div className="relative overflow-hidden rounded-[8px] border border-border">

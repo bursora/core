@@ -149,6 +149,12 @@
     body {
         @apply bg-background text-foreground font-sans;
     }
+    button:not(:disabled),
+    [role="button"]:not([aria-disabled="true"]),
+    label[for],
+    summary {
+        cursor: pointer;
+    }
 }
 
 .shiki {

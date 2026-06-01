@@ -320,7 +320,11 @@ export function PricingOverridesPanel({
                         />
                     ) : (
                         <>
-                            <DashboardSection label="Pricing rows" bodyClassName="-mx-5">
+                            <DashboardSection
+                                label="Pricing rows"
+                                bodyClassName="-mx-5 mt-5"
+                                className="pb-3"
+                            >
                                 <Table>
                                     <TableHeader className="sticky top-0 z-10 bg-background">
                                         <TableRow>

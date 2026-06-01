@@ -69,17 +69,33 @@
             "types": "./components/ui/copy-button.tsx",
             "default": "./components/ui/copy-button.tsx"
         },
+        "./components/ui/dashboard-views/burn-rate-tile-view": {
+            "types": "./components/ui/dashboard-views/burn-rate-tile-view.tsx",
+            "default": "./components/ui/dashboard-views/burn-rate-tile-view.tsx"
+        },
         "./components/ui/dashboard-views/now-strip-view": {
             "types": "./components/ui/dashboard-views/now-strip-view.tsx",
             "default": "./components/ui/dashboard-views/now-strip-view.tsx"
+        },
+        "./components/ui/dashboard-views/pace-tile-view": {
+            "types": "./components/ui/dashboard-views/pace-tile-view.tsx",
+            "default": "./components/ui/dashboard-views/pace-tile-view.tsx"
         },
         "./components/ui/dashboard-views/recent-alerts-panel-view": {
             "types": "./components/ui/dashboard-views/recent-alerts-panel-view.tsx",
             "default": "./components/ui/dashboard-views/recent-alerts-panel-view.tsx"
         },
+        "./components/ui/dashboard-views/runway-projection-view": {
+            "types": "./components/ui/dashboard-views/runway-projection-view.tsx",
+            "default": "./components/ui/dashboard-views/runway-projection-view.tsx"
+        },
         "./components/ui/dashboard-views/spend-composition-panel": {
             "types": "./components/ui/dashboard-views/spend-composition-panel.tsx",
             "default": "./components/ui/dashboard-views/spend-composition-panel.tsx"
+        },
+        "./components/ui/dashboard-views/status-strip-view": {
+            "types": "./components/ui/dashboard-views/status-strip-view.tsx",
+            "default": "./components/ui/dashboard-views/status-strip-view.tsx"
         },
         "./components/ui/dashboard-views/top-spenders-snapshot-view": {
             "types": "./components/ui/dashboard-views/top-spenders-snapshot-view.tsx",

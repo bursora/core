@@ -82,18 +82,21 @@ describe("dashboard data surfaces are cloud-gated", () => {
     test.each(GATED_PAGES)("%s returns the paywall inside the locked branch", (path) => {
         const src = read(path);
         // The early return hands CloudPaywallPage the workspace id plus a static
-        // title/subtitle — never fetched workspace data. CloudPaywallPage in turn
-        // passes only workspaceId to the blur view (asserted below).
+        // title/subtitle — never fetched workspace data. CloudPaywallPage then
+        // resolves the paywall data itself and spreads it into the blur view
+        // (asserted below).
         expect(src).toMatch(/<CloudPaywallPage\b[\s\S]*?workspaceId=\{workspaceId\}/);
     });
 });
 
-describe("CloudPaywallPage hands the blur view only the workspace id", () => {
-    test("passes only workspaceId to CloudPaywall", () => {
+describe("CloudPaywallPage hands the blur view the workspace id + resolved paywall data", () => {
+    test("spreads the resolved paywall data into CloudPaywall", () => {
         const src = read(join(WORKSPACE_DIR, "_components", "cloud-paywall-page.tsx"));
-        // Relocated from the per-page assertion: the actual blurred view still
-        // receives only the workspace id, no fetched data.
-        expect(src).toMatch(/<CloudPaywall\s+workspaceId=\{workspaceId\}\s*\/>/);
+        // CloudPaywallPage resolves owner + plan (price, bullets, checkout) in
+        // resolveCloudPaywallData and spreads them into the blur view.
+        expect(src).toMatch(
+            /<CloudPaywall\s+workspaceId=\{workspaceId\}\s+\{\.\.\.paywall\}\s*\/>/,
+        );
     });
 });
 
@@ -104,7 +107,7 @@ describe("settings: activity gated, billing reachable when locked", () => {
         // The activity log is real workspace data (incl. alert_raised rows), so
         // it renders the paywall when locked instead of fetching activity.
         expect(src).toContain("cloudWorkspaceLocked");
-        expect(src).toMatch(/activity:\s*locked\s*\?/);
+        expect(src).toMatch(/activity:\s*locked\s*&&\s*paywall\s*\?/);
     });
 
     test("billing stays reachable so a locked user can subscribe", () => {

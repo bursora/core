@@ -16,9 +16,9 @@ import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import { FakePaymentProviderAdapter } from "./fakes/fake-payment-provider.adapter";
 import { InMemoryBillingWebhookEventStore } from "./fakes/in-memory-billing-webhook-event.store";
 import { InMemoryPlanRepository } from "./fakes/in-memory-plan.repository";
-import { InMemoryWorkspaceBillingRepository } from "./fakes/in-memory-workspace-billing.repository";
+import { InMemoryUserBillingRepository } from "./fakes/in-memory-user-billing.repository";
 
-const WORKSPACE_ID = "11111111-2222-3333-4444-555555555555";
+const USER_ID = "11111111-2222-3333-4444-555555555555";
 
 const makeRequest = (body: string, signature: string | null): Request => {
     const headers: Record<string, string> = { "content-type": "application/json" };
@@ -31,22 +31,16 @@ const makeRequest = (body: string, signature: string | null): Request => {
 };
 
 let provider: FakePaymentProviderAdapter;
-let workspaces: InMemoryWorkspaceBillingRepository;
+let users: InMemoryUserBillingRepository;
 let webhookEvents: InMemoryBillingWebhookEventStore;
 
 beforeEach(() => {
     provider = new FakePaymentProviderAdapter();
-    workspaces = new InMemoryWorkspaceBillingRepository();
+    users = new InMemoryUserBillingRepository();
     webhookEvents = new InMemoryBillingWebhookEventStore();
-    workspaces.seed({
-        workspaceId: WORKSPACE_ID,
-        providerCustomerId: null,
-        providerSubscriptionId: null,
-        subscriptionStatus: null,
-    });
     setBillingDepsForTesting({
         provider,
-        workspaces,
+        users,
         webhookEvents,
         plans: new InMemoryPlanRepository(),
         appUrl: "https://app.test",
@@ -62,7 +56,7 @@ describe("/api/webhooks/lemonsqueezy", () => {
         provider.nextEvent = {
             id: "evt_1",
             type: "subscription.activated",
-            workspaceId: WORKSPACE_ID,
+            userId: USER_ID,
             customerId: "cus_99",
             subscriptionId: "sub_99",
         };
@@ -70,7 +64,7 @@ describe("/api/webhooks/lemonsqueezy", () => {
         const response = await POST(makeRequest("{}", "valid-sig"));
 
         expect(response.status).toBe(200);
-        const row = await workspaces.findById(WORKSPACE_ID);
+        const row = await users.findByUserId(USER_ID);
         expect(row?.subscriptionStatus).toBe("active");
     });
 
@@ -78,7 +72,7 @@ describe("/api/webhooks/lemonsqueezy", () => {
         provider.nextEvent = {
             id: "evt_dup",
             type: "subscription.activated",
-            workspaceId: WORKSPACE_ID,
+            userId: USER_ID,
             customerId: "cus_99",
             subscriptionId: "sub_99",
         };
@@ -104,7 +98,7 @@ describe("/api/webhooks/lemonsqueezy", () => {
         provider.nextEvent = {
             id: "evt_boom",
             type: "subscription.activated",
-            workspaceId: WORKSPACE_ID,
+            userId: USER_ID,
             customerId: "cus_99",
             subscriptionId: "sub_99",
         };
@@ -128,7 +122,7 @@ describe("/api/webhooks/lemonsqueezy", () => {
         };
         setBillingDepsForTesting({
             provider,
-            workspaces,
+            users,
             webhookEvents: throwingEvents,
             plans: new InMemoryPlanRepository(),
             appUrl: "https://app.test",

@@ -23,7 +23,7 @@ export class NoActiveCloudPlanError extends Error {
 }
 
 export interface CreateCheckoutSessionUseCaseInput {
-    readonly workspaceId: string;
+    readonly userId: string;
     readonly userEmail: string;
     readonly successUrl: string;
     readonly cancelUrl: string;
@@ -39,7 +39,7 @@ export async function createCheckoutSessionUseCase(
         throw new NoActiveCloudPlanError();
     }
     const session = await input.provider.createCheckoutSession({
-        workspaceId: input.workspaceId,
+        userId: input.userId,
         userEmail: input.userEmail,
         variantId: plan.lsVariantId,
         successUrl: input.successUrl,

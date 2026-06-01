@@ -13,6 +13,7 @@ import tseslint from "typescript-eslint";
 const eeAllowedFiles = [
     "lib/ee/**/*.{ts,tsx}",
     "lib/billing-gate/**/*.{ts,tsx}",
+    "lib/onboarding/plan-entry.ts",
     "app/(dashboard)/workspace/[workspaceId]/settings/**/*.{ts,tsx}",
     "app/api/webhooks/lemonsqueezy/route.ts",
     "app/api/cron/billing-webhook-prune/route.ts",

@@ -1,12 +1,14 @@
 /**
- * Billing panel for /settings.
+ * Account billing panel for /settings.
  *
- * Workspaces with no provider customer on file see "Upgrade to Bursora cloud"
- * which opens Lemon Squeezy checkout. Once a customer record exists (any
- * status), a "Manage billing" button opens the LS customer portal where the
- * user can update payment, view invoices, or cancel. Workspaces with a
- * lapsed/cancelled subscription see both buttons. The `?billing=ok|cancel`
- * flag set on the redirect back from LS surfaces a small confirmation line.
+ * Billing is account-level: it reflects the signed-in user's Bursora Cloud
+ * subscription, which gates every workspace they own. A user with no provider
+ * customer on file sees "Upgrade to Bursora cloud" which opens Lemon Squeezy
+ * checkout. Once a customer record exists (any status), a "Manage billing"
+ * button opens the LS customer portal where they can update payment, view
+ * invoices, or cancel. A lapsed/cancelled subscription shows both buttons. The
+ * `?billing=ok|cancel` flag set on the redirect back from LS surfaces a small
+ * confirmation line.
  *
  * The money-back guarantee panel renders only while
  * `refund_eligible_until` is set and in the future. It survives subscription
@@ -20,12 +22,12 @@ import { StatusTag, type StatusTagTone } from "@/components/ui/workspace/status-
 import { isActiveSubscriptionStatus } from "@/lib/billing-status";
 import type { ReactNode } from "react";
 import { createCheckoutAction, openPortalAction } from "../billing-actions";
-import { getWorkspaceBillingRecord } from "../billing/server";
+import { getUserBillingRecord } from "../billing/server";
 import { PastDueBanner } from "./past-due-banner";
 import { RefundPanel } from "./refund-panel";
 
 interface BillingSectionProps {
-    workspaceId: string;
+    userId: string;
     status: "ok" | "cancel" | null;
     /** Rendered between the plan card and the money-back panel — the usage section. */
     children?: ReactNode;
@@ -39,12 +41,12 @@ const STATUS_PILL: Record<string, { label: string; tone: StatusTagTone }> = {
 
 const INACTIVE_PILL = { label: "Inactive", tone: "muted" } as const;
 
-export async function BillingSection({ workspaceId, status, children }: BillingSectionProps) {
-    const record = await getWorkspaceBillingRecord(workspaceId);
-    // Portal button: show whenever the workspace has a provider customer on
-    // file, even if the subscription is cancelled. Lemon Squeezy's portal lets
-    // the user see invoices and re-subscribe, so the entry point is useful
-    // beyond active status.
+export async function BillingSection({ userId, status, children }: BillingSectionProps) {
+    const record = await getUserBillingRecord(userId);
+    // Portal button: show whenever the user has a provider customer on file,
+    // even if the subscription is cancelled. Lemon Squeezy's portal lets the
+    // user see invoices and re-subscribe, so the entry point is useful beyond
+    // active status.
     const hasProviderCustomer = record?.providerCustomerId != null;
     const hasActiveSubscription =
         hasProviderCustomer && isActiveSubscriptionStatus(record?.subscriptionStatus);
@@ -60,7 +62,7 @@ export async function BillingSection({ workspaceId, status, children }: BillingS
 
     return (
         <div className="space-y-6">
-            {isPastDue ? <PastDueBanner workspaceId={workspaceId} /> : null}
+            {isPastDue ? <PastDueBanner /> : null}
             <DashboardSection label="Billing">
                 <div className="rounded-md border border-border bg-muted/30 p-4">
                     <div className="flex flex-wrap items-start justify-between gap-3">
@@ -81,13 +83,11 @@ export async function BillingSection({ workspaceId, status, children }: BillingS
                         <div className="flex flex-wrap items-center gap-2">
                             {hasProviderCustomer ? (
                                 <form action={openPortalAction}>
-                                    <input type="hidden" name="workspaceId" value={workspaceId} />
                                     <Button type="submit">Manage billing</Button>
                                 </form>
                             ) : null}
                             {!hasActiveSubscription ? (
                                 <form action={createCheckoutAction}>
-                                    <input type="hidden" name="workspaceId" value={workspaceId} />
                                     <Button type="submit">Upgrade to Bursora cloud</Button>
                                 </form>
                             ) : null}

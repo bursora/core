@@ -3,30 +3,13 @@ import { handleWebhookUseCase } from "@/lib/ee/billing";
 import { describe, expect, test } from "bun:test";
 import { FakePaymentProviderAdapter } from "./fakes/fake-payment-provider.adapter";
 import { InMemoryBillingWebhookEventStore } from "./fakes/in-memory-billing-webhook-event.store";
-import { InMemoryWorkspaceBillingRepository } from "./fakes/in-memory-workspace-billing.repository";
+import { InMemoryUserBillingRepository } from "./fakes/in-memory-user-billing.repository";
 
-const WORKSPACE_ID = "11111111-2222-3333-4444-555555555555";
+const USER_ID = "11111111-2222-3333-4444-555555555555";
 
-const seedUnsubscribed = (
-    repo: InMemoryWorkspaceBillingRepository,
-    customerId: string | null = null,
-    subId: string | null = null,
-) => {
+const seedActive = (repo: InMemoryUserBillingRepository, customerId: string, subId: string) => {
     repo.seed({
-        workspaceId: WORKSPACE_ID,
-        providerCustomerId: customerId,
-        providerSubscriptionId: subId,
-        subscriptionStatus: null,
-    });
-};
-
-const seedActive = (
-    repo: InMemoryWorkspaceBillingRepository,
-    customerId: string,
-    subId: string,
-) => {
-    repo.seed({
-        workspaceId: WORKSPACE_ID,
+        userId: USER_ID,
         providerCustomerId: customerId,
         providerSubscriptionId: subId,
         subscriptionStatus: "active",
@@ -35,7 +18,7 @@ const seedActive = (
 
 const runWebhook = async (
     event: WebhookEvent,
-    workspaces: InMemoryWorkspaceBillingRepository,
+    users: InMemoryUserBillingRepository,
     webhookEvents: InMemoryBillingWebhookEventStore = new InMemoryBillingWebhookEventStore(),
 ) => {
     const provider = new FakePaymentProviderAdapter();
@@ -44,7 +27,7 @@ const runWebhook = async (
         rawBody: "raw",
         signatureHeader: "sig",
         provider,
-        workspaces,
+        users,
         webhookEvents,
     });
 };
@@ -53,68 +36,68 @@ describe("handleWebhookUseCase", () => {
     test("rejects forged events (signature mismatch) with verified=false", async () => {
         const provider = new FakePaymentProviderAdapter();
         provider.verifyShouldThrow = true;
-        const workspaces = new InMemoryWorkspaceBillingRepository();
-        seedUnsubscribed(workspaces);
 
         const result = await handleWebhookUseCase({
             rawBody: "x",
             signatureHeader: "bad",
             provider,
-            workspaces,
+            users: new InMemoryUserBillingRepository(),
             webhookEvents: new InMemoryBillingWebhookEventStore(),
         });
 
         expect(result.verified).toBe(false);
     });
 
-    test("subscription.activated records active subscription and stores provider ids", async () => {
-        const workspaces = new InMemoryWorkspaceBillingRepository();
-        seedUnsubscribed(workspaces);
+    test("subscription.activated upserts the user with active status and provider ids", async () => {
+        // No row pre-exists: the webhook resolves the user from the checkout
+        // custom-data userId and inserts via upsert.
+        const users = new InMemoryUserBillingRepository();
 
         const result = await runWebhook(
             {
                 id: "evt_basic_checkout",
                 type: "subscription.activated",
-                workspaceId: WORKSPACE_ID,
+                userId: USER_ID,
                 customerId: "cus_99",
                 subscriptionId: "sub_99",
             },
-            workspaces,
+            users,
         );
 
         expect(result.verified).toBe(true);
-        const row = await workspaces.findById(WORKSPACE_ID);
+        const row = await users.findByUserId(USER_ID);
         expect(row?.subscriptionStatus).toBe("active");
         expect(row?.providerCustomerId).toBe("cus_99");
         expect(row?.providerSubscriptionId).toBe("sub_99");
+        expect(row?.subscribedAt).not.toBeNull();
+        expect(row?.refundEligibleUntil).not.toBeNull();
     });
 
     test("subscription.activated writes the provider-reported status verbatim", async () => {
         // The handler must not hardcode `active`; an explicit status on the
         // event is written through unchanged (defaulting to `active` only
         // when the event omits one).
-        const workspaces = new InMemoryWorkspaceBillingRepository();
-        seedUnsubscribed(workspaces);
+        const users = new InMemoryUserBillingRepository();
 
         await runWebhook(
             {
                 id: "evt_activated_status",
                 type: "subscription.activated",
-                workspaceId: WORKSPACE_ID,
+                userId: USER_ID,
                 customerId: "cus_99",
                 subscriptionId: "sub_99",
                 status: "past_due",
             },
-            workspaces,
+            users,
         );
 
-        const row = await workspaces.findById(WORKSPACE_ID);
+        const row = await users.findByUserId(USER_ID);
         expect(row?.subscriptionStatus).toBe("past_due");
     });
 
     test("subscription.canceled records subscription_status='canceled'", async () => {
-        const workspaces = new InMemoryWorkspaceBillingRepository();
-        seedActive(workspaces, "cus_99", "sub_99");
+        const users = new InMemoryUserBillingRepository();
+        seedActive(users, "cus_99", "sub_99");
 
         await runWebhook(
             {
@@ -124,16 +107,16 @@ describe("handleWebhookUseCase", () => {
                 subscriptionId: "sub_99",
                 status: "canceled",
             },
-            workspaces,
+            users,
         );
 
-        const row = await workspaces.findById(WORKSPACE_ID);
+        const row = await users.findByUserId(USER_ID);
         expect(row?.subscriptionStatus).toBe("canceled");
     });
 
     test("subscription.updated writes the provider status verbatim", async () => {
-        const workspaces = new InMemoryWorkspaceBillingRepository();
-        seedActive(workspaces, "cus_99", "sub_99");
+        const users = new InMemoryUserBillingRepository();
+        seedActive(users, "cus_99", "sub_99");
 
         await runWebhook(
             {
@@ -143,52 +126,76 @@ describe("handleWebhookUseCase", () => {
                 subscriptionId: "sub_99",
                 status: "past_due",
             },
-            workspaces,
+            users,
         );
 
-        const row = await workspaces.findById(WORKSPACE_ID);
+        const row = await users.findByUserId(USER_ID);
         expect(row?.subscriptionStatus).toBe("past_due");
     });
 
-    test("unknown events are accepted but do not change subscription state", async () => {
-        const workspaces = new InMemoryWorkspaceBillingRepository();
-        seedActive(workspaces, "cus_99", "sub_99");
+    test("subscription.updated before activation backfills provider ids (no null-customer row)", async () => {
+        // LS can deliver subscription.updated before — or instead of — the
+        // activation event. With the checkout custom-data userId echoed, the row
+        // must be created WITH the provider ids, never active-with-null-customer
+        // (which would later break the billing portal).
+        const users = new InMemoryUserBillingRepository();
 
-        const result = await runWebhook({ id: "evt_unknown", type: "unknown" }, workspaces);
+        await runWebhook(
+            {
+                id: "evt_updated_first",
+                type: "subscription.updated",
+                userId: USER_ID,
+                customerId: "cus_99",
+                subscriptionId: "sub_99",
+                status: "active",
+            },
+            users,
+        );
+
+        const row = await users.findByUserId(USER_ID);
+        expect(row?.subscriptionStatus).toBe("active");
+        expect(row?.providerCustomerId).toBe("cus_99");
+        expect(row?.providerSubscriptionId).toBe("sub_99");
+    });
+
+    test("unknown events are accepted but do not change subscription state", async () => {
+        const users = new InMemoryUserBillingRepository();
+        seedActive(users, "cus_99", "sub_99");
+
+        const result = await runWebhook({ id: "evt_unknown", type: "unknown" }, users);
 
         expect(result.verified).toBe(true);
-        const row = await workspaces.findById(WORKSPACE_ID);
+        const row = await users.findByUserId(USER_ID);
         expect(row?.subscriptionStatus).toBe("active");
     });
 
     test("replayed event with the same id is a deduped no-op", async () => {
-        const workspaces = new InMemoryWorkspaceBillingRepository();
-        seedUnsubscribed(workspaces);
+        const users = new InMemoryUserBillingRepository();
         const webhookEvents = new InMemoryBillingWebhookEventStore();
 
         await runWebhook(
             {
                 id: "evt_checkout_1",
                 type: "subscription.activated",
-                workspaceId: WORKSPACE_ID,
+                userId: USER_ID,
                 customerId: "cus_99",
                 subscriptionId: "sub_99",
             },
-            workspaces,
+            users,
             webhookEvents,
         );
-        expect((await workspaces.findById(WORKSPACE_ID))?.subscriptionStatus).toBe("active");
+        expect((await users.findByUserId(USER_ID))?.subscriptionStatus).toBe("active");
 
         // Replay the original event. It must be a no-op.
         const replay = await runWebhook(
             {
                 id: "evt_checkout_1",
                 type: "subscription.activated",
-                workspaceId: WORKSPACE_ID,
+                userId: USER_ID,
                 customerId: "cus_99",
                 subscriptionId: "sub_99",
             },
-            workspaces,
+            users,
             webhookEvents,
         );
 
@@ -197,8 +204,8 @@ describe("handleWebhookUseCase", () => {
     });
 
     test("a side-effect failure rolls back the idempotency row so the retry re-runs", async () => {
-        const workspaces = new InMemoryWorkspaceBillingRepository();
-        seedActive(workspaces, "cus_99", "sub_99");
+        const users = new InMemoryUserBillingRepository();
+        seedActive(users, "cus_99", "sub_99");
         const webhookEvents = new InMemoryBillingWebhookEventStore();
         const event: WebhookEvent = {
             id: "evt_retry_me",
@@ -210,26 +217,26 @@ describe("handleWebhookUseCase", () => {
 
         // First delivery: the side effect throws. The handler must propagate
         // (so the route 500s) AND drop the idempotency row it just recorded.
-        workspaces.update = async () => {
+        users.upsert = async () => {
             throw new Error("db down");
         };
-        await expect(runWebhook(event, workspaces, webhookEvents)).rejects.toThrow("db down");
+        await expect(runWebhook(event, users, webhookEvents)).rejects.toThrow("db down");
         expect(webhookEvents.has("evt_retry_me")).toBe(false);
 
-        // Provider retry: a healthy workspace repo applies the event for real
+        // Provider retry: a healthy user repo applies the event for real
         // instead of finding it recorded-as-handled and skipping it.
-        const healthy = new InMemoryWorkspaceBillingRepository();
+        const healthy = new InMemoryUserBillingRepository();
         seedActive(healthy, "cus_99", "sub_99");
         const retry = await runWebhook(event, healthy, webhookEvents);
 
         expect(retry.verified).toBe(true);
         expect(retry.deduped ?? false).toBe(false);
-        expect((await healthy.findById(WORKSPACE_ID))?.subscriptionStatus).toBe("past_due");
+        expect((await healthy.findByUserId(USER_ID))?.subscriptionStatus).toBe("past_due");
     });
 
     test("subscription event with unknown customer is a verified no-op", async () => {
-        const workspaces = new InMemoryWorkspaceBillingRepository();
-        seedUnsubscribed(workspaces);
+        const users = new InMemoryUserBillingRepository();
+        seedActive(users, "cus_99", "sub_99");
 
         const result = await runWebhook(
             {
@@ -239,22 +246,22 @@ describe("handleWebhookUseCase", () => {
                 subscriptionId: "sub_unknown",
                 status: "canceled",
             },
-            workspaces,
+            users,
         );
 
         expect(result.verified).toBe(true);
-        const row = await workspaces.findById(WORKSPACE_ID);
-        expect(row?.subscriptionStatus).toBeNull();
+        const row = await users.findByUserId(USER_ID);
+        expect(row?.subscriptionStatus).toBe("active");
     });
 
-    test("payment.succeeded flips past_due to active using customerId when workspaceId is absent", async () => {
-        // LS `subscription_payment_success` deliveries do not always echo
-        // `custom_data.workspace_id`. The handler must fall back to looking
-        // up the workspace by `customerId` so a past_due workspace can
-        // recover after the customer fixes their card.
-        const workspaces = new InMemoryWorkspaceBillingRepository();
-        workspaces.seed({
-            workspaceId: WORKSPACE_ID,
+    test("payment.succeeded flips past_due to active using customerId when userId is absent", async () => {
+        // LS `subscription_payment_success` deliveries do not carry the
+        // checkout custom-data userId. The handler must fall back to looking
+        // up the user by `customerId` so a past_due account can recover after
+        // the customer fixes their card.
+        const users = new InMemoryUserBillingRepository();
+        users.seed({
+            userId: USER_ID,
             providerCustomerId: "cus_99",
             providerSubscriptionId: "sub_99",
             subscriptionStatus: "past_due",
@@ -264,21 +271,21 @@ describe("handleWebhookUseCase", () => {
             {
                 id: "evt_payment_succeeded",
                 type: "payment.succeeded",
-                // workspaceId absent — exactly what LS sends on a renewal.
+                // userId absent — exactly what LS sends on a renewal.
                 customerId: "cus_99",
                 subscriptionId: "sub_99",
             },
-            workspaces,
+            users,
         );
 
         expect(result.verified).toBe(true);
-        const row = await workspaces.findById(WORKSPACE_ID);
+        const row = await users.findByUserId(USER_ID);
         expect(row?.subscriptionStatus).toBe("active");
     });
 
-    test("payment.failed marks the workspace past_due", async () => {
-        const workspaces = new InMemoryWorkspaceBillingRepository();
-        seedActive(workspaces, "cus_99", "sub_99");
+    test("payment.failed marks the user past_due", async () => {
+        const users = new InMemoryUserBillingRepository();
+        seedActive(users, "cus_99", "sub_99");
 
         const result = await runWebhook(
             {
@@ -287,17 +294,17 @@ describe("handleWebhookUseCase", () => {
                 customerId: "cus_99",
                 subscriptionId: "sub_99",
             },
-            workspaces,
+            users,
         );
 
         expect(result.verified).toBe(true);
-        const row = await workspaces.findById(WORKSPACE_ID);
+        const row = await users.findByUserId(USER_ID);
         expect(row?.subscriptionStatus).toBe("past_due");
     });
 
-    test("subscription.expired marks the workspace canceled", async () => {
-        const workspaces = new InMemoryWorkspaceBillingRepository();
-        seedActive(workspaces, "cus_99", "sub_99");
+    test("subscription.expired marks the user canceled", async () => {
+        const users = new InMemoryUserBillingRepository();
+        seedActive(users, "cus_99", "sub_99");
 
         const result = await runWebhook(
             {
@@ -307,19 +314,19 @@ describe("handleWebhookUseCase", () => {
                 subscriptionId: "sub_99",
                 status: "expired",
             },
-            workspaces,
+            users,
         );
 
         expect(result.verified).toBe(true);
-        const row = await workspaces.findById(WORKSPACE_ID);
+        const row = await users.findByUserId(USER_ID);
         expect(row?.subscriptionStatus).toBe("canceled");
     });
 
     test("order.refunded cancels subscription and clears refund eligibility", async () => {
-        const workspaces = new InMemoryWorkspaceBillingRepository();
+        const users = new InMemoryUserBillingRepository();
         const eligibleUntil = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
-        workspaces.seed({
-            workspaceId: WORKSPACE_ID,
+        users.seed({
+            userId: USER_ID,
             providerCustomerId: "cus_99",
             providerSubscriptionId: "sub_99",
             subscriptionStatus: "active",
@@ -332,11 +339,11 @@ describe("handleWebhookUseCase", () => {
                 type: "order.refunded",
                 customerId: "cus_99",
             },
-            workspaces,
+            users,
         );
 
         expect(result.verified).toBe(true);
-        const row = await workspaces.findById(WORKSPACE_ID);
+        const row = await users.findByUserId(USER_ID);
         expect(row?.subscriptionStatus).toBe("canceled");
         expect(row?.refundEligibleUntil).toBeNull();
     });

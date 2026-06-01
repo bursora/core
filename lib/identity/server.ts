@@ -10,6 +10,7 @@ import "server-only";
 import { env } from "../env";
 import { defaultSmtpMailer } from "../notification";
 import { acceptInviteUseCase } from "./accept-invite.usecase";
+import { parseEncryptionKey } from "./api-key.cipher";
 import { createWorkspaceUseCase } from "./create-workspace.usecase";
 import { DrizzleApiKeyAuditLogRepository } from "./drizzle-api-key-audit-log.repository";
 import { DrizzleApiKeyRepository } from "./drizzle-api-key.repository";
@@ -24,6 +25,7 @@ import { lookupApiKeyUseCase } from "./lookup-api-key.usecase";
 import type { MemberRole } from "./member";
 import { renameApiKeyUseCase } from "./rename-api-key.usecase";
 import { renameWorkspaceUseCase } from "./rename-workspace.usecase";
+import { revealApiKeyUseCase, type RevealApiKeyResult } from "./reveal-api-key.usecase";
 import { revokeApiKeyUseCase } from "./revoke-api-key.usecase";
 import { setWorkspaceEnvironmentUseCase } from "./set-workspace-environment.usecase";
 
@@ -35,6 +37,10 @@ const apiKeyAudit = () => new DrizzleApiKeyAuditLogRepository(db());
 const mailer = () => defaultSmtpMailer();
 
 const inviteAcceptUrl = (token: string) => `${env().BETTER_AUTH_URL}/invite/${token}`;
+
+// Decode the KEK once per request. `env()` already validated the length at
+// boot, so this never throws here; the parse just turns base64 into a Buffer.
+const encryptionKey = () => parseEncryptionKey(env().BURSORA_KEY);
 
 export async function createWorkspace(input: {
     name: string;
@@ -91,9 +97,14 @@ export async function inviteMember(input: {
     });
 }
 
-export async function listWorkspaceMembers(workspaceId: string) {
-    return listMembersUseCase({ workspaceId, members: members() });
-}
+/**
+ * Per-request memoised member roster. The dashboard home renders both the
+ * getting-started widget and the capacity row, which each read the roster —
+ * cache so the DB sees one query per request.
+ */
+export const listWorkspaceMembers = cache(async (workspaceId: string) =>
+    listMembersUseCase({ workspaceId, members: members() }),
+);
 
 export async function listPendingInvites(workspaceId: string) {
     return invites().listPendingByWorkspace(workspaceId);
@@ -122,6 +133,7 @@ export async function issueApiKey(input: {
         workspaceId: input.workspaceId,
         name: input.name,
         pepper: env().BURSORA_API_KEY_PEPPER,
+        encryptionKey: encryptionKey(),
         keys: apiKeys(),
         audit: apiKeyAudit(),
         userId: input.userId ?? null,
@@ -129,9 +141,35 @@ export async function issueApiKey(input: {
     });
 }
 
-export async function listApiKeys(workspaceId: string) {
-    return listApiKeysUseCase({ workspaceId, keys: apiKeys() });
+/**
+ * Reveal a key's plaintext for a workspace member. Scoped to the passed
+ * workspace id (which the action layer derives from the session, never the
+ * request body) and audited on success.
+ */
+export async function revealApiKey(input: {
+    id: string;
+    workspaceId: string;
+    userId?: string | null;
+    ip?: string | null;
+}): Promise<RevealApiKeyResult> {
+    return revealApiKeyUseCase({
+        id: input.id,
+        workspaceId: input.workspaceId,
+        encryptionKey: encryptionKey(),
+        keys: apiKeys(),
+        audit: apiKeyAudit(),
+        userId: input.userId ?? null,
+        ip: input.ip ?? null,
+    });
 }
+
+/**
+ * Per-request memoised key list. The dashboard home's getting-started widget
+ * and capacity row both read it on the same render — cache to dedupe.
+ */
+export const listApiKeys = cache(async (workspaceId: string) =>
+    listApiKeysUseCase({ workspaceId, keys: apiKeys() }),
+);
 
 export async function revokeApiKey(input: {
     id: string;
@@ -182,6 +220,15 @@ export async function lookupApiKey(plaintext: string) {
  */
 export const findMembership = cache(async (workspaceId: string, userId: string) =>
     members().findMembership(workspaceId, userId),
+);
+
+/**
+ * The user id of the workspace's owner — the single member whose Bursora Cloud
+ * subscription gates the workspace (see the billing gate). Used to decide
+ * whether the viewer is the one who can unlock it by subscribing.
+ */
+export const getWorkspaceOwnerUserId = cache(
+    async (workspaceId: string): Promise<string | null> => members().findOwnerUserId(workspaceId),
 );
 
 /**

@@ -58,7 +58,15 @@ export class InMemoryMemberRepository implements MemberRepository {
     }
 
     async findOwnerUserRole(workspaceId: string): Promise<UserRole | null> {
-        // Mirror the Drizzle repo: prefer an admin owner, else a stable order.
+        return this.resolveOwner(workspaceId)?.platformRole ?? null;
+    }
+
+    async findOwnerUserId(workspaceId: string): Promise<string | null> {
+        return this.resolveOwner(workspaceId)?.userId ?? null;
+    }
+
+    /** Mirror the Drizzle repo: prefer an admin owner, else a stable order. */
+    private resolveOwner(workspaceId: string) {
         const [owner] = Array.from(this.rows.values())
             .filter((m) => m.workspaceId === workspaceId && m.role === "owner")
             .map((m) => ({ ...m, platformRole: this.userRoles.get(m.userId) ?? USER_ROLE.user }))
@@ -69,7 +77,7 @@ export class InMemoryMemberRepository implements MemberRepository {
                     a.createdAt.getTime() - b.createdAt.getTime() ||
                     a.userId.localeCompare(b.userId),
             );
-        return owner?.platformRole ?? null;
+        return owner;
     }
 }
 

@@ -23,6 +23,7 @@ import {
     listApiKeysUseCase,
     revokeApiKeyUseCase,
 } from "@/lib/identity";
+import { parseEncryptionKey } from "@/lib/identity/api-key.cipher";
 import { CapturingMailer } from "@/tests/identity/fakes/capturing-mailer";
 import { InMemoryApiKeyAuditLogRepository } from "@/tests/identity/fakes/in-memory-api-key-audit-log.repository";
 import { InMemoryApiKeyRepository } from "@/tests/identity/fakes/in-memory-api-key.repository";
@@ -32,8 +33,10 @@ import {
 } from "@/tests/identity/fakes/in-memory-member.repository";
 import { InMemoryWorkspaceRepository } from "@/tests/identity/fakes/in-memory-workspace.repository";
 import { describe, expect, test } from "bun:test";
+import { randomBytes } from "node:crypto";
 
 const PEPPER = "test-pepper";
+const ENCRYPTION_KEY = parseEncryptionKey(randomBytes(32).toString("base64"));
 const WORKSPACE = "11111111-2222-3333-4444-555555555555";
 
 describe("@/lib/identity public API", () => {
@@ -91,6 +94,7 @@ describe("@/lib/identity public API", () => {
             workspaceId: WORKSPACE,
             name: "test",
             pepper: PEPPER,
+            encryptionKey: ENCRYPTION_KEY,
             keys,
             audit,
         });

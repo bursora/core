@@ -12,15 +12,39 @@ import {
     OpenRouterLogo,
     PerplexityLogo,
     TogetherLogo,
+    VercelLogo,
     XaiLogo,
 } from "./icons/brand-logos";
+
+/**
+ * Canonical provider ids, in display order. The set Bursora detects (SDK
+ * baseURL map + native manifests) and prices (LiteLLM sync allowlist). Source
+ * of truth for any UI that enumerates providers — e.g. the pricing-override
+ * form. Ollama is detected by the SDK but absent here: free local models have
+ * no synced price and no spend to cap.
+ */
+export const PROVIDER_IDS = [
+    "openai",
+    "anthropic",
+    "google",
+    "deepseek",
+    "groq",
+    "xai",
+    "mistral",
+    "together",
+    "fireworks",
+    "perplexity",
+    "openrouter",
+    "vercel",
+] as const;
+
+export type ProviderId = (typeof PROVIDER_IDS)[number];
 
 const PROVIDER_LABELS: Readonly<Record<string, string>> = {
     openai: "OpenAI",
     anthropic: "Anthropic",
     deepseek: "DeepSeek",
     google: "Google",
-    azure: "Azure OpenAI",
     groq: "Groq",
     xai: "xAI",
     mistral: "Mistral",
@@ -28,6 +52,12 @@ const PROVIDER_LABELS: Readonly<Record<string, string>> = {
     fireworks: "Fireworks AI",
     perplexity: "Perplexity",
     openrouter: "OpenRouter",
+    vercel: "Vercel AI Gateway",
+    // The Vercel AI SDK is an integration path, not a billed vendor — its events
+    // tag the underlying model's provider. It carries a label + icon so it
+    // renders as a provider in onboarding and on the landing, but stays out of
+    // PROVIDER_IDS (pricing / facets), where it would have nothing to price.
+    "ai-sdk": "Vercel AI SDK",
 };
 
 export function providerLabel(id: string): string {
@@ -48,6 +78,8 @@ const PROVIDER_ICONS: Readonly<
     fireworks: FireworksLogo,
     perplexity: PerplexityLogo,
     openrouter: OpenRouterLogo,
+    vercel: VercelLogo,
+    "ai-sdk": VercelLogo,
 };
 
 export function ProviderIcon({ id, className }: { id: string; className?: string }): ReactNode {

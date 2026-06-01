@@ -4,7 +4,7 @@
  * Daily cron pulls https://github.com/BerriAI/litellm's curated price map and
  * surfaces priced entries for our supported vendors as ScrapedRate rows.
  * Per-token costs in the feed are converted to per-1M tokens — the unit every
- * major provider (OpenAI, Anthropic, Google, Azure, DeepSeek) displays.
+ * major provider (OpenAI, Anthropic, Google, DeepSeek) displays.
  * Cache-read cost maps to cachePer1mUsd; absent → null. Cache-write cost is
  * ignored (not in schema).
  *
@@ -31,9 +31,11 @@ const USER_AGENT = "bursora-pricing-sync";
 // surfaced) and the reconciliation map: three vendors are keyed differently by
 // LiteLLM than by our SDK, so rows are stored under the slug the SDK reports —
 // otherwise an event's provider would never match a synced price.
-//   gemini       → google      (SDK derives from generativelanguage.googleapis.com)
-//   together_ai  → together
-//   fireworks_ai → fireworks
+//   gemini            → google   (SDK derives from generativelanguage.googleapis.com)
+//   together_ai       → together
+//   fireworks_ai      → fireworks
+//   vercel_ai_gateway → vercel    (zero-markup routing; key vercel_ai_gateway/<vendor>/<model>
+//                                  strips to <vendor>/<model>, the id the gateway API takes)
 const LITELLM_TO_SLUG: Readonly<Record<string, string>> = {
     openai: "openai",
     anthropic: "anthropic",
@@ -46,6 +48,7 @@ const LITELLM_TO_SLUG: Readonly<Record<string, string>> = {
     fireworks_ai: "fireworks",
     perplexity: "perplexity",
     openrouter: "openrouter",
+    vercel_ai_gateway: "vercel",
 };
 
 interface LiteLLMEntry {

@@ -13,7 +13,7 @@
 import type { PlanReadRepository } from "@/lib/plans/plan";
 import type { BillingWebhookEventStore } from "./billing-webhook-event.store";
 import type { PaymentProviderAdapter } from "./payment-provider.adapter";
-import type { WorkspaceBillingRepository } from "./workspace-billing.repository";
+import type { UserBillingRepository } from "./user-billing.repository";
 
 export type {
     CheckoutSessionInput,
@@ -29,16 +29,16 @@ export type {
 
 export interface BillingDeps {
     readonly provider: PaymentProviderAdapter;
-    readonly workspaces: WorkspaceBillingRepository;
+    readonly users: UserBillingRepository;
     readonly webhookEvents: BillingWebhookEventStore;
     readonly plans: PlanReadRepository;
     readonly appUrl: string;
 }
 
 export interface GetBillingPortalUrlUseCaseInput {
-    readonly workspaceId: string;
+    readonly userId: string;
     readonly returnUrl: string;
-    readonly workspaces: WorkspaceBillingRepository;
+    readonly users: UserBillingRepository;
     readonly provider: PaymentProviderAdapter;
 }
 
@@ -50,7 +50,7 @@ export interface HandleWebhookUseCaseInput {
     readonly rawBody: string;
     readonly signatureHeader: string;
     readonly provider: PaymentProviderAdapter;
-    readonly workspaces: WorkspaceBillingRepository;
+    readonly users: UserBillingRepository;
     readonly webhookEvents: BillingWebhookEventStore;
 }
 

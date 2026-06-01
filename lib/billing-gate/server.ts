@@ -5,8 +5,9 @@
  * asks before rendering real data. Lock truth table:
  *   - Self-host (`IS_CLOUD=false`) is always unlocked. This path never imports
  *     `lib/ee`, so the OSS build keeps excluding the billing module.
- *   - Cloud reads the workspace billing record and locks unless the
- *     subscription is in the active set (see `lib/billing-status`).
+ *   - Cloud reads the workspace owner's subscription and locks unless it is in
+ *     the active set (see `lib/billing-status`). The owner is the account that
+ *     pays; their subscription gates every workspace they own.
  *
  * The EE billing read is reached through a DYNAMIC import guarded by
  * `OSS_BUILD` — the sanctioned pattern that keeps `@/lib/ee` symbols out of
@@ -20,14 +21,17 @@ import "server-only";
 
 import { getRequestSession } from "@/lib/auth";
 import { isActiveSubscriptionStatus } from "@/lib/billing-status";
-import type { WorkspaceBillingRecord } from "@/lib/ee/billing/workspace-billing.repository";
+import type { UserBillingRecord } from "@/lib/ee/billing/user-billing.repository";
 import { env } from "@/lib/env";
 import { USER_ROLE } from "@/lib/identity/user-role";
 
 export interface BillingGateDeps {
     readonly isCloud: boolean;
-    /** Reads the workspace billing record. Only called on the cloud path. */
-    readonly readBilling: (workspaceId: string) => Promise<WorkspaceBillingRecord | null>;
+    /**
+     * Reads the workspace owner's billing record. Only called on the cloud
+     * path.
+     */
+    readonly readBilling: (workspaceId: string) => Promise<UserBillingRecord | null>;
     /**
      * True when the current session user is a platform admin. Optional: when
      * absent the gate treats the user as a non-admin. Production wiring reads
@@ -62,18 +66,18 @@ function billingGateDeps(): BillingGateDeps {
             // Unreachable in the OSS build: that bundle is self-host, so
             // `isCloud` is false and this read is never called.
             if (eeBillingPromise === null) return null;
-            const { getWorkspaceBillingRecord } = await eeBillingPromise;
-            return getWorkspaceBillingRecord(workspaceId);
+            const { getWorkspaceOwnerBillingRecord } = await eeBillingPromise;
+            return getWorkspaceOwnerBillingRecord(workspaceId);
         },
     };
 }
 
 /**
  * True when a cloud workspace should see the view-paywall instead of real
- * data. Always `false` on self-host. On cloud, `true` unless the workspace has
- * an active subscription. The billing read is deduped per request by
- * `getWorkspaceBillingRecord`'s own `cache()`, so the layout, the page it
- * renders, and `BillingSection` on settings share one query.
+ * data. Always `false` on self-host. On cloud, `true` unless the workspace
+ * owner has an active subscription. The billing read is deduped per request by
+ * `getUserBillingRecord`'s own `cache()`, so the layout and the page it renders
+ * share one query.
  */
 export async function cloudWorkspaceLocked(workspaceId: string): Promise<boolean> {
     const deps = billingGateDeps();

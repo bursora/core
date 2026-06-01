@@ -207,6 +207,12 @@ const VENDOR_CASES = [
         provider: "openrouter",
         eventModel: "anthropic/claude-3.5-sonnet",
     },
+    {
+        feedKey: "vercel_ai_gateway/openai/gpt-4o",
+        litellmProvider: "vercel_ai_gateway",
+        provider: "vercel",
+        eventModel: "openai/gpt-4o",
+    },
 ];
 
 const VENDOR_FEED: LiteLLMFeed = Object.fromEntries(

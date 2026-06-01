@@ -35,6 +35,15 @@ export interface MemberRepository {
      * workspace exemptions (rate limit, fair-use cap).
      */
     findOwnerUserRole(workspaceId: string): Promise<UserRole | null>;
+
+    /**
+     * Returns the `user_id` of the workspace owner (the member whose workspace
+     * role is `owner`) or `null` when the workspace has no owner row. Used by
+     * the cloud billing gate to resolve whose subscription gates the workspace.
+     * Resolves to a single stable owner with the same ordering as
+     * `findOwnerUserRole`.
+     */
+    findOwnerUserId(workspaceId: string): Promise<string | null>;
 }
 
 export interface InviteRepository {

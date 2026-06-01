@@ -5,8 +5,8 @@
  * asks before rendering real data. It encodes the lock truth table:
  *   - Self-host (`IS_CLOUD=false`) is always unlocked. That branch never reads
  *     billing, so the OSS build keeps excluding `lib/ee`.
- *   - Cloud reads the workspace billing record and locks unless the
- *     subscription is in the active set {active, past_due, unpaid}.
+ *   - Cloud reads the workspace owner's subscription and locks unless it is in
+ *     the active set {active, past_due, unpaid}.
  *
  * The check is fully injected (mirrors `event-bundle/server.ts`) so this suite
  * exercises the truth table without an env or a real database: it sets the
@@ -14,13 +14,14 @@
  */
 
 import { cloudWorkspaceLocked, setBillingGateDepsForTesting } from "@/lib/billing-gate/server";
-import type { WorkspaceBillingRecord } from "@/lib/ee/billing/workspace-billing.repository";
+import type { UserBillingRecord } from "@/lib/ee/billing/user-billing.repository";
 import { afterEach, describe, expect, test } from "bun:test";
 
 const WORKSPACE_ID = "11111111-2222-3333-4444-555555555555";
+const OWNER_USER_ID = "99999999-8888-7777-6666-555555555555";
 
-const record = (subscriptionStatus: string | null): WorkspaceBillingRecord => ({
-    workspaceId: WORKSPACE_ID,
+const record = (subscriptionStatus: string | null): UserBillingRecord => ({
+    userId: OWNER_USER_ID,
     providerCustomerId: "cus_1",
     providerSubscriptionId: "sub_1",
     subscriptionStatus,

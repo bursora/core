@@ -18,9 +18,12 @@
 
 import "server-only";
 
+import { parseEncryptionKey } from "./identity/api-key.cipher";
+
 const ALWAYS_REQUIRED = [
     "DATABASE_URL",
     "BURSORA_API_KEY_PEPPER",
+    "BURSORA_KEY",
     "BETTER_AUTH_SECRET",
     "BETTER_AUTH_URL",
     "SMTP_HOST",
@@ -43,6 +46,12 @@ type CloudKey = (typeof CLOUD_REQUIRED)[number];
 export interface Env {
     readonly DATABASE_URL: string;
     readonly BURSORA_API_KEY_PEPPER: string;
+    /**
+     * Base64-encoded 32-byte key-encryption key. Seals API key plaintext at
+     * rest (AES-256-GCM) so the dashboard can show a key to its workspace
+     * members on demand. Distinct from the HMAC pepper used for auth.
+     */
+    readonly BURSORA_KEY: string;
     readonly BETTER_AUTH_SECRET: string;
     readonly BETTER_AUTH_URL: string;
     readonly SMTP_HOST: string;
@@ -164,6 +173,10 @@ export function loadEnv(source: Record<string, string | undefined>): Env {
         throw new Error(`SMTP_PORT must be a positive integer, got: ${source.SMTP_PORT}`);
     }
 
+    // Fail fast on a malformed KEK so a misconfigured deploy never starts and
+    // then 500s on the first reveal. `parseEncryptionKey` throws on wrong length.
+    parseEncryptionKey(source.BURSORA_KEY ?? "");
+
     const smtpUser = source.SMTP_USER ?? "";
     const smtpPass = source.SMTP_PASS ?? "";
     if (smtpUser.length > 0 !== smtpPass.length > 0) {
@@ -199,6 +212,7 @@ export function loadEnv(source: Record<string, string | undefined>): Env {
     return Object.freeze({
         DATABASE_URL: getAlways("DATABASE_URL"),
         BURSORA_API_KEY_PEPPER: getAlways("BURSORA_API_KEY_PEPPER"),
+        BURSORA_KEY: getAlways("BURSORA_KEY"),
         BETTER_AUTH_SECRET: getAlways("BETTER_AUTH_SECRET"),
         BETTER_AUTH_URL: getAlways("BETTER_AUTH_URL"),
         SMTP_HOST: getAlways("SMTP_HOST"),

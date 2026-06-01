@@ -7,6 +7,17 @@ export interface ApiKeyListItem {
     readonly scopes: readonly string[];
     readonly createdAt: Date;
     readonly revokedAt: Date | null;
+    /**
+     * True when the plaintext is sealed at rest and can be revealed. False for
+     * keys issued before encryption at rest existed — those must be rotated to
+     * regain copy. Carries no secret material to the client, only the flag.
+     */
+    readonly revealable: boolean;
+    /**
+     * Non-secret trailing 6 chars of the plaintext, for a Stripe-style masked
+     * suffix in the list. NULL on legacy rows → the cell falls back to dots.
+     */
+    readonly last6: string | null;
 }
 
 export interface ListApiKeysInput {
@@ -30,5 +41,7 @@ export async function listApiKeysUseCase(
         scopes: row.scopes,
         createdAt: row.createdAt,
         revokedAt: row.revokedAt,
+        revealable: row.seal !== null,
+        last6: row.last6,
     }));
 }

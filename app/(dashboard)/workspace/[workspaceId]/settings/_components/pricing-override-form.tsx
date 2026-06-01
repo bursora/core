@@ -18,7 +18,7 @@ import { Input } from "@/components/ui/input";
 import { MoneyInput } from "@/components/ui/money-input";
 import { RichSelect, type RichSelectItem } from "@/components/ui/rich-select";
 import { normalizeNumericInput } from "@/lib/format";
-import { providerLabel } from "@/lib/providers";
+import { PROVIDER_IDS, providerLabel, type ProviderId } from "@/lib/providers";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useTransition } from "react";
 import { useForm } from "react-hook-form";
@@ -70,17 +70,9 @@ interface PricingOverrideFormProps {
     initialValues?: Partial<FormValues>;
 }
 
-type ProviderValue = "openai" | "anthropic" | "deepseek" | "google" | "azure";
 type RegionValue = "global" | "us" | "eu" | "asia";
 
-const PROVIDER_VALUES: readonly ProviderValue[] = [
-    "openai",
-    "anthropic",
-    "deepseek",
-    "google",
-    "azure",
-];
-const PROVIDER_ITEMS: readonly RichSelectItem<ProviderValue>[] = PROVIDER_VALUES.map((value) => ({
+const PROVIDER_ITEMS: readonly RichSelectItem<ProviderId>[] = PROVIDER_IDS.map((value) => ({
     value,
     label: providerLabel(value),
 }));
@@ -178,8 +170,8 @@ export function PricingOverrideForm({
                                 <FormItem className="sm:col-span-2">
                                     <FormLabel>Provider</FormLabel>
                                     <FormControl>
-                                        <RichSelect<ProviderValue>
-                                            value={field.value as ProviderValue}
+                                        <RichSelect<ProviderId>
+                                            value={field.value as ProviderId}
                                             onValueChange={field.onChange}
                                             items={PROVIDER_ITEMS}
                                             placeholder="Select provider"

@@ -3,7 +3,7 @@ import "server-only";
 import type { Db } from "@/lib/db";
 import { schema } from "@/lib/db";
 import { and, desc, eq, isNull } from "drizzle-orm";
-import type { ApiKey } from "./api-key";
+import type { ApiKey, ApiKeySeal } from "./api-key";
 import type { ApiKeyRepository } from "./api-key.repository";
 
 export class DrizzleApiKeyRepository implements ApiKeyRepository {
@@ -12,6 +12,8 @@ export class DrizzleApiKeyRepository implements ApiKeyRepository {
     async insert(input: {
         workspaceId: string;
         keyHash: string;
+        seal: ApiKeySeal;
+        last6: string;
         name: string;
         scopes: readonly string[];
     }): Promise<ApiKey> {
@@ -20,6 +22,10 @@ export class DrizzleApiKeyRepository implements ApiKeyRepository {
             .values({
                 workspaceId: input.workspaceId,
                 keyHash: input.keyHash,
+                cipherText: input.seal.cipherText,
+                cipherIv: input.seal.cipherIv,
+                cipherAuthTag: input.seal.cipherAuthTag,
+                last6: input.last6,
                 name: input.name,
                 scopes: [...input.scopes],
             })
@@ -33,6 +39,15 @@ export class DrizzleApiKeyRepository implements ApiKeyRepository {
             .select()
             .from(schema.apiKeys)
             .where(eq(schema.apiKeys.keyHash, keyHash))
+            .limit(1);
+        return row ? toApiKey(row) : null;
+    }
+
+    async findById(id: string, workspaceId: string): Promise<ApiKey | null> {
+        const [row] = await this.db
+            .select()
+            .from(schema.apiKeys)
+            .where(and(eq(schema.apiKeys.id, id), eq(schema.apiKeys.workspaceId, workspaceId)))
             .limit(1);
         return row ? toApiKey(row) : null;
     }
@@ -80,10 +95,20 @@ export class DrizzleApiKeyRepository implements ApiKeyRepository {
 type Row = typeof schema.apiKeys.$inferSelect;
 
 function toApiKey(row: Row): ApiKey {
+    const seal: ApiKeySeal | null =
+        row.cipherText !== null && row.cipherIv !== null && row.cipherAuthTag !== null
+            ? {
+                  cipherText: row.cipherText,
+                  cipherIv: row.cipherIv,
+                  cipherAuthTag: row.cipherAuthTag,
+              }
+            : null;
     return {
         id: row.id,
         workspaceId: row.workspaceId,
         keyHash: row.keyHash,
+        seal,
+        last6: row.last6,
         name: row.name,
         scopes: row.scopes,
         createdAt: row.createdAt,

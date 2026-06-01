@@ -39,7 +39,7 @@ export async function ApiKeysSection({
 
             <DashboardSection
                 label="API keys"
-                sublabel="shown once at creation · store it somewhere safe"
+                sublabel="reveal and copy a key any time · keep it server-side"
                 actions={<IssueApiKeyButton workspaceId={workspaceId} autoOpen={autoIssue} />}
                 bodyClassName="-mx-5"
             >
@@ -47,6 +47,7 @@ export async function ApiKeysSection({
                     <TableHeader>
                         <TableRow>
                             <TableHead>Name</TableHead>
+                            <TableHead>Key</TableHead>
                             <TableHead>Created</TableHead>
                             <TableHead>Status</TableHead>
                             <TableHead className="text-right">Actions</TableHead>
@@ -55,7 +56,7 @@ export async function ApiKeysSection({
                     <TableBody>
                         {keys.length === 0 ? (
                             <TableRow>
-                                <TableCell colSpan={4} className="text-muted-foreground">
+                                <TableCell colSpan={5} className="text-muted-foreground">
                                     No keys issued yet.
                                 </TableCell>
                             </TableRow>
@@ -68,6 +69,8 @@ export async function ApiKeysSection({
                                     createdLabel={formatDateTime(k.createdAt)}
                                     workspaceId={workspaceId}
                                     initialRevoked={Boolean(k.revokedAt)}
+                                    revealable={k.revealable}
+                                    last6={k.last6}
                                 />
                             ))
                         )}

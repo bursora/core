@@ -29,7 +29,12 @@ export interface WebhookEvent {
      */
     readonly id: string;
     readonly type: WebhookEventType;
-    readonly workspaceId?: string | null;
+    /**
+     * Subscribing user id, echoed back via checkout `custom_data` on the
+     * first-activation event. Absent on recurring events (renewal, cancel),
+     * which resolve the user by `customerId` instead.
+     */
+    readonly userId?: string | null;
     readonly customerId?: string | null;
     readonly subscriptionId?: string | null;
     readonly status?: string | null;
@@ -38,7 +43,7 @@ export interface WebhookEvent {
 }
 
 export interface CheckoutSessionInput {
-    readonly workspaceId: string;
+    readonly userId: string;
     readonly userEmail: string;
     /**
      * Provider-specific identifier for the SKU/plan being subscribed to.

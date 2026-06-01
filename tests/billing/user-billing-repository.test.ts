@@ -75,4 +75,25 @@ describe("UserBillingRepository", () => {
         await repo.upsert({ userId: USER_ID, providerCustomerId: "cus_1" });
         expect(await repo.findByProviderCustomerId("cus_absent")).toBeNull();
     });
+
+    test("claiming a customer id held by another user transfers it instead of failing", async () => {
+        const repo = new InMemoryUserBillingRepository();
+        await repo.upsert({
+            userId: OTHER_USER_ID,
+            providerCustomerId: "cus_shared",
+            subscriptionStatus: "active",
+        });
+
+        // A fresh user re-runs checkout against the same provider customer.
+        await repo.upsert({
+            userId: USER_ID,
+            providerCustomerId: "cus_shared",
+            subscriptionStatus: "active",
+        });
+
+        // The id now resolves only to the new claimant; the stale row is detached.
+        expect((await repo.findByProviderCustomerId("cus_shared"))?.userId).toBe(USER_ID);
+        expect((await repo.findByUserId(USER_ID))?.providerCustomerId).toBe("cus_shared");
+        expect((await repo.findByUserId(OTHER_USER_ID))?.providerCustomerId).toBeNull();
+    });
 });

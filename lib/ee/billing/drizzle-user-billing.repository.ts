@@ -2,7 +2,7 @@ import "server-only";
 
 import type { Db } from "@/lib/db";
 import { schema } from "@/lib/db";
-import { eq } from "drizzle-orm";
+import { and, eq, ne } from "drizzle-orm";
 import type {
     UserBillingRecord,
     UserBillingRepository,
@@ -52,10 +52,31 @@ export class DrizzleUserBillingRepository implements UserBillingRepository {
         if (input.refundEligibleUntil !== undefined) {
             set.refundEligibleUntil = input.refundEligibleUntil;
         }
-        await this.db
-            .insert(schema.userSubscriptions)
-            .values({ userId: input.userId, ...set })
-            .onConflictDoUpdate({ target: schema.userSubscriptions.userId, set });
+        const claimedCustomerId = set.providerCustomerId;
+        await this.db.transaction(async (tx) => {
+            // provider_customer_id is unique to one user (reverse-resolve must be
+            // unambiguous). When a concrete id is written, detach it from any
+            // other user's row first so a serialized re-claim doesn't trip the
+            // unique index. Happens when a prior owner deleted their account and
+            // re-subscribed, or a fresh user re-runs checkout against the same
+            // provider customer. Newest claimant wins the id; the stale row keeps
+            // its other fields but stops resolving by customer id.
+            if (claimedCustomerId != null) {
+                await tx
+                    .update(schema.userSubscriptions)
+                    .set({ providerCustomerId: null })
+                    .where(
+                        and(
+                            eq(schema.userSubscriptions.providerCustomerId, claimedCustomerId),
+                            ne(schema.userSubscriptions.userId, input.userId),
+                        ),
+                    );
+            }
+            await tx
+                .insert(schema.userSubscriptions)
+                .values({ userId: input.userId, ...set })
+                .onConflictDoUpdate({ target: schema.userSubscriptions.userId, set });
+        });
     }
 }
 

@@ -31,15 +31,15 @@ export default async function WorkspaceEntryPage({ searchParams }: WorkspaceEntr
     const first = memberships[0];
     if (!first) {
         if (env().IS_CLOUD) {
+            const { billing } = await searchParams;
+            // Back from checkout: forward to the plan step with the flag. The
+            // activation webhook is async and usually lands after this redirect,
+            // so the flag must outlive an unsubscribed check; the step polls until
+            // it activates. Dropping it here strands the user on the buy card.
+            if (billing === "ok") redirect(planStepReturnedActivePath());
             const subscribed = await isUserSubscribed(session.user.id);
-            if (subscribed) {
-                // Just back from checkout: show the plan step's confirmation,
-                // which auto-advances. Otherwise nothing to buy — go create a
-                // workspace.
-                const { billing } = await searchParams;
-                if (billing === "ok") redirect(planStepReturnedActivePath());
-                redirect(wizardStepPath(1));
-            }
+            // Already subscribed, not returning from checkout: go create a workspace.
+            if (subscribed) redirect(wizardStepPath(1));
             if (!(await isPlanStepSkipped(session.user.id))) redirect(wizardStepPath(0));
         }
         redirect(wizardStepPath(1));

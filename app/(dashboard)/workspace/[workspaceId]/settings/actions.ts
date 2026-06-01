@@ -37,6 +37,7 @@ import {
     issueApiKey,
     renameApiKey,
     renameWorkspace,
+    revealApiKey,
     revokeApiKey,
     setWorkspaceEnvironment,
 } from "@/lib/identity/server";
@@ -137,6 +138,46 @@ export const revokeApiKeyAction = withWorkspace(
             rethrowRedirect(err);
             const message = err instanceof Error ? err.message : "Failed to revoke key.";
             return actionFail(message);
+        }
+    },
+    { getWorkspaceId: workspaceIdFromPrevForm },
+);
+
+/**
+ * Reveal result handed back to the client. Carries the plaintext only on the
+ * `revealed` path; the `not_recoverable` and `error` paths carry no secret.
+ * A foreign-workspace or unknown key surfaces as `error` (the use case treats
+ * it as not-found) so the response never confirms whether an id exists.
+ */
+export type RevealResult =
+    | { readonly status: "revealed"; readonly plaintext: string }
+    | { readonly status: "not_recoverable" }
+    | { readonly status: "error"; readonly message: string };
+
+export const revealApiKeyAction = withWorkspace(
+    async (ctx, _prev: RevealResult | null, formData: FormData): Promise<RevealResult> => {
+        try {
+            const workspaceId = workspaceIdFromForm(formData);
+            const id = requireField(formData, "keyId");
+
+            const result = await revealApiKey({
+                id,
+                workspaceId,
+                userId: ctx.session.user.id,
+                ip: await requestSourceIp(),
+            });
+
+            if (result.kind === "ok") {
+                return { status: "revealed", plaintext: result.plaintext };
+            }
+            if (result.kind === "not_recoverable") {
+                return { status: "not_recoverable" };
+            }
+            return { status: "error", message: "Key not found." };
+        } catch (err: unknown) {
+            rethrowRedirect(err);
+            const message = err instanceof Error ? err.message : "Failed to reveal key.";
+            return { status: "error", message };
         }
     },
     { getWorkspaceId: workspaceIdFromPrevForm },

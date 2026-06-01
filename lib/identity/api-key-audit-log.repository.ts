@@ -1,11 +1,11 @@
 /**
  * Append-only audit trail for API key lifecycle events (create / revoke /
- * rename). Every successful mutation against `api_keys` is recorded here so
- * the workspace can answer "who did what, from where, when?" without
- * reconstructing it from logs.
+ * rename / reveal). Every successful mutation against `api_keys`, plus each
+ * plaintext reveal, is recorded here so the workspace can answer "who did
+ * what, from where, when?" without reconstructing it from logs.
  */
 
-export type ApiKeyAuditAction = "create" | "revoke" | "rename";
+export type ApiKeyAuditAction = "create" | "revoke" | "rename" | "reveal";
 
 export interface ApiKeyAuditLogEntry {
     readonly id: string;

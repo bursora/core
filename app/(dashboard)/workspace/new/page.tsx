@@ -1,85 +1,150 @@
-import { AppShell } from "@/components/shell/app-shell";
-import {
-    WORKSPACE_COOKIE,
-    WORKSPACE_COOKIE_MAX_AGE_SECONDS,
-} from "@/components/shell/app-shell-helpers";
-import { getRequestSession, requireSessionUI } from "@/lib/auth";
-import { createWorkspace } from "@/lib/identity/server";
-import { buildWorkspacePath } from "@/lib/routes";
-import { Building2 } from "lucide-react";
-import { cookies } from "next/headers";
+import { readIssuedKey } from "@/app/(dashboard)/workspace/[workspaceId]/settings/issued-key-cookie";
+import { OnboardingShell } from "@/components/shell/onboarding-shell";
+import { requireSessionUI } from "@/lib/auth";
+import { env } from "@/lib/env";
+import { assertWorkspaceMemberOrNotFound, listApiKeys } from "@/lib/identity/server";
+import { getCheckoutAction, isUserSubscribed } from "@/lib/onboarding/plan-entry";
+import { isPlanStepSkipped } from "@/lib/onboarding/plan-skip-cookie";
+import { getOnboardingPlan } from "@/lib/onboarding/plan-view";
+import { parseWizardStep, wizardStepPath, type WizardStep } from "@/lib/onboarding/wizard-step";
+import { deriveOnboardingWorkspaceName } from "@/lib/onboarding/workspace-name";
+import { Building2, KeyRound, Terminal } from "lucide-react";
 import { redirect } from "next/navigation";
-import { NewWorkspaceForm, type NewWorkspaceState } from "./new-workspace-form";
+import { ConnectStep } from "./_components/connect-step";
+import { KeyStep } from "./_components/key-step";
+import { PlanStep } from "./_components/plan-step";
+import { WizardStepper } from "./_components/wizard-stepper";
+import { createWorkspaceAction, skipPlanStepAction } from "./actions";
+import { NewWorkspaceForm } from "./new-workspace-form";
 
-async function createWorkspaceAction(
-    _prev: NewWorkspaceState,
-    formData: FormData,
-): Promise<NewWorkspaceState> {
-    "use server";
-
-    const session = await getRequestSession();
-    if (!session) redirect("/login");
-
-    const name = String(formData.get("name") ?? "").trim();
-    if (name.length === 0) {
-        return { error: "Workspace name is required" };
-    }
-
-    const rawEnvironment = String(formData.get("environment") ?? "").trim();
-    const environment = rawEnvironment.length > 0 ? rawEnvironment : undefined;
-
-    let workspaceId: string;
-    try {
-        const result = await createWorkspace({
-            name,
-            ownerId: session.user.id,
-            ...(environment ? { environment } : {}),
-        });
-        workspaceId = result.workspace.id;
-    } catch (err: unknown) {
-        return {
-            error: err instanceof Error ? err.message : "Failed to create workspace",
-        };
-    }
-
-    const jar = await cookies();
-    jar.set(WORKSPACE_COOKIE, workspaceId, {
-        path: "/",
-        maxAge: WORKSPACE_COOKIE_MAX_AGE_SECONDS,
-        sameSite: "lax",
-    });
-
-    redirect(buildWorkspacePath(workspaceId, "keys"));
+interface NewWorkspacePageProps {
+    searchParams: Promise<{ step?: string; ws?: string; billing?: string }>;
 }
 
-export default async function NewWorkspacePage() {
-    await requireSessionUI();
+const HEADERS: Record<
+    Exclude<WizardStep, 0>,
+    { icon: typeof Building2; title: string; subtitle: string }
+> = {
+    1: {
+        icon: Building2,
+        title: "Create a workspace",
+        subtitle: "Workspaces hold your API keys, budgets, and team members.",
+    },
+    2: {
+        icon: KeyRound,
+        title: "Your API key",
+        subtitle: "The SDK uses this secret to authenticate to Bursora.",
+    },
+    3: {
+        icon: Terminal,
+        title: "Connect your app",
+        subtitle: "Wrap your AI client and send your first call.",
+    },
+};
+
+export default async function NewWorkspacePage({ searchParams }: NewWorkspacePageProps) {
+    const session = await requireSessionUI();
+    const { step: rawStep, ws, billing } = await searchParams;
+    const isCloud = env().IS_CLOUD;
+    const step = parseWizardStep(rawStep);
+
+    // Step ⓪ Plan is the optional, cloud-only subscribe step.
+    if (step === 0 && !isCloud) redirect(wizardStepPath(1));
+    if (step === 0) {
+        const subscribed = await isUserSubscribed(session.user.id);
+        const returnedFromCheckout = billing === "ok";
+        const returnedActive = subscribed && returnedFromCheckout;
+        // Already subscribed and just browsing back here: nothing to do, send
+        // them on to create a workspace.
+        if (subscribed && !returnedFromCheckout) redirect(wizardStepPath(1));
+        // Returned from a successful checkout but the activation webhook hasn't
+        // landed yet — render the plan step in its polling "finalizing" state
+        // so it self-updates the moment the subscription activates.
+        const awaitingActivation = returnedFromCheckout && !subscribed;
+        const plan = await getOnboardingPlan();
+        // No active plan configured — skip a step we can't render.
+        if (!plan) redirect(wizardStepPath(1));
+        const checkoutAction = await getCheckoutAction();
+        return (
+            <OnboardingShell>
+                <div className="mb-6">
+                    <WizardStepper current={0} showPlan />
+                </div>
+                <PlanStep
+                    plan={plan}
+                    checkoutAction={checkoutAction}
+                    skipAction={skipPlanStepAction}
+                    returnedActive={returnedActive}
+                    awaitingActivation={awaitingActivation}
+                    nextPath={wizardStepPath(1)}
+                />
+            </OnboardingShell>
+        );
+    }
+
+    // Steps ② and ③ are scoped to a workspace the user owns; `/workspace/new`
+    // sits outside the `[workspaceId]` layout, so assert membership here to keep
+    // a forged `?ws=` from reading someone else's keys.
+    if (step === 2 || step === 3) {
+        if (!ws) redirect(wizardStepPath(1));
+        await assertWorkspaceMemberOrNotFound({ workspaceId: ws, userId: session.user.id });
+    }
+
+    const planSkipped = isCloud && (await isPlanStepSkipped(session.user.id));
+    const header = HEADERS[step];
+    const Icon = header.icon;
 
     return (
-        <AppShell>
-            <div className="mx-auto w-full max-w-xl px-4 py-10 sm:py-16">
-                <section className="rounded-[8px] border border-border bg-background p-6">
-                    <div className="flex items-start gap-3">
-                        <div
-                            className="flex h-10 w-10 items-center justify-center rounded-md bg-muted text-foreground"
-                            aria-hidden
-                        >
-                            <Building2 className="h-5 w-5" />
-                        </div>
-                        <div className="space-y-1.5">
-                            <h2 className="font-mono text-[10.5px] uppercase tracking-[0.08em] text-muted-foreground/70">
-                                Create a workspace
-                            </h2>
-                            <p className="text-sm text-muted-foreground">
-                                Workspaces hold your API keys, budgets, and team members.
-                            </p>
-                        </div>
-                    </div>
-                    <div className="mt-5">
-                        <NewWorkspaceForm action={createWorkspaceAction} />
-                    </div>
-                </section>
+        <OnboardingShell>
+            <div className="mb-6">
+                <WizardStepper current={step} showPlan={isCloud} planSkipped={planSkipped} />
             </div>
-        </AppShell>
+            <section className="rounded-[8px] border border-border bg-background p-6">
+                <div className="flex items-start gap-3">
+                    <div
+                        className="flex h-10 w-10 items-center justify-center rounded-md bg-muted text-foreground"
+                        aria-hidden
+                    >
+                        <Icon className="h-5 w-5" />
+                    </div>
+                    <div className="space-y-1.5">
+                        <h2 className="font-mono text-[10.5px] uppercase tracking-[0.08em] text-muted-foreground/70">
+                            {header.title}
+                        </h2>
+                        <p className="text-sm text-muted-foreground">{header.subtitle}</p>
+                    </div>
+                </div>
+                <div className="mt-5">
+                    {step === 1 ? (
+                        <NewWorkspaceForm
+                            action={createWorkspaceAction}
+                            defaultName={deriveOnboardingWorkspaceName({
+                                name: session.user.name,
+                                email: session.user.email,
+                            })}
+                        />
+                    ) : null}
+                    {step === 2 && ws ? <KeyStepSection workspaceId={ws} /> : null}
+                    {step === 3 && ws ? <ConnectStepSection workspaceId={ws} /> : null}
+                </div>
+            </section>
+        </OnboardingShell>
     );
+}
+
+async function KeyStepSection({ workspaceId }: { readonly workspaceId: string }) {
+    const [plaintext, keys] = await Promise.all([readIssuedKey(), listApiKeys(workspaceId)]);
+    const hasLiveKey = keys.some((k) => k.revokedAt === null);
+    return <KeyStep workspaceId={workspaceId} plaintext={plaintext} hasLiveKey={hasLiveKey} />;
+}
+
+async function ConnectStepSection({ workspaceId }: { readonly workspaceId: string }) {
+    const keys = await listApiKeys(workspaceId);
+    const liveKey = keys
+        .filter((k) => k.revokedAt === null)
+        .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0];
+    // No live key means step ② was skipped or the key was revoked; send the user
+    // back to issue one rather than render a snippet with no key id.
+    if (!liveKey) redirect(wizardStepPath(2, workspaceId));
+    return <ConnectStep workspaceId={workspaceId} apiKeyId={liveKey.id} />;
 }

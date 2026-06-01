@@ -1,0 +1,118 @@
+"use server";
+
+/**
+ * Server actions for the welcome wizard at `/workspace/new`.
+ *
+ * Step ① creates the workspace, sets the active-workspace cookie, issues the
+ * first API key (idempotent — skips when a live key already exists), flashes the
+ * plaintext via the issued-key cookie, then advances to step ②. Cookies can
+ * only be set inside a Server Action, so the key is issued here rather than in
+ * the step ② render; the plaintext is shown once on entry to step ②.
+ *
+ * The continue action clears the flash and advances to step ③ so the secret
+ * isn't re-shown on a back-navigation.
+ */
+
+import {
+    ISSUED_KEY_COOKIE,
+    ISSUED_KEY_COOKIE_MAX_AGE,
+} from "@/app/(dashboard)/workspace/[workspaceId]/settings/issued-key-cookie";
+import {
+    WORKSPACE_COOKIE,
+    WORKSPACE_COOKIE_MAX_AGE_SECONDS,
+} from "@/components/shell/app-shell-helpers";
+import { requestSourceIp } from "@/lib/actions/request-ip";
+import { getRequestSession } from "@/lib/auth";
+import { createWorkspace, issueApiKey, listApiKeys } from "@/lib/identity/server";
+import { setPlanStepSkipped } from "@/lib/onboarding/plan-skip-cookie";
+import { wizardStepPath } from "@/lib/onboarding/wizard-step";
+import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
+import type { NewWorkspaceState } from "./new-workspace-form";
+
+const FIRST_KEY_NAME = "Default";
+
+/**
+ * Skip the optional plan step ⓪. Records the skip so the `/workspace` entry
+ * redirect doesn't route the user back here, then advances to the workspace
+ * step. Never blocks progress.
+ */
+export async function skipPlanStepAction(): Promise<void> {
+    const session = await getRequestSession();
+    if (!session) redirect("/login");
+    await setPlanStepSkipped(session.user.id);
+    redirect(wizardStepPath(1));
+}
+
+export async function createWorkspaceAction(
+    _prev: NewWorkspaceState,
+    formData: FormData,
+): Promise<NewWorkspaceState> {
+    const session = await getRequestSession();
+    if (!session) redirect("/login");
+
+    const name = String(formData.get("name") ?? "").trim();
+    if (name.length === 0) {
+        return { error: "Workspace name is required" };
+    }
+
+    const rawEnvironment = String(formData.get("environment") ?? "").trim();
+    const environment = rawEnvironment.length > 0 ? rawEnvironment : undefined;
+
+    let workspaceId: string;
+    try {
+        const result = await createWorkspace({
+            name,
+            ownerId: session.user.id,
+            ...(environment ? { environment } : {}),
+        });
+        workspaceId = result.workspace.id;
+    } catch (err: unknown) {
+        return {
+            error: err instanceof Error ? err.message : "Failed to create workspace",
+        };
+    }
+
+    const jar = await cookies();
+    jar.set(WORKSPACE_COOKIE, workspaceId, {
+        path: "/",
+        maxAge: WORKSPACE_COOKIE_MAX_AGE_SECONDS,
+        sameSite: "lax",
+    });
+
+    // Auto-issue the first key so the user lands on step ② with a ready secret.
+    // Idempotent: a freshly created workspace has no keys, but guard anyway so a
+    // resubmit can't mint a second key or clobber an existing flash.
+    const existing = await listApiKeys(workspaceId);
+    if (!existing.some((k) => k.revokedAt === null)) {
+        const issued = await issueApiKey({
+            workspaceId,
+            name: FIRST_KEY_NAME,
+            userId: session.user.id,
+            ip: await requestSourceIp(),
+        });
+        jar.set(ISSUED_KEY_COOKIE, issued.plaintext, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === "production",
+            sameSite: "lax",
+            maxAge: ISSUED_KEY_COOKIE_MAX_AGE,
+            path: "/",
+        });
+    }
+
+    redirect(wizardStepPath(2, workspaceId));
+}
+
+export async function continueToConnectAction(formData: FormData): Promise<void> {
+    const session = await getRequestSession();
+    if (!session) redirect("/login");
+
+    const workspaceId = String(formData.get("ws") ?? "").trim();
+    if (workspaceId.length === 0) redirect(wizardStepPath(1));
+
+    // Clear the one-time secret so a back-navigation to step ② doesn't re-show it.
+    const jar = await cookies();
+    jar.set(ISSUED_KEY_COOKIE, "", { maxAge: 0, path: "/" });
+
+    redirect(wizardStepPath(3, workspaceId));
+}

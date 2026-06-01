@@ -1,9 +1,12 @@
 import { API_KEY_PREFIX, issueApiKeyUseCase } from "@/lib/identity";
+import { parseEncryptionKey } from "@/lib/identity/api-key.cipher";
 import { describe, expect, test } from "bun:test";
+import { randomBytes } from "node:crypto";
 import { InMemoryApiKeyAuditLogRepository } from "./fakes/in-memory-api-key-audit-log.repository";
 import { InMemoryApiKeyRepository } from "./fakes/in-memory-api-key.repository";
 
 const PEPPER = "test-pepper-do-not-use-in-prod";
+const ENCRYPTION_KEY = parseEncryptionKey(randomBytes(32).toString("base64"));
 
 describe("issueApiKeyUseCase", () => {
     test("returns plaintext once and persists only the hash", async () => {
@@ -14,6 +17,7 @@ describe("issueApiKeyUseCase", () => {
             workspaceId,
             name: "test",
             pepper: PEPPER,
+            encryptionKey: ENCRYPTION_KEY,
             keys: repo,
             audit: new InMemoryApiKeyAuditLogRepository(),
         });
@@ -36,6 +40,7 @@ describe("issueApiKeyUseCase", () => {
             workspaceId,
             name: "test",
             pepper: PEPPER,
+            encryptionKey: ENCRYPTION_KEY,
             keys: repo,
             audit: new InMemoryApiKeyAuditLogRepository(),
         });
@@ -43,6 +48,7 @@ describe("issueApiKeyUseCase", () => {
             workspaceId,
             name: "test",
             pepper: PEPPER,
+            encryptionKey: ENCRYPTION_KEY,
             keys: repo,
             audit: new InMemoryApiKeyAuditLogRepository(),
         });

@@ -169,6 +169,27 @@
             "when": 1780140371253,
             "tag": "0023_user_role",
             "breakpoints": true
+        },
+        {
+            "idx": 24,
+            "version": "7",
+            "when": 1780224888443,
+            "tag": "0024_user_subscriptions",
+            "breakpoints": true
+        },
+        {
+            "idx": 25,
+            "version": "7",
+            "when": 1780229525963,
+            "tag": "0025_api_key_cipher",
+            "breakpoints": true
+        },
+        {
+            "idx": 26,
+            "version": "7",
+            "when": 1780295357226,
+            "tag": "0026_sad_morgan_stark",
+            "breakpoints": true
         }
     ]
 }

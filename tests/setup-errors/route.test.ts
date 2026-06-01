@@ -70,6 +70,8 @@ const setup = (opts: { knownKey?: boolean } = {}): Harness => {
                   id: API_KEY_ID,
                   workspaceId: WORKSPACE,
                   keyHash: "stubbed-hash",
+                  seal: null,
+                  last6: null,
                   name: "stub",
                   scopes: [],
                   createdAt: new Date("2025-01-01T00:00:00Z"),

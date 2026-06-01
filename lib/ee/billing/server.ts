@@ -12,22 +12,19 @@ import "server-only";
 
 import { db } from "@/lib/db";
 import { env } from "@/lib/env";
+import { DrizzleMemberRepository } from "@/lib/identity/drizzle-member.repository";
 import { drizzlePlanRepository } from "@/lib/plans/drizzle-plan.repository";
-import { buildWorkspacePath } from "@/lib/routes";
 import { cache } from "react";
 import type { BillingWebhookEventStore } from "./billing-webhook-event.store";
 import { billingWebhookPruneCutoff } from "./billing-webhook-retention";
 import { createCheckoutSessionUseCase } from "./create-checkout-session.usecase";
 import { DrizzleBillingWebhookEventStore } from "./drizzle-billing-webhook-event.store";
-import { DrizzleWorkspaceBillingRepository } from "./drizzle-workspace-billing.repository";
+import { DrizzleUserBillingRepository } from "./drizzle-user-billing.repository";
 import { getBillingPortalUrlUseCase } from "./get-billing-portal-url.usecase";
 import { handleWebhookUseCase } from "./handle-webhook.usecase";
 import { LemonSqueezyApiAdapter } from "./lemonsqueezy.adapter";
 import type { BillingDeps, PaymentProviderAdapter } from "./types";
-import type {
-    WorkspaceBillingRecord,
-    WorkspaceBillingRepository,
-} from "./workspace-billing.repository";
+import type { UserBillingRecord, UserBillingRepository } from "./user-billing.repository";
 
 function buildDeps(): BillingDeps {
     const e = env();
@@ -48,7 +45,7 @@ function buildDeps(): BillingDeps {
             ...(webhookSecretNext.length > 0 ? { webhookSecretNext } : {}),
             storeId,
         }),
-        workspaces: new DrizzleWorkspaceBillingRepository(database),
+        users: new DrizzleUserBillingRepository(database),
         webhookEvents: new DrizzleBillingWebhookEventStore(database),
         plans: drizzlePlanRepository(database),
         appUrl: e.NEXT_PUBLIC_APP_URL,
@@ -131,38 +128,40 @@ export function resetBillingCredentialCheckForTesting(): void {
     credentialCheck = null;
 }
 
-const settingsUrl = (workspaceId: string, status: "ok" | "cancel"): string =>
-    `${billingDeps().appUrl}${buildWorkspacePath(workspaceId, "settings")}?billing=${status}`;
+// Post-checkout landing: the signed-in user's workspace home, where the
+// now-unlocked dashboard renders. The `?billing` flag is carried for parity
+// with the in-app confirmation copy.
+const landingUrl = (status: "ok" | "cancel"): string =>
+    `${billingDeps().appUrl}/workspace?billing=${status}`;
 
 /**
- * Open Lemon Squeezy checkout for the active Bursora Cloud plan. The variant is
- * resolved from the `plans` table (the daily sync's source of truth), charges
- * at checkout, and auto-renews on LS's side; Bursora records no bill of its
- * own. Throws `NoActiveCloudPlanError` when no plan is configured.
+ * Open Lemon Squeezy checkout for the active Bursora Cloud plan, keyed to the
+ * subscribing user. The variant is resolved from the `plans` table (the daily
+ * sync's source of truth), charges at checkout, and auto-renews on LS's side;
+ * Bursora records no bill of its own. Throws `NoActiveCloudPlanError` when no
+ * plan is configured.
  */
 export async function createCheckoutSession(input: {
-    workspaceId: string;
+    userId: string;
     userEmail: string;
 }): Promise<{ url: string }> {
     const deps = billingDeps();
     return createCheckoutSessionUseCase({
-        workspaceId: input.workspaceId,
+        userId: input.userId,
         userEmail: input.userEmail,
-        successUrl: settingsUrl(input.workspaceId, "ok"),
-        cancelUrl: settingsUrl(input.workspaceId, "cancel"),
+        successUrl: landingUrl("ok"),
+        cancelUrl: landingUrl("cancel"),
         provider: deps.provider,
         plans: deps.plans,
     });
 }
 
-export async function getBillingPortalUrl(input: {
-    workspaceId: string;
-}): Promise<{ url: string }> {
+export async function getBillingPortalUrl(input: { userId: string }): Promise<{ url: string }> {
     const deps = billingDeps();
     return getBillingPortalUrlUseCase({
-        workspaceId: input.workspaceId,
-        returnUrl: `${deps.appUrl}${buildWorkspacePath(input.workspaceId, "settings")}`,
-        workspaces: deps.workspaces,
+        userId: input.userId,
+        returnUrl: `${deps.appUrl}/workspace`,
+        users: deps.users,
         provider: deps.provider,
     });
 }
@@ -176,19 +175,33 @@ export async function handleWebhook(input: {
         rawBody: input.rawBody,
         signatureHeader: input.signatureHeader,
         provider: deps.provider,
-        workspaces: deps.workspaces,
+        users: deps.users,
         webhookEvents: deps.webhookEvents,
     });
 }
 
 /**
- * Read a workspace's billing record. Returns `null` if the workspace does not
- * exist. Wrapped in React `cache()` so the readers in one render — the
- * view-paywall gate and `BillingSection` — share a single query per request.
+ * Read a user's billing record. Returns `null` when the user has never
+ * subscribed. Wrapped in React `cache()` so readers in one render share a
+ * single query per request: `BillingSection` reads the current user, and the
+ * view-paywall gate reads the workspace owner — both route through here.
  */
-export const getWorkspaceBillingRecord = cache(
-    async (workspaceId: string): Promise<WorkspaceBillingRecord | null> =>
-        billingDeps().workspaces.findById(workspaceId),
+export const getUserBillingRecord = cache(
+    async (userId: string): Promise<UserBillingRecord | null> =>
+        billingDeps().users.findByUserId(userId),
+);
+
+/**
+ * Resolve the owner of a workspace and read their billing record. The cloud
+ * view-paywall gate calls this: a workspace is unlocked iff its owner has an
+ * active subscription. Returns `null` when the workspace has no owner row.
+ */
+export const getWorkspaceOwnerBillingRecord = cache(
+    async (workspaceId: string): Promise<UserBillingRecord | null> => {
+        const ownerUserId = await new DrizzleMemberRepository(db()).findOwnerUserId(workspaceId);
+        if (!ownerUserId) return null;
+        return getUserBillingRecord(ownerUserId);
+    },
 );
 
 /**
@@ -206,6 +219,6 @@ export type {
     BillingDeps,
     BillingWebhookEventStore,
     PaymentProviderAdapter,
-    WorkspaceBillingRecord,
-    WorkspaceBillingRepository,
+    UserBillingRecord,
+    UserBillingRepository,
 };

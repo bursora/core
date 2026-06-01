@@ -1,9 +1,12 @@
 import { issueApiKeyUseCase, renameApiKeyUseCase, revokeApiKeyUseCase } from "@/lib/identity";
+import { parseEncryptionKey } from "@/lib/identity/api-key.cipher";
 import { describe, expect, test } from "bun:test";
+import { randomBytes } from "node:crypto";
 import { InMemoryApiKeyAuditLogRepository } from "./fakes/in-memory-api-key-audit-log.repository";
 import { InMemoryApiKeyRepository } from "./fakes/in-memory-api-key.repository";
 
 const PEPPER = "test-pepper-do-not-use-in-prod";
+const ENCRYPTION_KEY = parseEncryptionKey(randomBytes(32).toString("base64"));
 const WORKSPACE_ID = "11111111-2222-3333-4444-555555555555";
 const USER_ID = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
 const IP = "203.0.113.42";
@@ -17,6 +20,7 @@ describe("api key audit log", () => {
             workspaceId: WORKSPACE_ID,
             name: "ci",
             pepper: PEPPER,
+            encryptionKey: ENCRYPTION_KEY,
             keys,
             audit,
             userId: USER_ID,
@@ -40,6 +44,7 @@ describe("api key audit log", () => {
             workspaceId: WORKSPACE_ID,
             name: "ci",
             pepper: PEPPER,
+            encryptionKey: ENCRYPTION_KEY,
             keys,
             audit,
             userId: USER_ID,
@@ -74,6 +79,7 @@ describe("api key audit log", () => {
             workspaceId: WORKSPACE_ID,
             name: "ci",
             pepper: PEPPER,
+            encryptionKey: ENCRYPTION_KEY,
             keys,
             audit,
             userId: USER_ID,

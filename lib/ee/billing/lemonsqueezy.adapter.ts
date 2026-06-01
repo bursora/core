@@ -73,7 +73,7 @@ export class LemonSqueezyApiAdapter implements PaymentProviderAdapter {
                 attributes: {
                     checkout_data: {
                         email: input.userEmail,
-                        custom: { workspace_id: input.workspaceId },
+                        custom: { user_id: input.userId },
                     },
                     product_options: {
                         redirect_url: input.successUrl,
@@ -231,9 +231,9 @@ export function mapLemonSqueezyEvent(
 ): WebhookEvent {
     const eventName = payload.meta?.event_name ?? "";
     const dataId = payload.data?.id !== undefined ? String(payload.data.id) : "";
-    const workspaceId =
-        typeof payload.meta?.custom_data?.workspace_id === "string"
-            ? (payload.meta.custom_data.workspace_id as string)
+    const userId =
+        typeof payload.meta?.custom_data?.user_id === "string"
+            ? (payload.meta.custom_data.user_id as string)
             : null;
     const attributes = payload.data?.attributes ?? {};
 
@@ -268,7 +268,7 @@ export function mapLemonSqueezyEvent(
     return {
         id: eventId,
         type,
-        workspaceId,
+        userId,
         customerId,
         subscriptionId,
         status,

@@ -4,6 +4,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 const BASE = {
     DATABASE_URL: "postgres://x",
     BURSORA_API_KEY_PEPPER: "pepper",
+    BURSORA_KEY: "x".repeat(43) + "=", // 32 bytes base64
     BETTER_AUTH_SECRET: "secret",
     BETTER_AUTH_URL: "http://localhost:3000",
     SMTP_HOST: "localhost",
@@ -53,6 +54,21 @@ describe("loadEnv", () => {
 
     test("throws when SMTP_PORT is non-numeric", () => {
         expect(() => loadEnv({ ...FULL_CLOUD, SMTP_PORT: "not-a-port" })).toThrow(/SMTP_PORT/);
+    });
+
+    test("exposes BURSORA_KEY", () => {
+        const env = loadEnv(BASE);
+        expect(env.BURSORA_KEY).toBe(BASE.BURSORA_KEY);
+    });
+
+    test("throws when BURSORA_KEY is missing", () => {
+        const partial = { ...BASE };
+        delete (partial as Record<string, string | undefined>).BURSORA_KEY;
+        expect(() => loadEnv(partial)).toThrow(/BURSORA_KEY/);
+    });
+
+    test("throws when BURSORA_KEY does not decode to 32 bytes", () => {
+        expect(() => loadEnv({ ...BASE, BURSORA_KEY: "too-short" })).toThrow(/BURSORA_KEY/);
     });
 
     test("throws when LEMONSQUEEZY_API_KEY is missing in cloud mode", () => {
@@ -245,6 +261,7 @@ describe("env() cache reset", () => {
         "IS_CLOUD",
         "DATABASE_URL",
         "BURSORA_API_KEY_PEPPER",
+        "BURSORA_KEY",
         "BETTER_AUTH_SECRET",
         "BETTER_AUTH_URL",
         "SMTP_HOST",
@@ -274,6 +291,7 @@ describe("env() cache reset", () => {
 
         process.env.DATABASE_URL = "postgres://x";
         process.env.BURSORA_API_KEY_PEPPER = "pepper";
+        process.env.BURSORA_KEY = "x".repeat(43) + "=";
         process.env.BETTER_AUTH_SECRET = "secret";
         process.env.BETTER_AUTH_URL = "http://localhost:3000";
         process.env.SMTP_HOST = "localhost";

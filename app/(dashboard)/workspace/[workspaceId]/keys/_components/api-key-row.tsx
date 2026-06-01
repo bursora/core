@@ -1,10 +1,9 @@
 "use client";
 
 /**
- * Single API key row with optimistic revoke. The credential (plaintext) is
- * shown exactly once at issuance and never stored, so this row only displays
- * the key id as a reference for identification and revocation — it is not
- * itself the SDK credential.
+ * Single API key row with optimistic revoke. The masked Key cell reveals the
+ * plaintext on demand (decrypted server-side, audited) for active keys; the
+ * name column shows the key-id tail as a stable reference.
  */
 
 import { revokeApiKeyAction } from "@/app/(dashboard)/workspace/[workspaceId]/settings/actions";
@@ -20,6 +19,7 @@ import { CheckCircle2Icon, CircleSlashIcon, KeyRoundIcon, PencilIcon, Trash2 } f
 import { useOptimistic, useState, useTransition } from "react";
 import { DangerConfirm } from "./danger-confirm";
 import { RenameApiKeyDialog } from "./rename-api-key-dialog";
+import { RevealApiKeyCell } from "./reveal-api-key-cell";
 
 interface ApiKeyRowProps {
     readonly id: string;
@@ -27,12 +27,24 @@ interface ApiKeyRowProps {
     readonly createdLabel: string;
     readonly workspaceId: string;
     readonly initialRevoked: boolean;
+    /** True when the plaintext is sealed at rest and can be revealed. */
+    readonly revealable: boolean;
+    /** Trailing 6 chars of the plaintext for the masked suffix; null on legacy keys. */
+    readonly last6: string | null;
 }
 
 const ID_TAIL_LENGTH = 8;
 const idTail = (id: string): string => id.slice(-ID_TAIL_LENGTH);
 
-export function ApiKeyRow({ id, name, createdLabel, workspaceId, initialRevoked }: ApiKeyRowProps) {
+export function ApiKeyRow({
+    id,
+    name,
+    createdLabel,
+    workspaceId,
+    initialRevoked,
+    revealable,
+    last6,
+}: ApiKeyRowProps) {
     const initial: RevokeState = initialRevoked ? "revoked" : "active";
     const [state, dispatch] = useOptimistic<RevokeState, "begin" | "rollback">(
         initial,
@@ -63,6 +75,18 @@ export function ApiKeyRow({ id, name, createdLabel, workspaceId, initialRevoked 
                         </code>
                     </div>
                 </div>
+            </TableCell>
+            <TableCell>
+                {isRevoked ? (
+                    <span className="text-xs text-muted-foreground">—</span>
+                ) : (
+                    <RevealApiKeyCell
+                        keyId={id}
+                        workspaceId={workspaceId}
+                        revealable={revealable}
+                        last6={last6}
+                    />
+                )}
             </TableCell>
             <TableCell className="text-sm text-muted-foreground">{createdLabel}</TableCell>
             <TableCell>

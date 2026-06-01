@@ -9,7 +9,7 @@ import { LemonSqueezyApiAdapter } from "@/lib/ee/billing/lemonsqueezy.adapter";
 import { describe, expect, test } from "bun:test";
 import { createHmac } from "node:crypto";
 
-const WORKSPACE_ID = "11111111-2222-3333-4444-555555555555";
+const USER_ID = "11111111-2222-3333-4444-555555555555";
 const STORE_ID = "1";
 const VARIANT_ID = "variant_456";
 const API_KEY = "ls_test_api_key";
@@ -39,7 +39,7 @@ const sign = (rawBody: string, secret: string): string =>
     createHmac("sha256", secret).update(rawBody).digest("hex");
 
 describe("LemonSqueezyApiAdapter.createCheckoutSession", () => {
-    test("POSTs to /v1/checkouts with store, variant, custom workspace id, email, redirect", async () => {
+    test("POSTs to /v1/checkouts with store, variant, custom user id, email, redirect", async () => {
         const { fetcher, calls } = recordingFetch([
             new Response(
                 JSON.stringify({
@@ -60,7 +60,7 @@ describe("LemonSqueezyApiAdapter.createCheckoutSession", () => {
         });
 
         const result = await adapter.createCheckoutSession({
-            workspaceId: WORKSPACE_ID,
+            userId: USER_ID,
             userEmail: "founder@example.com",
             variantId: VARIANT_ID,
             successUrl: "https://app.test/ok",
@@ -88,7 +88,7 @@ describe("LemonSqueezyApiAdapter.createCheckoutSession", () => {
         const attrs = data.attributes as Record<string, unknown>;
         const checkoutData = attrs.checkout_data as Record<string, unknown>;
         expect(checkoutData.email).toBe("founder@example.com");
-        expect((checkoutData.custom as Record<string, string>).workspace_id).toBe(WORKSPACE_ID);
+        expect((checkoutData.custom as Record<string, string>).user_id).toBe(USER_ID);
         const productOptions = attrs.product_options as Record<string, string>;
         expect(productOptions.redirect_url).toBe("https://app.test/ok");
 
@@ -119,7 +119,7 @@ describe("LemonSqueezyApiAdapter.createCheckoutSession", () => {
 
         await expect(
             adapter.createCheckoutSession({
-                workspaceId: WORKSPACE_ID,
+                userId: USER_ID,
                 userEmail: "founder@example.com",
                 variantId: VARIANT_ID,
                 successUrl: "https://app.test/ok",
@@ -234,7 +234,7 @@ describe("LemonSqueezyApiAdapter.verifyAndParseEvent", () => {
     const subscriptionCreatedBody = JSON.stringify({
         meta: {
             event_name: "subscription_created",
-            custom_data: { workspace_id: WORKSPACE_ID },
+            custom_data: { user_id: USER_ID },
         },
         data: {
             id: "12345",
@@ -254,13 +254,13 @@ describe("LemonSqueezyApiAdapter.verifyAndParseEvent", () => {
             signatureHeader: signature,
         });
         expect(event.type).toBe("subscription.activated");
-        expect(event.workspaceId).toBe(WORKSPACE_ID);
+        expect(event.userId).toBe(USER_ID);
         expect(event.customerId).toBe("99");
         expect(event.subscriptionId).toBe("12345");
     });
 
     test("rejects a tampered body", () => {
-        const tampered = subscriptionCreatedBody.replace(WORKSPACE_ID, "deadbeef");
+        const tampered = subscriptionCreatedBody.replace(USER_ID, "deadbeef");
         const signature = sign(subscriptionCreatedBody, WEBHOOK_SECRET);
         expect(() =>
             adapter.verifyAndParseEvent({
@@ -302,7 +302,7 @@ describe("LemonSqueezyApiAdapter.verifyAndParseEvent", () => {
         const body = JSON.stringify({
             meta: {
                 event_name: "subscription_payment_success",
-                custom_data: { workspace_id: WORKSPACE_ID },
+                custom_data: { user_id: USER_ID },
             },
             data: {
                 id: "in_1",
@@ -321,7 +321,7 @@ describe("LemonSqueezyApiAdapter.verifyAndParseEvent", () => {
             signatureHeader: signature,
         });
         expect(event.type).toBe("payment.succeeded");
-        expect(event.workspaceId).toBe(WORKSPACE_ID);
+        expect(event.userId).toBe(USER_ID);
         expect(event.customerId).toBe("99");
         expect(event.invoiceId).toBe("in_1");
     });
@@ -351,7 +351,7 @@ describe("LemonSqueezyApiAdapter.verifyAndParseEvent", () => {
         const body = JSON.stringify({
             meta: {
                 event_name: "subscription_updated",
-                custom_data: { workspace_id: WORKSPACE_ID },
+                custom_data: { user_id: USER_ID },
             },
             data: {
                 id: "12345",
@@ -494,7 +494,7 @@ describe("LemonSqueezyApiAdapter.verifyAndParseEvent", () => {
         const body = JSON.stringify({
             meta: {
                 event_name: "subscription_created",
-                custom_data: { workspace_id: WORKSPACE_ID },
+                custom_data: { user_id: USER_ID },
             },
             data: {
                 id: "12345",
@@ -525,7 +525,7 @@ describe("LemonSqueezyApiAdapter.verifyAndParseEvent two-secret rotation", () =>
     const body = JSON.stringify({
         meta: {
             event_name: "subscription_created",
-            custom_data: { workspace_id: WORKSPACE_ID },
+            custom_data: { user_id: USER_ID },
         },
         data: {
             id: "12345",

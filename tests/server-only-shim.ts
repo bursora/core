@@ -41,5 +41,20 @@ plugin({
                 export function notFound() {}
             `,
         }));
+        build.module("next/headers", () => ({
+            loader: "js",
+            contents: `
+                export async function cookies() {
+                    return {
+                        get: () => undefined,
+                        getAll: () => [],
+                        set: () => {},
+                        delete: () => {},
+                        has: () => false,
+                    };
+                }
+                export async function headers() { return new Headers(); }
+            `,
+        }));
     },
 });

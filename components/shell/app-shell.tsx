@@ -5,6 +5,7 @@
  * interactive bits live in `*.client.tsx` siblings.
  */
 
+import { GettingStartedWidget } from "@/app/(dashboard)/workspace/[workspaceId]/_components/getting-started-widget";
 import { KeyboardShortcuts } from "@/components/shell/keyboard-shortcuts";
 import { NotificationCenter } from "@/components/shell/notification-center";
 import { SidebarNav } from "@/components/shell/sidebar-nav";
@@ -58,7 +59,12 @@ export async function AppShell({ children, urlWorkspaceId }: AppShellProps) {
                 <SidebarContent>
                     <SidebarNav activeWorkspaceId={activeWorkspaceId} />
                 </SidebarContent>
-                <SidebarFooter>
+                <SidebarFooter className="gap-2">
+                    {activeWorkspaceId ? (
+                        <Suspense fallback={null}>
+                            <GettingStartedWidget workspaceId={activeWorkspaceId} />
+                        </Suspense>
+                    ) : null}
                     <div className="flex items-center gap-2 px-2 py-1 text-xs text-muted-foreground">
                         <Logo className="size-5" />
                         <span>Bursora</span>

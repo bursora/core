@@ -5,10 +5,12 @@
  * view explicitly opts in to seeing revoked rows via `{ includeRevoked: true }`.
  */
 
+import type { ApiKeySeal } from "@/lib/identity";
 import { describe, expect, test } from "bun:test";
 import { InMemoryApiKeyRepository } from "./fakes/in-memory-api-key.repository";
 
 const WORKSPACE = "11111111-2222-3333-4444-555555555555";
+const SEAL: ApiKeySeal = { cipherText: "ct", cipherIv: "iv", cipherAuthTag: "tag" };
 
 describe("ApiKeyRepository.listByWorkspace revoked filter", () => {
     test("hides revoked keys by default", async () => {
@@ -16,12 +18,16 @@ describe("ApiKeyRepository.listByWorkspace revoked filter", () => {
         await repo.insert({
             workspaceId: WORKSPACE,
             keyHash: "hash-active",
+            seal: SEAL,
+            last6: "active",
             name: "active",
             scopes: [],
         });
         const toRevoke = await repo.insert({
             workspaceId: WORKSPACE,
             keyHash: "hash-revoked",
+            seal: SEAL,
+            last6: "revokd",
             name: "old",
             scopes: [],
         });
@@ -38,12 +44,16 @@ describe("ApiKeyRepository.listByWorkspace revoked filter", () => {
         await repo.insert({
             workspaceId: WORKSPACE,
             keyHash: "hash-active",
+            seal: SEAL,
+            last6: "active",
             name: "active",
             scopes: [],
         });
         const toRevoke = await repo.insert({
             workspaceId: WORKSPACE,
             keyHash: "hash-revoked",
+            seal: SEAL,
+            last6: "revokd",
             name: "old",
             scopes: [],
         });

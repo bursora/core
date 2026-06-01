@@ -15,64 +15,19 @@ import { CopyButton } from "@/components/ui/copy-button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DashboardSection } from "@/components/ui/workspace/dashboard-section";
 import { env } from "@/lib/env";
-import { extractRegion } from "@/lib/extract-snippet";
 import { listApiKeys } from "@/lib/identity/server";
+import { SNIPPET_TEMPLATES, type ProviderSnippet } from "@/lib/onboarding/snippets";
+import { ProviderIcon } from "@/lib/providers";
 import { buildWorkspacePath, KEYS_FROM_SPEND_EMPTY } from "@/lib/routes";
 import { KeyRound } from "lucide-react";
 import Link from "next/link";
-import path from "node:path";
-
-interface ProviderSnippet {
-    readonly id: string;
-    readonly label: string;
-    readonly code: string;
-}
-
-const ROOT = path.join(process.cwd(), "..");
-const PROVIDERS: ReadonlyArray<{
-    id: string;
-    label: string;
-    file: string;
-    region: string;
-}> = [
-    {
-        id: "openai",
-        label: "OpenAI",
-        file: "sdk/examples/openai-quickstart.ts",
-        region: "openai-quickstart",
-    },
-    {
-        id: "anthropic",
-        label: "Anthropic",
-        file: "sdk/examples/anthropic-quickstart.ts",
-        region: "anthropic-quickstart",
-    },
-    {
-        id: "openai-embeddings",
-        label: "OpenAI Embeddings",
-        file: "sdk/examples/openai-embeddings-quickstart.ts",
-        region: "openai-embeddings-quickstart",
-    },
-    {
-        id: "deepseek",
-        label: "DeepSeek",
-        file: "sdk/examples/deepseek-quickstart.ts",
-        region: "deepseek-quickstart",
-    },
-];
-
-const TEMPLATES: ReadonlyArray<ProviderSnippet> = PROVIDERS.map((p) => ({
-    id: p.id,
-    label: p.label,
-    code: extractRegion(path.join(ROOT, p.file), p.region),
-}));
 
 interface EmptyOnboardingProps {
     readonly workspaceId: string;
 }
 
 export async function EmptyOnboarding({ workspaceId }: EmptyOnboardingProps) {
-    const first = TEMPLATES[0];
+    const first = SNIPPET_TEMPLATES[0];
     if (!first) return null;
 
     const allKeys = await listApiKeys(workspaceId);
@@ -81,7 +36,7 @@ export async function EmptyOnboarding({ workspaceId }: EmptyOnboardingProps) {
         .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0];
 
     const snippets: ReadonlyArray<ProviderSnippet> = liveKey
-        ? TEMPLATES.map((t) => ({
+        ? SNIPPET_TEMPLATES.map((t) => ({
               ...t,
               code: renderSnippet(t.code, {
                   apiKey: liveKey.id,
@@ -89,7 +44,7 @@ export async function EmptyOnboarding({ workspaceId }: EmptyOnboardingProps) {
                   endpoint: env().NEXT_PUBLIC_APP_URL,
               }),
           }))
-        : TEMPLATES;
+        : SNIPPET_TEMPLATES;
 
     return (
         <div className="flex flex-col gap-4">
@@ -120,9 +75,10 @@ export async function EmptyOnboarding({ workspaceId }: EmptyOnboardingProps) {
                 sublabel="install the sdk and send your first request"
             >
                 <Tabs defaultValue={first.id}>
-                    <TabsList>
+                    <TabsList className="flex-wrap justify-start group-data-[orientation=horizontal]/tabs:h-auto">
                         {snippets.map((s) => (
-                            <TabsTrigger key={s.id} value={s.id}>
+                            <TabsTrigger key={s.id} value={s.id} className="flex-none">
+                                <ProviderIcon id={s.id} className="size-4" />
                                 {s.label}
                             </TabsTrigger>
                         ))}

@@ -1,7 +1,14 @@
 import "server-only";
 
 import type { Db } from "@/lib/db";
-import { notifications, workspaces } from "@/lib/db/schema";
+import {
+    notifications,
+    users,
+    userSubscriptions,
+    workspaceMembers,
+    workspaces,
+} from "@/lib/db/schema";
+import { USER_ROLE } from "@/lib/identity/user-role";
 import { and, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import type { NotificationDisplay, NotificationSeverity, NotificationSource } from "./types";
 
@@ -129,11 +136,42 @@ export function drizzleNotificationsRepository(db: Db): NotificationsRepository 
                 conditions.push(eq(notifications.workspaceId, workspaceId));
             }
             if (subscriptionStatuses !== undefined) {
-                // Cloud bell feed: only surface notifications from workspaces
-                // with an active subscription. A locked workspace has a NULL or
-                // non-active status, which `inArray` excludes, so its alert
-                // content never leaks through the cross-workspace bell.
-                conditions.push(inArray(workspaces.subscriptionStatus, [...subscriptionStatuses]));
+                // Cloud bell feed: surface a workspace only when the SAME single
+                // owner the view-paywall gate locks against has an active
+                // subscription. The gate resolves ONE deterministic owner
+                // (admin-first, then oldest, then id; see `findOwnerUserId`) and
+                // checks only that owner's status, so the bell must rank owners
+                // by that exact order and test rank 1. Filtering against any
+                // owner would leak a locked workspace's alert content whenever a
+                // co-owner is subscribed but the resolved owner is not.
+                const rankedOwners = db
+                    .select({
+                        workspaceId: workspaceMembers.workspaceId,
+                        userId: workspaceMembers.userId,
+                        rank: sql<number>`row_number() over (
+                            partition by ${workspaceMembers.workspaceId}
+                            order by (${users.role} = ${USER_ROLE.admin}) desc,
+                                ${workspaceMembers.createdAt} asc,
+                                ${workspaceMembers.userId} asc
+                        )`.as("rank"),
+                    })
+                    .from(workspaceMembers)
+                    .innerJoin(users, eq(users.id, workspaceMembers.userId))
+                    .where(eq(workspaceMembers.role, "owner"))
+                    .as("ranked_owners");
+                const activeOwnerWorkspaceIds = db
+                    .select({ workspaceId: rankedOwners.workspaceId })
+                    .from(rankedOwners)
+                    .innerJoin(userSubscriptions, eq(userSubscriptions.userId, rankedOwners.userId))
+                    .where(
+                        and(
+                            eq(rankedOwners.rank, 1),
+                            inArray(userSubscriptions.subscriptionStatus, [
+                                ...subscriptionStatuses,
+                            ]),
+                        ),
+                    );
+                conditions.push(inArray(notifications.workspaceId, activeOwnerWorkspaceIds));
             }
             if (sources && sources.length > 0) {
                 conditions.push(inArray(notifications.source, [...sources]));

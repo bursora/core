@@ -15,6 +15,7 @@ export {
     API_KEY_RANDOM_LENGTH,
     type ApiKey,
     type ApiKeyLookup,
+    type ApiKeySeal,
     type IssuedApiKey,
 } from "./api-key";
 export {
@@ -38,6 +39,11 @@ export { listMembersUseCase } from "./list-members.usecase";
 export { lookupApiKeyUseCase } from "./lookup-api-key.usecase";
 export { renameApiKeyUseCase, type RenameApiKeyInput } from "./rename-api-key.usecase";
 export { renameWorkspaceUseCase, type RenameWorkspaceInput } from "./rename-workspace.usecase";
+export {
+    revealApiKeyUseCase,
+    type RevealApiKeyInput,
+    type RevealApiKeyResult,
+} from "./reveal-api-key.usecase";
 export { revokeApiKeyUseCase, type RevokeApiKeyInput } from "./revoke-api-key.usecase";
 export {
     setWorkspaceEnvironmentUseCase,
@@ -52,6 +58,12 @@ export type {
 } from "./api-key-audit-log.repository";
 export type { ApiKeyRepository } from "./api-key.repository";
 
+export {
+    decryptApiKey,
+    encryptApiKey,
+    parseEncryptionKey,
+    type SealedApiKey,
+} from "./api-key.cipher";
 export { generateApiKeyPlaintext, hashApiKey, parseApiKeyPlaintext } from "./api-key.crypto";
 
 export type { Invite, MemberRole, WorkspaceMember } from "./member";

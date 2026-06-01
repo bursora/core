@@ -16,15 +16,17 @@ export interface NewWorkspaceState {
 
 interface Props {
     readonly action: (prev: NewWorkspaceState, formData: FormData) => Promise<NewWorkspaceState>;
+    /** Prefilled "{firstName}'s Workspace"; selected on focus so one keystroke replaces it. */
+    readonly defaultName: string;
 }
 
 const INITIAL: NewWorkspaceState = { error: null };
 const MAX_LEN = 60;
 const DEFAULT_ENVIRONMENT = "prod";
 
-export function NewWorkspaceForm({ action }: Props) {
+export function NewWorkspaceForm({ action, defaultName }: Props) {
     const [state, formAction] = useActionState(action, INITIAL);
-    const [name, setName] = useState("");
+    const [name, setName] = useState(defaultName);
     const [environment, setEnvironment] = useState<string>(DEFAULT_ENVIRONMENT);
     const errorId = useId();
     const helperId = useId();
@@ -61,6 +63,7 @@ export function NewWorkspaceForm({ action }: Props) {
                         placeholder="Acme Inc."
                         value={name}
                         onChange={(e) => setName(e.target.value)}
+                        onFocus={(e) => e.target.select()}
                         aria-invalid={state.error ? true : undefined}
                         aria-describedby={`${helperId}${state.error ? ` ${errorId}` : ""}`}
                         className="pl-9"
@@ -68,7 +71,7 @@ export function NewWorkspaceForm({ action }: Props) {
                 </div>
                 <div className="flex items-start justify-between gap-3 text-xs">
                     <p id={helperId} className="text-muted-foreground">
-                        Visible to everyone you invite. You can rename it later.
+                        You can rename this later.
                     </p>
                     <span
                         className={cn(

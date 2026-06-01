@@ -8,7 +8,11 @@ import { describe, expect, test } from "bun:test";
 import { InMemoryApiKeyAuditLogRepository } from "./fakes/in-memory-api-key-audit-log.repository";
 import { InMemoryApiKeyRepository } from "./fakes/in-memory-api-key.repository";
 
+import { parseEncryptionKey } from "@/lib/identity/api-key.cipher";
+import { randomBytes } from "node:crypto";
+
 const PEPPER = "isolation-pepper";
+const ENCRYPTION_KEY = parseEncryptionKey(randomBytes(32).toString("base64"));
 const WORKSPACE_A = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
 const WORKSPACE_B = "11111111-2222-3333-4444-555555555555";
 
@@ -21,6 +25,7 @@ describe("api-key workspace isolation", () => {
             workspaceId: WORKSPACE_A,
             name: "test",
             pepper: PEPPER,
+            encryptionKey: ENCRYPTION_KEY,
             keys: repo,
             audit,
         });
@@ -28,6 +33,7 @@ describe("api-key workspace isolation", () => {
             workspaceId: WORKSPACE_A,
             name: "test",
             pepper: PEPPER,
+            encryptionKey: ENCRYPTION_KEY,
             keys: repo,
             audit,
         });
@@ -35,6 +41,7 @@ describe("api-key workspace isolation", () => {
             workspaceId: WORKSPACE_B,
             name: "test",
             pepper: PEPPER,
+            encryptionKey: ENCRYPTION_KEY,
             keys: repo,
             audit,
         });
@@ -54,6 +61,7 @@ describe("api-key workspace isolation", () => {
             workspaceId: WORKSPACE_A,
             name: "test",
             pepper: PEPPER,
+            encryptionKey: ENCRYPTION_KEY,
             keys: repo,
             audit: new InMemoryApiKeyAuditLogRepository(),
         });
@@ -69,6 +77,7 @@ describe("api-key workspace isolation", () => {
             workspaceId: WORKSPACE_A,
             name: "test",
             pepper: PEPPER,
+            encryptionKey: ENCRYPTION_KEY,
             keys: repo,
             audit,
         });

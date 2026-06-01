@@ -1,34 +1,48 @@
 /**
  * Entry redirect for `/workspace`. Resolves the active workspace from the
  * cookie or the user's first membership and redirects to
- * `/workspace/[workspaceId]`. When the user has no memberships, renders the
- * onboarding empty state with a "Create workspace" CTA.
+ * `/workspace/[workspaceId]`. When the user has no memberships, redirects
+ * straight into the setup wizard: cloud + unsubscribed (and not already
+ * skipped) starts at the plan step; everyone else at the workspace step.
  *
  * Login's `callbackURL` points here so newly-signed-in users land on a real
- * workspace home without each page having to repeat resolution logic.
+ * workspace home (or the setup flow) without each page repeating resolution.
  */
 
-import { AppShell } from "@/components/shell/app-shell";
 import { WORKSPACE_COOKIE, resolveActiveWorkspaceId } from "@/components/shell/app-shell-helpers";
-import { Button } from "@/components/ui/button";
 import { requireSessionUI } from "@/lib/auth";
+import { env } from "@/lib/env";
 import { listWorkspacesForUser } from "@/lib/identity/workspaces-for-user";
+import { isUserSubscribed } from "@/lib/onboarding/plan-entry";
+import { isPlanStepSkipped } from "@/lib/onboarding/plan-skip-cookie";
+import { planStepReturnedActivePath, wizardStepPath } from "@/lib/onboarding/wizard-step";
 import { buildWorkspacePath } from "@/lib/routes";
 import { cookies } from "next/headers";
-import Link from "next/link";
 import { redirect } from "next/navigation";
 
-export default async function WorkspaceEntryPage() {
+interface WorkspaceEntryPageProps {
+    searchParams: Promise<{ billing?: string }>;
+}
+
+export default async function WorkspaceEntryPage({ searchParams }: WorkspaceEntryPageProps) {
     const session = await requireSessionUI();
 
     const memberships = await listWorkspacesForUser(session.user.id);
     const first = memberships[0];
     if (!first) {
-        return (
-            <AppShell>
-                <OnboardingEmptyState email={session.user.email} />
-            </AppShell>
-        );
+        if (env().IS_CLOUD) {
+            const subscribed = await isUserSubscribed(session.user.id);
+            if (subscribed) {
+                // Just back from checkout: show the plan step's confirmation,
+                // which auto-advances. Otherwise nothing to buy — go create a
+                // workspace.
+                const { billing } = await searchParams;
+                if (billing === "ok") redirect(planStepReturnedActivePath());
+                redirect(wizardStepPath(1));
+            }
+            if (!(await isPlanStepSkipped(session.user.id))) redirect(wizardStepPath(0));
+        }
+        redirect(wizardStepPath(1));
     }
 
     const cookieStore = await cookies();
@@ -41,23 +55,4 @@ export default async function WorkspaceEntryPage() {
             available: memberships,
         }) ?? first.id;
     redirect(buildWorkspacePath(resolved));
-}
-
-function OnboardingEmptyState({ email }: { readonly email: string }) {
-    return (
-        <div className="flex min-h-[60vh] items-center justify-center px-4">
-            <section className="w-full max-w-md rounded-[8px] border border-border bg-background p-6 text-center">
-                <h2 className="font-mono text-[10.5px] uppercase tracking-[0.08em] text-muted-foreground/70">
-                    Welcome to Bursora
-                </h2>
-                <p className="mt-3 text-sm text-muted-foreground">
-                    Signed in as {email}. Create a workspace to start tracking spend, budgets, and
-                    alerts.
-                </p>
-                <Button asChild className="mt-5">
-                    <Link href="/workspace/new">Create workspace</Link>
-                </Button>
-            </section>
-        </div>
-    );
 }

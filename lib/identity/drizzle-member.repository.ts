@@ -99,6 +99,29 @@ export class DrizzleMemberRepository implements MemberRepository {
         if (!row) return null;
         return row.role === USER_ROLE.admin ? USER_ROLE.admin : USER_ROLE.user;
     }
+
+    async findOwnerUserId(workspaceId: string): Promise<string | null> {
+        // Same single-owner resolution as `findOwnerUserRole`: admin owner
+        // first, then oldest, then id, so the resolved owner never flips
+        // between calls.
+        const [row] = await this.db
+            .select({ userId: schema.workspaceMembers.userId })
+            .from(schema.workspaceMembers)
+            .innerJoin(schema.users, eq(schema.workspaceMembers.userId, schema.users.id))
+            .where(
+                and(
+                    eq(schema.workspaceMembers.workspaceId, workspaceId),
+                    eq(schema.workspaceMembers.role, "owner"),
+                ),
+            )
+            .orderBy(
+                desc(eq(schema.users.role, USER_ROLE.admin)),
+                asc(schema.workspaceMembers.createdAt),
+                asc(schema.workspaceMembers.userId),
+            )
+            .limit(1);
+        return row?.userId ?? null;
+    }
 }
 
 type MemberRow = typeof schema.workspaceMembers.$inferSelect;

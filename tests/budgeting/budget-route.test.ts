@@ -103,6 +103,8 @@ const setupHarness = (opts: {
                   id: API_KEY_ID,
                   workspaceId: WORKSPACE,
                   keyHash: "stubbed-hash",
+                  seal: null,
+                  last6: null,
                   name: "stub",
                   scopes: ["budget:read"],
                   createdAt: new Date("2025-01-01T00:00:00Z"),

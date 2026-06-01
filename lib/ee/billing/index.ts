@@ -25,10 +25,10 @@ export type {
 
 export type { BillingWebhookEventStore } from "./billing-webhook-event.store";
 export type {
-    WorkspaceBillingRecord,
-    WorkspaceBillingRepository,
-    WorkspaceBillingUpdate,
-} from "./workspace-billing.repository";
+    UserBillingRecord,
+    UserBillingRepository,
+    UserBillingUpsert,
+} from "./user-billing.repository";
 
 export {
     BILLING_WEBHOOK_RETENTION_DAYS,

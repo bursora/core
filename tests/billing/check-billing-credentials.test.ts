@@ -27,7 +27,7 @@ import { installCloudEnv } from "../support/with-cloud-env";
 import { FakePaymentProviderAdapter } from "./fakes/fake-payment-provider.adapter";
 import { InMemoryBillingWebhookEventStore } from "./fakes/in-memory-billing-webhook-event.store";
 import { InMemoryPlanRepository } from "./fakes/in-memory-plan.repository";
-import { InMemoryWorkspaceBillingRepository } from "./fakes/in-memory-workspace-billing.repository";
+import { InMemoryUserBillingRepository } from "./fakes/in-memory-user-billing.repository";
 
 installCloudEnv();
 
@@ -67,7 +67,7 @@ describe("checkBillingCredentials memoization", () => {
         resetBillingCredentialCheckForTesting();
         setBillingDepsForTesting({
             provider,
-            workspaces: new InMemoryWorkspaceBillingRepository(),
+            users: new InMemoryUserBillingRepository(),
             webhookEvents: new InMemoryBillingWebhookEventStore(),
             plans: new InMemoryPlanRepository(),
             appUrl: "https://app.test",

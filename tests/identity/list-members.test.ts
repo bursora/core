@@ -26,6 +26,9 @@ class FakeMemberRepository implements MemberRepository {
     async findOwnerUserRole(): Promise<UserRole | null> {
         return null;
     }
+    async findOwnerUserId(): Promise<string | null> {
+        return null;
+    }
 }
 
 describe("listMembersUseCase", () => {

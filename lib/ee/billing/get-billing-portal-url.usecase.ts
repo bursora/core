@@ -1,10 +1,10 @@
 import type { PaymentProviderAdapter } from "./types";
-import type { WorkspaceBillingRepository } from "./workspace-billing.repository";
+import type { UserBillingRepository } from "./user-billing.repository";
 
 export interface GetBillingPortalUrlInput {
-    readonly workspaceId: string;
+    readonly userId: string;
     readonly returnUrl: string;
-    readonly workspaces: WorkspaceBillingRepository;
+    readonly users: UserBillingRepository;
     readonly provider: PaymentProviderAdapter;
 }
 
@@ -13,13 +13,13 @@ export interface GetBillingPortalUrlResult {
 }
 
 /**
- * Thrown when the workspace exists but has not yet completed a Checkout, so
- * there is no billing-provider customer to open a portal for. The route
- * maps this to a 409 / shows a "Subscribe first" message.
+ * Thrown when the user has not yet completed a Checkout, so there is no
+ * billing-provider customer to open a portal for. The route maps this to a
+ * 409 / shows a "Subscribe first" message.
  */
 export class BillingNotEnabledError extends Error {
-    constructor(workspaceId: string) {
-        super(`workspace ${workspaceId} has no billing-provider customer`);
+    constructor(userId: string) {
+        super(`user ${userId} has no billing-provider customer`);
         this.name = "BillingNotEnabledError";
     }
 }
@@ -27,12 +27,9 @@ export class BillingNotEnabledError extends Error {
 export async function getBillingPortalUrlUseCase(
     input: GetBillingPortalUrlInput,
 ): Promise<GetBillingPortalUrlResult> {
-    const record = await input.workspaces.findById(input.workspaceId);
-    if (!record) {
-        throw new Error(`workspace not found: ${input.workspaceId}`);
-    }
-    if (!record.providerCustomerId) {
-        throw new BillingNotEnabledError(input.workspaceId);
+    const record = await input.users.findByUserId(input.userId);
+    if (!record?.providerCustomerId) {
+        throw new BillingNotEnabledError(input.userId);
     }
 
     const session = await input.provider.createPortalSession({

@@ -28,8 +28,8 @@ export function IssuedKeyCard({ plaintext }: IssuedKeyCardProps) {
                             api key issued
                         </h2>
                         <p className="mt-2 text-sm text-foreground">
-                            Copy this secret now — it&rsquo;s shown once and never stored. Use it as{" "}
-                            <code className="font-mono">BURSORA_API_KEY</code> in your SDK.
+                            Use it as <code className="font-mono">BURSORA_API_KEY</code> in your
+                            SDK. You can reveal and copy it again any time from the list below.
                         </p>
                     </div>
                     <div className="space-y-1.5">

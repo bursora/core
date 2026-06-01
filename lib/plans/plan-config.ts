@@ -21,14 +21,23 @@ export interface TrackedPlan {
 
 /**
  * Bursora Cloud: a flat plan whose name, price, and interval come from Lemon
- * Squeezy. The Bursora-side default is the 5M-events/month fair-use ceiling,
- * which LS does not model.
+ * Squeezy. The Bursora-side config carries the 5M-events/month fair-use ceiling
+ * (which LS does not model) and the value-prop bullets shown on the plan card.
+ * `features` are extra bullets; the events ceiling renders as its own bullet.
  */
 export const TRACKED_PLANS: readonly TrackedPlan[] = [
     {
         name: "Bursora Cloud",
         config: {
             includedEventsPerMonth: 5_000_000,
+            features: [
+                "Every major provider: OpenAI, Anthropic, Google, and more",
+                "Block calls before they blow your budget",
+                "Live spend by customer, agent, workflow, and model",
+                "Spike alerts to Slack, Discord, and email",
+                "Override pricing for negotiated provider rates",
+                "Unlimited workspaces for your whole team",
+            ],
         },
     },
 ] as const;

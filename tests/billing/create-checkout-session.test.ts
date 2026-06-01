@@ -15,7 +15,7 @@ import { FakePaymentProviderAdapter } from "@/tests/billing/fakes/fake-payment-p
 import { InMemoryPlanRepository } from "@/tests/billing/fakes/in-memory-plan.repository";
 import { describe, expect, test } from "bun:test";
 
-const WORKSPACE_ID = "11111111-2222-3333-4444-555555555555";
+const USER_ID = "11111111-2222-3333-4444-555555555555";
 
 describe("createCheckoutSessionUseCase", () => {
     test("passes the active plan's lsVariantId to the provider", async () => {
@@ -24,7 +24,7 @@ describe("createCheckoutSessionUseCase", () => {
         plans.seed({ lsVariantId: "variant_from_db" });
 
         const result = await createCheckoutSessionUseCase({
-            workspaceId: WORKSPACE_ID,
+            userId: USER_ID,
             userEmail: "owner@example.com",
             successUrl: "https://app.test/ok",
             cancelUrl: "https://app.test/cancel",
@@ -33,6 +33,7 @@ describe("createCheckoutSessionUseCase", () => {
         });
 
         expect(provider.checkoutCalls[0]?.variantId).toBe("variant_from_db");
+        expect(provider.checkoutCalls[0]?.userId).toBe(USER_ID);
         expect(result.url).toBe(provider.nextCheckoutResult.url);
     });
 
@@ -42,7 +43,7 @@ describe("createCheckoutSessionUseCase", () => {
 
         await expect(
             createCheckoutSessionUseCase({
-                workspaceId: WORKSPACE_ID,
+                userId: USER_ID,
                 userEmail: "owner@example.com",
                 successUrl: "https://app.test/ok",
                 cancelUrl: "https://app.test/cancel",

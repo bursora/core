@@ -4,6 +4,7 @@ import { requireSessionUI } from "@/lib/auth";
 import { cloudWorkspaceLocked } from "@/lib/billing-gate/server";
 import { env } from "@/lib/env";
 import { assertWorkspaceMemberOrNotFound } from "@/lib/identity/server";
+import { resolveCloudPaywallData } from "../_components/cloud-paywall-data";
 import { ActivityTab } from "./_components/activity-tab";
 import { AlertChannelsSection } from "./_components/alert-channels-section";
 import { EventBundleSection } from "./_components/event-bundle-section";
@@ -39,6 +40,7 @@ export default async function SettingsPage({ params, searchParams }: SettingsPag
     // Settings stays reachable so a locked workspace can pay (Billing tab), but
     // the Activity log is real workspace data (incl. alert_raised) — gate it.
     const locked = await cloudWorkspaceLocked(workspaceId);
+    const paywall = locked ? await resolveCloudPaywallData(workspaceId, session.user.id) : null;
     const channelsSaved = search.channelsSaved === "1";
     const billingStatus =
         search.billing === "ok" || search.billing === "cancel"
@@ -80,7 +82,7 @@ export default async function SettingsPage({ params, searchParams }: SettingsPag
                     ...(isCloud && BillingSection
                         ? {
                               billing: (
-                                  <BillingSection workspaceId={workspaceId} status={billingStatus}>
+                                  <BillingSection userId={session.user.id} status={billingStatus}>
                                       <EventBundleSection workspaceId={workspaceId} />
                                   </BillingSection>
                               ),
@@ -90,22 +92,25 @@ export default async function SettingsPage({ params, searchParams }: SettingsPag
                     channels: (
                         <AlertChannelsSection workspaceId={workspaceId} saved={channelsSaved} />
                     ),
-                    activity: locked ? (
-                        <CloudPaywall workspaceId={workspaceId} />
-                    ) : (
-                        <ActivityTab
-                            workspaceId={workspaceId}
-                            searchParams={{
-                                ...(search.kind !== undefined ? { kind: search.kind } : {}),
-                                ...(search.severity !== undefined
-                                    ? { severity: search.severity }
-                                    : {}),
-                                ...(search.from !== undefined ? { from: search.from } : {}),
-                                ...(search.to !== undefined ? { to: search.to } : {}),
-                                ...(search.cursor !== undefined ? { cursor: search.cursor } : {}),
-                            }}
-                        />
-                    ),
+                    activity:
+                        locked && paywall ? (
+                            <CloudPaywall workspaceId={workspaceId} {...paywall} />
+                        ) : (
+                            <ActivityTab
+                                workspaceId={workspaceId}
+                                searchParams={{
+                                    ...(search.kind !== undefined ? { kind: search.kind } : {}),
+                                    ...(search.severity !== undefined
+                                        ? { severity: search.severity }
+                                        : {}),
+                                    ...(search.from !== undefined ? { from: search.from } : {}),
+                                    ...(search.to !== undefined ? { to: search.to } : {}),
+                                    ...(search.cursor !== undefined
+                                        ? { cursor: search.cursor }
+                                        : {}),
+                                }}
+                            />
+                        ),
                 }}
             />
         </div>

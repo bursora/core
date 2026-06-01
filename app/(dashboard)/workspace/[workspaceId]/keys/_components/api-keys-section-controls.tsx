@@ -47,8 +47,8 @@ export function IssueApiKeyButton({ workspaceId, autoOpen }: IssueApiKeyButtonPr
                     <DialogHeader>
                         <DialogTitle>Issue new API key</DialogTitle>
                         <DialogDescription>
-                            Give the key a short name so you can recognize it later. The secret
-                            itself is shown once after creation.
+                            Give the key a short name so you can recognize it later. You can reveal
+                            and copy the secret any time from the list.
                         </DialogDescription>
                     </DialogHeader>
                     <div className="space-y-2 py-4">

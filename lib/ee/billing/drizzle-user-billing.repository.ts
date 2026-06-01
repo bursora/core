@@ -4,36 +4,39 @@ import type { Db } from "@/lib/db";
 import { schema } from "@/lib/db";
 import { eq } from "drizzle-orm";
 import type {
-    WorkspaceBillingRecord,
-    WorkspaceBillingRepository,
-    WorkspaceBillingUpdate,
-} from "./workspace-billing.repository";
+    UserBillingRecord,
+    UserBillingRepository,
+    UserBillingUpsert,
+} from "./user-billing.repository";
 
-type Row = typeof schema.workspaces.$inferSelect;
+type Row = typeof schema.userSubscriptions.$inferSelect;
 
-export class DrizzleWorkspaceBillingRepository implements WorkspaceBillingRepository {
+export class DrizzleUserBillingRepository implements UserBillingRepository {
     constructor(private readonly db: Db) {}
 
-    async findById(workspaceId: string): Promise<WorkspaceBillingRecord | null> {
+    async findByUserId(userId: string): Promise<UserBillingRecord | null> {
         const [row] = await this.db
             .select()
-            .from(schema.workspaces)
-            .where(eq(schema.workspaces.id, workspaceId))
+            .from(schema.userSubscriptions)
+            .where(eq(schema.userSubscriptions.userId, userId))
             .limit(1);
         return row ? toRecord(row) : null;
     }
 
-    async findByProviderCustomerId(customerId: string): Promise<WorkspaceBillingRecord | null> {
+    async findByProviderCustomerId(customerId: string): Promise<UserBillingRecord | null> {
         const [row] = await this.db
             .select()
-            .from(schema.workspaces)
-            .where(eq(schema.workspaces.providerCustomerId, customerId))
+            .from(schema.userSubscriptions)
+            .where(eq(schema.userSubscriptions.providerCustomerId, customerId))
             .limit(1);
         return row ? toRecord(row) : null;
     }
 
-    async update(input: WorkspaceBillingUpdate): Promise<void> {
-        const set: Partial<typeof schema.workspaces.$inferInsert> = {};
+    async upsert(input: UserBillingUpsert): Promise<void> {
+        // Only the provided fields are written: on insert the rest fall back to
+        // their column defaults (NULL); on conflict only the provided fields are
+        // overwritten, so a partial update never clobbers untouched state.
+        const set: Partial<typeof schema.userSubscriptions.$inferInsert> = {};
         if (input.providerCustomerId !== undefined) {
             set.providerCustomerId = input.providerCustomerId;
         }
@@ -49,17 +52,16 @@ export class DrizzleWorkspaceBillingRepository implements WorkspaceBillingReposi
         if (input.refundEligibleUntil !== undefined) {
             set.refundEligibleUntil = input.refundEligibleUntil;
         }
-        if (Object.keys(set).length === 0) return;
         await this.db
-            .update(schema.workspaces)
-            .set(set)
-            .where(eq(schema.workspaces.id, input.workspaceId));
+            .insert(schema.userSubscriptions)
+            .values({ userId: input.userId, ...set })
+            .onConflictDoUpdate({ target: schema.userSubscriptions.userId, set });
     }
 }
 
-function toRecord(row: Row): WorkspaceBillingRecord {
+function toRecord(row: Row): UserBillingRecord {
     return {
-        workspaceId: row.id,
+        userId: row.userId,
         providerCustomerId: row.providerCustomerId ?? null,
         providerSubscriptionId: row.providerSubscriptionId ?? null,
         subscriptionStatus: row.subscriptionStatus ?? null,

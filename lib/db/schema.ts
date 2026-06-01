@@ -83,32 +83,40 @@ export const verification = pgTable("verification", {
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 });
 
-// --- workspaces ---------------------------------------------------------------
-// `provider_customer_id`, `provider_subscription_id`, `subscription_status`,
-// `subscribed_at` and `refund_eligible_until` are
-// billing-owned columns that live on the workspace row to keep the webhook
-// handler's write a single UPDATE. All are nullable: cloud workspaces that
-// have never opened Checkout and every self-host workspace leave them empty.
-// `subscription_status` mirrors the upstream provider's subscription
-// state verbatim (e.g. `active`, `past_due`, `cancelled`, `expired`).
+// --- user_subscriptions -------------------------------------------------------
+// Billing state, scoped to the subscribing user (the account that pays), not
+// the workspace. One row per user; absence of a row means the user has never
+// opened Checkout. All fields are nullable so a freshly-inserted row before
+// activation, and every self-host install, leaves them empty.
 //
-// `subscribed_at` is set the first time Checkout completes. `refund_eligible_until`
-// is signup + 30 days — used by the UI to surface the money-back window.
-export const workspaces = pgTable(
-    "workspaces",
+// `subscription_status` mirrors the upstream provider's subscription state
+// verbatim (e.g. `active`, `past_due`, `cancelled`, `expired`).
+// `subscribed_at` is set the first time Checkout completes.
+// `refund_eligible_until` is signup + 30 days — used by the UI to surface the
+// money-back window. `provider_customer_id` is uniquely indexed so a provider
+// webhook can reverse-resolve the user from its customer id.
+export const userSubscriptions = pgTable(
+    "user_subscriptions",
     {
-        id: uuid("id").primaryKey().defaultRandom(),
-        name: text("name").notNull(),
-        environment: text("environment").notNull().default("prod"),
+        userId: uuid("user_id")
+            .primaryKey()
+            .references(() => users.id, { onDelete: "cascade" }),
         providerCustomerId: text("provider_customer_id"),
         providerSubscriptionId: text("provider_subscription_id"),
         subscriptionStatus: text("subscription_status"),
         subscribedAt: timestamp("subscribed_at", { withTimezone: true }),
         refundEligibleUntil: timestamp("refund_eligible_until", { withTimezone: true }),
-        createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     },
-    (t) => [uniqueIndex("workspaces_provider_customer_idx").on(t.providerCustomerId)],
+    (t) => [uniqueIndex("user_subscriptions_provider_customer_idx").on(t.providerCustomerId)],
 );
+
+// --- workspaces ---------------------------------------------------------------
+export const workspaces = pgTable("workspaces", {
+    id: uuid("id").primaryKey().defaultRandom(),
+    name: text("name").notNull(),
+    environment: text("environment").notNull().default("prod"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
 
 // --- workspace_members --------------------------------------------------------
 export const workspaceMembers = pgTable(
@@ -158,6 +166,16 @@ export const apiKeys = pgTable(
             .notNull()
             .references(() => workspaces.id, { onDelete: "cascade" }),
         keyHash: text("key_hash").notNull(),
+        // AES-256-GCM seal of the plaintext (base64). Lets workspace members
+        // reveal/copy the key on demand. NULL on rows issued before encryption
+        // at rest existed — those degrade to "rotate to enable copy".
+        cipherText: text("cipher_text"),
+        cipherIv: text("cipher_iv"),
+        cipherAuthTag: text("cipher_auth_tag"),
+        // Non-secret display hint: trailing 6 chars of the plaintext, persisted
+        // at issue time so the masked list can show a Stripe-style suffix
+        // without decrypting the seal. NULL on legacy rows → all-dots mask.
+        last6: text("last6"),
         name: text("name").notNull().default(""),
         scopes: text("scopes")
             .array()
@@ -173,7 +191,8 @@ export const apiKeys = pgTable(
 );
 
 // --- api_key_audit_log -------------------------------------------------------
-// Append-only audit trail for `api_keys` lifecycle (create / revoke / rename).
+// Append-only audit trail for `api_keys` lifecycle (create / revoke / rename /
+// reveal).
 // Each successful mutation against `api_keys` writes a row here so the workspace
 // can answer "who did what, from where, when?" without reconstructing it from
 // application logs.
@@ -190,7 +209,7 @@ export const apiKeyAuditLog = pgTable(
             .references(() => workspaces.id, { onDelete: "cascade" }),
         apiKeyId: uuid("api_key_id").notNull(),
         userId: uuid("user_id").references(() => users.id, { onDelete: "set null" }),
-        action: text("action").notNull(), // 'create' | 'revoke' | 'rename'
+        action: text("action").notNull(), // 'create' | 'revoke' | 'rename' | 'reveal'
         metadata: jsonb("metadata"),
         ip: text("ip"),
         ts: timestamp("ts", { withTimezone: true }).notNull().defaultNow(),

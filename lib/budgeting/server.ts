@@ -13,24 +13,22 @@
 import { clickhouseClient, type ClickHouse } from "@/lib/clickhouse/client";
 import { db, schema } from "@/lib/db";
 import { isAdminOwnedWorkspace } from "@/lib/identity/server";
-import { redisClient } from "@/lib/redis/client";
 import { clickHouseSpendRepository } from "@/lib/spend";
-import { createSpendCounter, RedisSpendCounterStore } from "@/lib/spend-counter";
 import { and, count, eq, inArray, min } from "drizzle-orm";
 import "server-only";
 import type { AlertRepository } from "../detection/alert.repository";
 import { drizzleAlertRepository } from "../detection/drizzle-alert.repository";
-import { env } from "../env";
 import { errMessage } from "../error-message";
 import type { EventBus } from "../event-bus";
 import { ALERT_RAISED_TOPIC } from "../event-bus";
 import { eventBus } from "../in-memory-event-bus";
 import { ClickHouseUsageEventRepository } from "../metering/clickhouse-usage-event.repository";
-import type { UsageEventRow } from "../metering/usage-event";
+import { blockedUsageEventRow } from "../metering/usage-event";
 import type { UsageEventRepository } from "../metering/usage-event.repository";
 import { ensureNotificationBootstrap } from "../notification/bootstrap";
 import type { BudgetMode, Decision, ScopeType } from "./budget";
 import type { BudgetListFilter, BudgetRepository, RawBudget } from "./budget.repository";
+import { ClickHouseSpendAggregator } from "./clickhouse-spend.aggregator";
 import { createBudgetUseCase } from "./create-budget.usecase";
 import {
     decideBudgetUseCase,
@@ -40,7 +38,6 @@ import {
 import { DrizzleBudgetRepository } from "./drizzle-budget.repository";
 import { periodWindow, type Period } from "./period";
 import type { SpendAggregator } from "./spend-aggregator";
-import { SpendCounterAggregator } from "./spend-counter.aggregator";
 import { updateBudgetUseCase, type UpdateBudgetPatch } from "./update-budget.usecase";
 
 export interface BudgetingDeps {
@@ -75,13 +72,9 @@ export function budgetingDeps(): BudgetingDeps {
 
     const ttl = parseTtl(process.env.BURSORA_DECISION_TTL_S);
     const ch = clickhouseClient();
-    const counter = createSpendCounter({
-        store: new RedisSpendCounterStore(redisClient(env().REDIS_URL)),
-        spend: clickHouseSpendRepository(ch),
-    });
     return {
         budgets: new DrizzleBudgetRepository(db()),
-        spend: new SpendCounterAggregator(counter),
+        spend: new ClickHouseSpendAggregator(clickHouseSpendRepository(ch)),
         now: () => new Date(),
         bus: eventBus(),
         alerts: drizzleAlertRepository(db()),
@@ -93,37 +86,14 @@ export function budgetingDeps(): BudgetingDeps {
 /**
  * Builds the blocked-event sink: stamps a `status='blocked'` usage event into
  * ClickHouse (the canonical store) so the dashboard and notification enrichment
- * can count denials without a separate table. Cost stays `'0'`; `provider`/
- * `model` carry the SDK's intended target (empty string when the SDK omitted
- * them, matching the non-Nullable ClickHouse facet columns). `decidedByBudgetId`
- * records the budget that tripped, powering the blocked call drilldown on
- * /budgets; `blockReason` is the protocol reason string from `evaluateBudget`
- * and surfaces in the Blocks tab.
+ * can count denials without a separate table.
  *
  * ClickHouse carries no FK on `decided_by_budget_id`, so a budget deleted
  * between decide and write needs no retry: the row lands with its id intact.
  */
 export function clickHouseRecordBlocked(events: UsageEventRepository): RecordBlockedCall {
     return async (row) => {
-        const event: UsageEventRow = {
-            workspaceId: row.workspaceId,
-            tenantId: row.tenantId,
-            agentId: row.agentId,
-            workflowId: row.workflowId,
-            provider: row.intendedProvider ?? "",
-            model: row.intendedModel ?? "",
-            promptTokens: 0,
-            completionTokens: 0,
-            cacheTokens: 0,
-            latencyMs: null,
-            costUsd: "0",
-            requestId: null,
-            ts: row.ts,
-            status: "blocked",
-            decidedByBudgetId: row.budgetId,
-            blockReason: row.blockReason,
-        };
-        await events.insertBatch([event]);
+        await events.insertBatch([blockedUsageEventRow(row)]);
     };
 }
 
@@ -526,6 +496,9 @@ export async function getBudgetStats(
     const result: Record<string, BudgetStats> = {};
     for (const b of budgets) {
         const win = periodWindows.get(b.period);
+        if (win === undefined) {
+            throw new Error(`invariant: period window missing for "${b.period}"`);
+        }
         const bucket = spendByBudget.get(b.id) ?? emptySpendBucket();
         const trip = tripByBudget.get(b.id);
         const top =
@@ -538,8 +511,8 @@ export async function getBudgetStats(
             calls: bucket.calls,
             tokens: bucket.tokens,
             topModel: top,
-            periodFromIso: (win?.from ?? new Date(0)).toISOString(),
-            periodToIso: (win?.to ?? new Date(0)).toISOString(),
+            periodFromIso: win.from.toISOString(),
+            periodToIso: win.to.toISOString(),
             currentlyBlocking: isBudgetCurrentlyBlocking(
                 b.mode,
                 bucket.usedUsd,

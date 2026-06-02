@@ -17,7 +17,9 @@
 import "server-only";
 
 import type { ClickHouse } from "@/lib/clickhouse/client";
+import { padCost, safeCount, tagOrNull } from "@/lib/clickhouse/decode";
 import { clickHouseSpendRepository } from "@/lib/spend";
+import { facetColumn } from "@/lib/spend/clickhouse-spend.repository";
 import { buildClickHouseMeteringWhere } from "./clickhouse-usage-events-filters";
 import {
     decodeBlockedEventsCursor,
@@ -37,7 +39,7 @@ import {
     type TopSpenderRow,
     type TopSpendersQuery,
 } from "./metering-read.repository";
-import type { Facet, SeriesPoint } from "./spend-series";
+import type { SeriesPoint } from "./spend-series";
 
 const TABLE = "usage_events";
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -55,44 +57,6 @@ const scopeColumn = (scope: ScopeKind): string => {
         case "model":
             return "model";
     }
-};
-
-const facetColumn = (facet: Facet): string => {
-    switch (facet) {
-        case "tenant":
-            return "tenant_id";
-        case "agent":
-            return "agent_id";
-        case "workflow":
-            return "workflow_id";
-        case "model":
-            return "model";
-    }
-};
-
-/** Map CH's empty-string sentinel for an absent tag back to `null`. */
-const tagOrNull = (value: string): string | null => (value === "" ? null : value);
-
-/**
- * Coerce a CH `count()` (returned as a JSON string) to a finite non-negative
- * integer. Falling back to 0 keeps the UI safe.
- */
-const safeCount = (n: string | number | null | undefined): number => {
-    if (n === null || n === undefined) return 0;
-    const v = typeof n === "number" ? n : Number(n);
-    return Number.isFinite(v) && v >= 0 ? Math.trunc(v) : 0;
-};
-
-/**
- * `toString()` on a CH decimal drops trailing zeros to the canonical form. Pad
- * to 8 fractional digits so the shape matches the PG repo and the UI.
- */
-const padCost = (s: string): string => {
-    if (s.includes(".")) {
-        const [whole, frac] = s.split(".");
-        return `${whole}.${(frac ?? "").padEnd(8, "0").slice(0, 8)}`;
-    }
-    return `${s}.00000000`;
 };
 
 export const clickHouseMeteringReadRepository = (ch: ClickHouse): MeteringReadRepository => {

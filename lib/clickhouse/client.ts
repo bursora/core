@@ -1,15 +1,7 @@
 /**
- * Server-scoped ClickHouse singleton. The connection surface lives in
- * `./adapter` (no `server-only` guard); this module adds the lazy app
- * singleton built from validated env, plus a startup connectivity check.
- *
- * The singleton is constructed lazily so importing this module never opens a
- * connection — matching `lib/db` and `lib/redis`. The native `createClient`
- * is itself lazy, so the first real request is what reaches the server.
- *
- * Inserts default to `async_insert=1`, `wait_for_async_insert=0` so ingest
- * returns as soon as ClickHouse queues the rows instead of blocking on the
- * background merge.
+ * Server-scoped ClickHouse singleton, built lazily from validated env so
+ * importing this module never opens a connection — matching `lib/db` and
+ * `lib/redis`. The connection surface lives in `./adapter`.
  */
 
 import "server-only";
@@ -34,12 +26,4 @@ export function clickhouseClient(): ClickHouse {
         g[GLOBAL_KEY] = createClickHouse(native);
     }
     return g[GLOBAL_KEY];
-}
-
-/**
- * Startup connectivity check. Throws a clear error when ClickHouse is
- * unreachable so boot fails fast instead of on the first ingest.
- */
-export async function checkClickHouseConnection(): Promise<void> {
-    await clickhouseClient().ping();
 }

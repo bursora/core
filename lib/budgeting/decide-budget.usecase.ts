@@ -22,6 +22,7 @@ import type { BudgetCrossingRecord } from "../detection/alert.repository";
 import { errMessage } from "../error-message";
 import type { BudgetAlertRaisedEvent } from "../event-bus";
 import { ALERT_RAISED_TOPIC } from "../event-bus";
+import type { BlockedUsageEvent } from "../metering/usage-event";
 import type { Budget, Decision } from "./budget";
 import type { BudgetRepository } from "./budget.repository";
 import type { BudgetTrigger, EvaluateBudgetOptions } from "./evaluate-budget";
@@ -36,19 +37,7 @@ import { spendKey } from "./spend-snapshot";
  * the SDK preflight path - the use case awaits `void promise.catch(log)`,
  * not the promise itself.
  */
-export type RecordBlockedCall = (row: {
-    readonly workspaceId: string;
-    readonly tenantId: string | null;
-    readonly agentId: string | null;
-    readonly workflowId: string | null;
-    readonly ts: Date;
-    readonly budgetId: string;
-    /** SDK-declared target of the blocked call. NULL when the SDK omitted them. */
-    readonly intendedProvider: string | null;
-    readonly intendedModel: string | null;
-    /** Decision reason string from `evaluateBudget`. */
-    readonly blockReason: string;
-}) => Promise<void>;
+export type RecordBlockedCall = (row: BlockedUsageEvent) => Promise<void>;
 
 export interface DecideBudgetInput {
     readonly workspaceId: string;
@@ -119,8 +108,6 @@ export async function decideBudgetUseCase(input: DecideBudgetInput): Promise<Dec
                 scopeId: row.scopeId,
                 from: window.from,
                 to: window.to,
-                period: row.period,
-                now: input.now,
             }),
         ),
     );

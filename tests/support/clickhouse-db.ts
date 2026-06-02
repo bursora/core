@@ -12,7 +12,8 @@
  * exercised against a fixtures dir before that slice lands.
  *
  * The harness client inserts synchronously (`async_insert=0`) so tests read
- * their own writes deterministically; production ingest stays async.
+ * their own writes deterministically, matching production (ingest inserts
+ * synchronously so a recorded event is queryable before the call returns).
  */
 
 import { createClickHouse, type ClickHouse } from "@/lib/clickhouse/client";
@@ -76,8 +77,8 @@ export async function createTestClickHouse(
     const admin = createClient({ url: config.url, database: config.database, ...credentials });
     await admin.command({ query: `CREATE DATABASE IF NOT EXISTS ${database}` });
 
-    // Synchronous insert so integration tests read their own writes; the
-    // production singleton keeps async_insert for non-blocking ingest.
+    // Synchronous insert so integration tests read their own writes, matching
+    // the production singleton (which also inserts synchronously).
     const native = createClient({
         url: config.url,
         database,

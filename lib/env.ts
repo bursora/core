@@ -12,10 +12,10 @@
  * self-host. `REDIS_URL` is always required: the spend counter reads Redis on
  * every request path regardless of those flags.
  *
- * `CLICKHOUSE_*` configure the usage-event store. Optional at the env layer —
- * empty `CLICKHOUSE_URL` is allowed so installs that don't yet point at
- * ClickHouse still boot. The client requires a URL at construction and the
- * connectivity check fails fast when it's unreachable.
+ * `CLICKHOUSE_URL` is always required: ClickHouse is the usage-event store and
+ * the single source of truth for spend, so every path (ingest, budget
+ * enforcement, dashboards) needs it. `CLICKHOUSE_USER`/`PASSWORD`/`DATABASE`
+ * default to an unauthenticated local instance.
  *
  * Optional things (NODE_ENV, APP_URL) are read directly off `process.env`
  * by their consumers; we don't gate boot on them.
@@ -38,6 +38,7 @@ const ALWAYS_REQUIRED = [
     "GOOGLE_CLIENT_ID",
     "GOOGLE_CLIENT_SECRET",
     "REDIS_URL",
+    "CLICKHOUSE_URL",
 ] as const;
 
 const CLOUD_REQUIRED = [
@@ -102,7 +103,7 @@ export interface Env {
      * the env URLs stay trusted regardless.
      */
     readonly BETTER_AUTH_TRUSTED_ORIGINS: readonly string[];
-    /** ClickHouse HTTP endpoint. Empty when unconfigured. */
+    /** ClickHouse HTTP endpoint. Required: the usage-event store. */
     readonly CLICKHOUSE_URL: string;
     /** ClickHouse user. Defaults to `default`. */
     readonly CLICKHOUSE_USER: string;
@@ -242,7 +243,7 @@ export function loadEnv(source: Record<string, string | undefined>): Env {
         BURSORA_SPIKE_PROTECTION_ENABLED: spikeProtectionEnabled,
         REDIS_URL: getAlways("REDIS_URL"),
         BETTER_AUTH_TRUSTED_ORIGINS: trustedOrigins,
-        CLICKHOUSE_URL: source.CLICKHOUSE_URL ?? "",
+        CLICKHOUSE_URL: getAlways("CLICKHOUSE_URL"),
         CLICKHOUSE_USER: source.CLICKHOUSE_USER ?? "default",
         CLICKHOUSE_PASSWORD: source.CLICKHOUSE_PASSWORD ?? "",
         CLICKHOUSE_DATABASE: source.CLICKHOUSE_DATABASE ?? "default",

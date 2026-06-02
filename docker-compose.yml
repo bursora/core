@@ -59,6 +59,11 @@ services:
     clickhouse-server:
         image: clickhouse/clickhouse-server:24.8
         restart: unless-stopped
+        environment:
+            # The 24.8 image locks the default user unless setup is skipped.
+            # ClickHouse is only exposed on the internal compose network (no host
+            # port), so the open default user stays inside the stack.
+            CLICKHOUSE_SKIP_USER_SETUP: "1"
         ulimits:
             nofile:
                 soft: 262144

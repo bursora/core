@@ -2,6 +2,12 @@
 
 Date: 2026-06-02. Goal: move `usage_events` from Postgres to ClickHouse, with a Redis spend counter fronting budget enforcement. Status: complete, committed, pushed; not merged. Solo (the tracker used to build this) is local-only — everything needed is embedded below so this doc stands alone.
 
+## Update — spend counter removed (2026-06-02, uncommitted)
+
+The Redis spend counter (`lib/spend-counter/`, the multi-scope increment/seed/reconcile-on-miss fan-out) is deleted. Budget enforcement now reads spend directly from ClickHouse: the preflight runs a windowed `SUM(cost_usd)` for the one scope via `ClickHouseSpendAggregator` → `clickHouseSpendRepository.getSpendForScope`. ClickHouse is the single source of truth; ingest inserts synchronously (`async_insert` dropped) so a recorded event is summed by the very next preflight.
+
+This dissolves both counter bugs: B1 (async-insert visibility under-count that didn't self-heal) and B2 (seed clobbering a concurrent increment). At indie/small-team scale a single-workspace SUM over `MergeTree ORDER BY (workspace_id, ts)`, month-partition-pruned, is a few ms — negligible before the AI call, and exact. No read cache was added (a short-TTL cache would serve stale-low spend during a runaway burst — the exact case to catch). `CLICKHOUSE_URL` is now always-required; Redis stays required for request dedup, rate limiting, and spike protection. The sections below describe the prior counter-fronted design.
+
 ## Shipped — pushed to remotes (pick up on the other machine)
 
 All three repos committed + pushed on branch `worktree-clickhouse`:

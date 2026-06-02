@@ -24,8 +24,6 @@
  * unpriced event would lose real, priced spend.
  */
 
-import { errMessage } from "../error-message";
-import type { RecordSpendEvent, SpendCounter } from "../spend-counter";
 import { UnknownPricingError } from "./pricing/calculate-cost";
 import { createDrizzlePricingResolver, type PricingResolver } from "./pricing/pricing-resolver";
 import type { PricingRepository } from "./pricing/pricing-row";
@@ -50,15 +48,6 @@ export interface IngestEventsInput {
      * avoid touching pricing infrastructure.
      */
     readonly pricingResolver?: PricingResolver;
-    /**
-     * Bumps the Redis spend counters after a successful insert, sharing this
-     * path's single dedup decision so a retried delivery neither double-inserts
-     * nor double-increments. Optional — omitted in unit tests that only assert
-     * the write path.
-     */
-    readonly spendCounter?: SpendCounter;
-    /** Wall clock for counter TTLs. Defaults to now when the counter is wired. */
-    readonly now?: Date;
 }
 
 export interface UnpricedModel {
@@ -145,38 +134,7 @@ export async function ingestEventsUseCase(input: IngestEventsInput): Promise<Ing
     const toInsert = await dedupeRows(rows, input.dedup);
     const inserted = toInsert.length > 0 ? await input.eventsRepo.insertBatch(toInsert) : 0;
 
-    // Bump the spend counters off the SAME deduped set the sink received, so the
-    // one dedup decision covers both the insert and the increment. ClickHouse is
-    // canonical: a counter failure self-heals on the next reconcile-on-miss, so
-    // it must never fail an already-persisted insert.
-    if (input.spendCounter !== undefined && toInsert.length > 0) {
-        await bumpSpendCounters(input.spendCounter, toInsert, input.now ?? new Date());
-    }
-
     return { inserted, unpriced: [...unpriced.values()] };
-}
-
-async function bumpSpendCounters(
-    spendCounter: SpendCounter,
-    rows: readonly UsageEventRow[],
-    now: Date,
-): Promise<void> {
-    const okEvents: RecordSpendEvent[] = rows
-        .filter((row) => (row.status ?? "ok") === "ok")
-        .map((row) => ({
-            workspaceId: row.workspaceId,
-            tenantId: row.tenantId,
-            agentId: row.agentId,
-            workflowId: row.workflowId,
-            costUsd: row.costUsd,
-            ts: row.ts,
-        }));
-    if (okEvents.length === 0) return;
-    try {
-        await spendCounter.record(okEvents, now);
-    } catch (err) {
-        console.warn("spend_counter.record_failed", { error: errMessage(err) });
-    }
 }
 
 /**

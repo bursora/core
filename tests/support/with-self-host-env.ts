@@ -27,6 +27,7 @@ const KEYS = [
     "BURSORA_RATE_LIMIT_ENABLED",
     "BURSORA_SPIKE_PROTECTION_ENABLED",
     "REDIS_URL",
+    "CLICKHOUSE_URL",
     "CRON_SECRET",
     "DATABASE_URL",
     "BURSORA_API_KEY_PEPPER",
@@ -40,9 +41,10 @@ const KEYS = [
 /**
  * Default self-host env. The always-required vars are present; `IS_CLOUD` and
  * the request-cap flags are off, so the LS quartet is not required. `REDIS_URL`
- * is always required (the spend counter needs Redis on every path), so the
- * baseline supplies it. Keys set to `undefined` are deleted from `process.env`
- * (clearing any ambient cloud values from a local `.env`).
+ * (dedup, rate-limit, spike) and `CLICKHOUSE_URL` (usage-event store) are
+ * always required, so the baseline supplies them. Keys set to `undefined` are
+ * deleted from `process.env` (clearing any ambient cloud values from a local
+ * `.env`).
  */
 const SELF_HOST_ENV: Readonly<Record<(typeof KEYS)[number], string | undefined>> = {
     IS_CLOUD: undefined,
@@ -52,6 +54,7 @@ const SELF_HOST_ENV: Readonly<Record<(typeof KEYS)[number], string | undefined>>
     BURSORA_RATE_LIMIT_ENABLED: "false",
     BURSORA_SPIKE_PROTECTION_ENABLED: "false",
     REDIS_URL: "redis://localhost:6379",
+    CLICKHOUSE_URL: "http://localhost:8123",
     CRON_SECRET: "test-cron",
     DATABASE_URL: "postgres://test",
     BURSORA_API_KEY_PEPPER: "test-pepper",

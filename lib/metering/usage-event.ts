@@ -59,3 +59,45 @@ export interface UsageEventRow {
      */
     readonly blockReason?: string | null;
 }
+
+/** A budget denial to stamp as a `status='blocked'` usage event. */
+export interface BlockedUsageEvent {
+    readonly workspaceId: string;
+    readonly tenantId: string | null;
+    readonly agentId: string | null;
+    readonly workflowId: string | null;
+    readonly ts: Date;
+    /** Id of the budget whose cap tripped this call. */
+    readonly budgetId: string;
+    /** SDK-declared target of the blocked call. NULL when the SDK omitted them. */
+    readonly intendedProvider: string | null;
+    readonly intendedModel: string | null;
+    /** Decision reason string from `evaluateBudget`. */
+    readonly blockReason: string;
+}
+
+/**
+ * Builds the persisted row for a budget denial: zeroed tokens/latency/cost,
+ * `provider`/`model` carrying the SDK's intended target (empty string when the
+ * SDK omitted them, matching the non-Nullable ClickHouse facet columns).
+ */
+export function blockedUsageEventRow(event: BlockedUsageEvent): UsageEventRow {
+    return {
+        workspaceId: event.workspaceId,
+        tenantId: event.tenantId,
+        agentId: event.agentId,
+        workflowId: event.workflowId,
+        provider: event.intendedProvider ?? "",
+        model: event.intendedModel ?? "",
+        promptTokens: 0,
+        completionTokens: 0,
+        cacheTokens: 0,
+        latencyMs: null,
+        costUsd: "0",
+        requestId: null,
+        ts: event.ts,
+        status: "blocked",
+        decidedByBudgetId: event.budgetId,
+        blockReason: event.blockReason,
+    };
+}

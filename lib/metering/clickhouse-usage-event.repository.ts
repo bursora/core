@@ -1,10 +1,10 @@
 /**
  * ClickHouse implementation of the UsageEventRepository.
  *
- * One async insert per call into the `usage_events` MergeTree (DDL:
- * `clickhouse/migrations/0001_usage_events.sql`). The shared client defaults to
- * `async_insert=1, wait_for_async_insert=0`, so ingest returns as soon as
- * ClickHouse queues the rows instead of blocking on the background merge.
+ * One synchronous insert per call into the `usage_events` MergeTree (DDL:
+ * `clickhouse/migrations/0001_usage_events.sql`). The call resolves only after
+ * ClickHouse has acknowledged the write, so a recorded event is visible to the
+ * very next budget preflight SUM — enforcement reads exact, never stale-low.
  *
  * No `ON CONFLICT` exists here — idempotency is enforced upstream by the Redis
  * dedup guard in `ingest-events.usecase.ts`, which drops retried `request_id`s

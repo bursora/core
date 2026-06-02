@@ -40,7 +40,6 @@ export function clickHouseClientOptions(config: ClickHouseConfig): ClickHouseCli
         username: config.username,
         password: config.password,
         database: config.database,
-        clickhouse_settings: { async_insert: 1, wait_for_async_insert: 0 },
     };
 }
 

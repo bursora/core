@@ -9,8 +9,6 @@
 import { clickhouseClient } from "@/lib/clickhouse/client";
 import { db } from "@/lib/db";
 import { redisClient } from "@/lib/redis/client";
-import { clickHouseSpendRepository } from "@/lib/spend";
-import { createSpendCounter, RedisSpendCounterStore, type SpendCounter } from "@/lib/spend-counter";
 import "server-only";
 import { env } from "../env";
 import { clickHouseMeteringReadRepository } from "./clickhouse-metering-read.repository";
@@ -36,8 +34,6 @@ export interface MeteringDeps {
     readonly eventsRepo: UsageEventRepository;
     readonly pricingRepo: PricingRepository;
     readonly dedup: RequestDedupGuard;
-    /** Optional in tests; production always wires the Redis-backed counter. */
-    readonly spendCounter?: SpendCounter;
 }
 
 export interface MeteringReadDeps {
@@ -57,16 +53,11 @@ export function setMeteringReadDepsForTesting(deps: MeteringReadDeps | null): vo
 
 export function meteringDeps(): MeteringDeps {
     if (testOverride !== null) return testOverride;
-    const ch = clickhouseClient();
     const redis = redisClient(env().REDIS_URL);
     return {
-        eventsRepo: new ClickHouseUsageEventRepository(ch),
+        eventsRepo: new ClickHouseUsageEventRepository(clickhouseClient()),
         pricingRepo: drizzlePricingRepository(db()),
         dedup: new RedisRequestDedupGuard(redis),
-        spendCounter: createSpendCounter({
-            store: new RedisSpendCounterStore(redis),
-            spend: clickHouseSpendRepository(ch),
-        }),
     };
 }
 
@@ -86,8 +77,6 @@ export async function ingestEvents(input: {
         eventsRepo: deps.eventsRepo,
         pricingRepo: deps.pricingRepo,
         dedup: deps.dedup,
-        now: new Date(),
-        ...(deps.spendCounter === undefined ? {} : { spendCounter: deps.spendCounter }),
     });
 }
 

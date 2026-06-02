@@ -11,6 +11,8 @@
 import "server-only";
 
 import type { ClickHouse } from "@/lib/clickhouse/client";
+import { safeCount } from "@/lib/clickhouse/decode";
+import { buildClickHouseMeteringWhere } from "@/lib/metering/clickhouse-usage-events-filters";
 
 export interface BlockedCallsLastDay {
     readonly lastHour: number;
@@ -26,35 +28,29 @@ export interface BlockedCallsQuery {
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
 
-const toCount = (n: string | number | null | undefined): number => {
-    const v = n === null || n === undefined ? 0 : Number(n);
-    return Number.isFinite(v) && v >= 0 ? Math.trunc(v) : 0;
-};
-
 export async function getBlockedCallsLastDay(
     query: BlockedCallsQuery,
 ): Promise<BlockedCallsLastDay> {
-    const dayStartMs = query.now.getTime() - DAY_MS;
-    const hourStartMs = query.now.getTime() - HOUR_MS;
+    const { conditions, params } = buildClickHouseMeteringWhere({
+        workspaceId: query.workspaceId,
+        status: "blocked",
+    });
+    conditions.push("toUnixTimestamp64Milli(ts) >= {dayStartMs:Int64}");
+    params.dayStartMs = query.now.getTime() - DAY_MS;
+    params.hourStartMs = query.now.getTime() - HOUR_MS;
 
     const [row] = await query.ch.query<{ last_day: string; last_hour: string }>({
         query: `SELECT
                 count() AS last_day,
                 countIf(toUnixTimestamp64Milli(ts) >= {hourStartMs:Int64}) AS last_hour
             FROM usage_events
-            WHERE workspace_id = {workspaceId:UUID}
-                AND status = 'blocked'
-                AND toUnixTimestamp64Milli(ts) >= {dayStartMs:Int64}`,
-        query_params: {
-            workspaceId: query.workspaceId,
-            dayStartMs,
-            hourStartMs,
-        },
+            WHERE ${conditions.join(" AND ")}`,
+        query_params: params,
     });
 
     return {
-        lastDay: toCount(row?.last_day),
-        lastHour: toCount(row?.last_hour),
+        lastDay: safeCount(row?.last_day),
+        lastHour: safeCount(row?.last_hour),
     };
 }
 
@@ -69,17 +65,19 @@ export interface CountBlockedSinceTripQuery {
 }
 
 export async function countBlockedSinceTrip(query: CountBlockedSinceTripQuery): Promise<number> {
+    const { conditions, params } = buildClickHouseMeteringWhere({
+        workspaceId: query.workspaceId,
+        status: "blocked",
+    });
+    conditions.push("toUnixTimestamp64Milli(ts) >= {sinceMs:Int64}");
+    params.sinceMs = query.since.getTime();
+
     const [row] = await query.ch.query<{ count: string }>({
         query: `SELECT count() AS count
             FROM usage_events
-            WHERE workspace_id = {workspaceId:UUID}
-                AND status = 'blocked'
-                AND toUnixTimestamp64Milli(ts) >= {sinceMs:Int64}`,
-        query_params: {
-            workspaceId: query.workspaceId,
-            sinceMs: query.since.getTime(),
-        },
+            WHERE ${conditions.join(" AND ")}`,
+        query_params: params,
     });
 
-    return toCount(row?.count);
+    return safeCount(row?.count);
 }

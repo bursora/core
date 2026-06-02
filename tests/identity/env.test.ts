@@ -14,6 +14,7 @@ const BASE = {
     GOOGLE_CLIENT_ID: "google-client-id",
     GOOGLE_CLIENT_SECRET: "google-client-secret",
     REDIS_URL: "redis://localhost:6379",
+    CLICKHOUSE_URL: "http://localhost:8123",
 };
 
 const FULL_CLOUD = {
@@ -241,9 +242,15 @@ describe("loadEnv", () => {
         expect(e.BETTER_AUTH_TRUSTED_ORIGINS).toEqual(["https://app.bursora.com"]);
     });
 
-    test("ClickHouse config defaults when unset", () => {
+    test("requires CLICKHOUSE_URL on every path", () => {
+        const missing = { ...BASE };
+        delete (missing as Record<string, string | undefined>).CLICKHOUSE_URL;
+        expect(() => loadEnv(missing)).toThrow(/CLICKHOUSE_URL/);
+        expect(() => loadEnv({ ...BASE, CLICKHOUSE_URL: "" })).toThrow(/CLICKHOUSE_URL/);
+    });
+
+    test("ClickHouse credentials and database default when unset", () => {
         const e = loadEnv(BASE);
-        expect(e.CLICKHOUSE_URL).toBe("");
         expect(e.CLICKHOUSE_USER).toBe("default");
         expect(e.CLICKHOUSE_PASSWORD).toBe("");
         expect(e.CLICKHOUSE_DATABASE).toBe("default");
@@ -293,6 +300,7 @@ describe("env() cache reset", () => {
         "BURSORA_RATE_LIMIT_ENABLED",
         "BURSORA_SPIKE_PROTECTION_ENABLED",
         "REDIS_URL",
+        "CLICKHOUSE_URL",
     ] as const;
     const snapshot = new Map<string, string | undefined>();
 
@@ -319,6 +327,7 @@ describe("env() cache reset", () => {
         process.env.CRON_SECRET = "cron-secret";
         process.env.NEXT_PUBLIC_APP_URL = "http://localhost:3000";
         process.env.REDIS_URL = "redis://localhost:6379";
+        process.env.CLICKHOUSE_URL = "http://localhost:8123";
         process.env.IS_CLOUD = "true";
         process.env.BURSORA_RATE_LIMIT_ENABLED = "false";
         process.env.BURSORA_SPIKE_PROTECTION_ENABLED = "false";

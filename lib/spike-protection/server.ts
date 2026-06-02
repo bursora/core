@@ -15,11 +15,12 @@
 
 import "server-only";
 
+import { clickhouseClient } from "@/lib/clickhouse/client";
 import { db } from "@/lib/db";
 import { env } from "../env";
 import { redisClient } from "../redis/client";
 import { calculate7DayWeightedBaseline } from "./baseline-calculator";
-import { drizzleBaselineSource } from "./drizzle-baseline.source";
+import { clickHouseBaselineSource } from "./clickhouse-baseline.source";
 import { drizzleSpikeSettingsRepository } from "./drizzle-settings.repository";
 import { InMemorySpikeStateStore } from "./in-memory.adapter";
 import { RedisSpikeStateStore } from "./redis.adapter";
@@ -75,7 +76,7 @@ export function spikeProtectionDeps(): SpikeProtectionDeps {
         enabled,
         isCloud: e.IS_CLOUD,
         state,
-        baseline: drizzleBaselineSource(db()),
+        baseline: clickHouseBaselineSource(clickhouseClient()),
         settings: drizzleSpikeSettingsRepository(db()),
         defaultMultiplier: DEFAULT_MULTIPLIER,
         cooldownMs: DEFAULT_COOLDOWN_MS,

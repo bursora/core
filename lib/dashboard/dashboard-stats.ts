@@ -7,12 +7,13 @@ import {
 } from "@/lib/budgeting";
 import { startOfDayUtc } from "@/lib/budgeting/period";
 import { budgetingDeps, listBudgets } from "@/lib/budgeting/server";
+import { clickhouseClient, type ClickHouse } from "@/lib/clickhouse/client";
+import { safeCount } from "@/lib/clickhouse/decode";
 import type { DashboardWindow } from "@/lib/dashboard-window";
-import { db, schema } from "@/lib/db";
 import { listAlerts } from "@/lib/detection";
+import { buildClickHouseMeteringWhere } from "@/lib/metering/clickhouse-usage-events-filters";
 import type { MeteringFilters } from "@/lib/metering/metering-read.repository";
-import { buildMeteringWhereClause } from "@/lib/metering/usage-events-filters";
-import { and, count, gte, lt, sum } from "drizzle-orm";
+import { clickHouseSpendRepository } from "@/lib/spend";
 import { withRequestMemo } from "./per-request-cache";
 
 /** Subset of MeteringFilters that maps onto alert scope tags. */
@@ -55,9 +56,8 @@ export interface DashboardStatsDeps {
     }) => Promise<number>;
     /**
      * Batched variant for headroom-style reads that resolve many budgets at
-     * once. Returns totals keyed by `${scopeType}:${scopeId ?? ""}:${from.toISOString()}`
-     * matching the input items. Production groups by (period, scopeType) so
-     * each group hits one SQL.
+     * once. Returns totals in the same order as the input items, one windowed
+     * SUM per item.
      */
     readonly getBudgetPeriodSpendBatch?: (input: {
         workspaceId: string;
@@ -70,106 +70,110 @@ export interface DashboardStatsDeps {
     }) => Promise<readonly number[]>;
 }
 
+/**
+ * Upper bound for `sumSpendSince` (no explicit `until`). Events never carry a
+ * future `ts`, so a far-future ceiling makes `getSpendForScope`'s half-open
+ * `[since, FAR_FUTURE)` window equivalent to "everything at or after `since`".
+ */
+const FAR_FUTURE = new Date("2999-12-31T00:00:00Z");
+
+/**
+ * Count `status='ok'` usage events for a workspace in a window against
+ * ClickHouse. `to` is optional: omit it for an open-ended "since" count, pass it
+ * for a half-open `[from, to)` window. Filters AND-combine via the shared CH
+ * predicate builder so the WHERE clause matches the spend reads.
+ */
+export async function countUsageEventsInWindow(
+    ch: ClickHouse,
+    input: {
+        workspaceId: string;
+        from: Date;
+        to?: Date;
+        filters?: MeteringFilters;
+    },
+): Promise<number> {
+    const { conditions, params } = buildClickHouseMeteringWhere({
+        workspaceId: input.workspaceId,
+        status: "ok",
+        ...(input.filters !== undefined ? { filters: input.filters } : {}),
+    });
+    conditions.push("toUnixTimestamp64Milli(ts) >= {fromMs:Int64}");
+    params.fromMs = input.from.getTime();
+    if (input.to !== undefined) {
+        conditions.push("toUnixTimestamp64Milli(ts) < {toMs:Int64}");
+        params.toMs = input.to.getTime();
+    }
+    const rows = await ch.query<{ c: string }>({
+        query: `SELECT count() AS c FROM usage_events WHERE ${conditions.join(" AND ")}`,
+        query_params: params,
+    });
+    return safeCount(rows[0]?.c);
+}
+
 let testOverride: DashboardStatsDeps | null = null;
 
 export function setDashboardStatsDepsForTesting(deps: DashboardStatsDeps | null): void {
     testOverride = deps;
 }
 
-const productionDeps = (): DashboardStatsDeps => ({
-    sumSpendSince: async (workspaceId, since, filters) => {
-        const rows = await db()
-            .select({ total: sum(schema.usageEvents.costUsd) })
-            .from(schema.usageEvents)
-            .where(
-                and(
-                    ...buildMeteringWhereClause({
+const productionDeps = (): DashboardStatsDeps => {
+    const ch = clickhouseClient();
+    const chSpend = clickHouseSpendRepository(ch);
+    const sumOk = (workspaceId: string, from: Date, to: Date, filters?: MeteringFilters) =>
+        chSpend
+            .getSpendForScope({
+                workspaceId,
+                scopeType: "workspace",
+                scopeId: null,
+                from,
+                to,
+                status: "ok",
+                ...(filters !== undefined ? { filters } : {}),
+            })
+            .then((n) => n.toFixed(8));
+    return {
+        sumSpendSince: (workspaceId, since, filters) =>
+            sumOk(workspaceId, since, FAR_FUTURE, filters),
+        sumSpendBetween: (workspaceId, since, until, filters) =>
+            sumOk(workspaceId, since, until, filters),
+        countCallsSince: (workspaceId, since, filters) =>
+            countUsageEventsInWindow(ch, {
+                workspaceId,
+                from: since,
+                ...(filters !== undefined ? { filters } : {}),
+            }),
+        countCallsBetween: (workspaceId, since, until, filters) =>
+            countUsageEventsInWindow(ch, {
+                workspaceId,
+                from: since,
+                to: until,
+                ...(filters !== undefined ? { filters } : {}),
+            }),
+        listBudgets: (workspaceId) => listBudgets(workspaceId),
+        getBudgetPeriodSpend: ({ workspaceId, scopeType, scopeId, from, to }) =>
+            budgetingDeps().spend.getSpendForScopePeriod({
+                workspaceId,
+                scopeType,
+                scopeId,
+                from,
+                to,
+            }),
+        getBudgetPeriodSpendBatch: async ({ workspaceId, items }) => {
+            const spend = budgetingDeps().spend;
+            return Promise.all(
+                items.map((it) =>
+                    spend.getSpendForScopePeriod({
                         workspaceId,
-                        status: "ok",
-                        ...(filters !== undefined ? { filters } : {}),
+                        scopeType: it.scopeType,
+                        scopeId: it.scopeId,
+                        from: it.from,
+                        to: it.to,
                     }),
-                    gte(schema.usageEvents.ts, since),
                 ),
             );
-        return rows[0]?.total ?? "0.00000000";
-    },
-    sumSpendBetween: async (workspaceId, since, until, filters) => {
-        const rows = await db()
-            .select({ total: sum(schema.usageEvents.costUsd) })
-            .from(schema.usageEvents)
-            .where(
-                and(
-                    ...buildMeteringWhereClause({
-                        workspaceId,
-                        status: "ok",
-                        ...(filters !== undefined ? { filters } : {}),
-                    }),
-                    gte(schema.usageEvents.ts, since),
-                    lt(schema.usageEvents.ts, until),
-                ),
-            );
-        return rows[0]?.total ?? "0.00000000";
-    },
-    countCallsSince: async (workspaceId, since, filters) => {
-        const rows = await db()
-            .select({ total: count() })
-            .from(schema.usageEvents)
-            .where(
-                and(
-                    ...buildMeteringWhereClause({
-                        workspaceId,
-                        status: "ok",
-                        ...(filters !== undefined ? { filters } : {}),
-                    }),
-                    gte(schema.usageEvents.ts, since),
-                ),
-            );
-        return rows[0]?.total ?? 0;
-    },
-    countCallsBetween: async (workspaceId, since, until, filters) => {
-        const rows = await db()
-            .select({ total: count() })
-            .from(schema.usageEvents)
-            .where(
-                and(
-                    ...buildMeteringWhereClause({
-                        workspaceId,
-                        status: "ok",
-                        ...(filters !== undefined ? { filters } : {}),
-                    }),
-                    gte(schema.usageEvents.ts, since),
-                    lt(schema.usageEvents.ts, until),
-                ),
-            );
-        return rows[0]?.total ?? 0;
-    },
-    listBudgets: (workspaceId) => listBudgets(workspaceId),
-    getBudgetPeriodSpend: ({ workspaceId, scopeType, scopeId, from, to }) =>
-        budgetingDeps().spend.getSpendForScopePeriod({
-            workspaceId,
-            scopeType,
-            scopeId,
-            from,
-            to,
-        }),
-    getBudgetPeriodSpendBatch: async ({ workspaceId, items }) => {
-        const spend = budgetingDeps().spend;
-        if (spend.getSpendForScopePeriodBatch) {
-            return spend.getSpendForScopePeriodBatch({ workspaceId, items });
-        }
-        return Promise.all(
-            items.map((it) =>
-                spend.getSpendForScopePeriod({
-                    workspaceId,
-                    scopeType: it.scopeType,
-                    scopeId: it.scopeId,
-                    from: it.from,
-                    to: it.to,
-                }),
-            ),
-        );
-    },
-});
+        },
+    };
+};
 
 const deps = (): DashboardStatsDeps => testOverride ?? productionDeps();
 

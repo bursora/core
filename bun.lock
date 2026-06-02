@@ -7,6 +7,7 @@
       "dependencies": {
         "@base-ui/react": "^1.4.1",
         "@bursora/sdk": "file:../sdk",
+        "@clickhouse/client": "^1.19.0",
         "@hookform/resolvers": "^5.2.2",
         "@react-email/components": "^1.0.12",
         "@react-email/render": "^2.0.8",
@@ -154,6 +155,10 @@
     "@better-fetch/fetch": ["@better-fetch/fetch@1.1.21", "", {}, "sha512-/ImESw0sskqlVR94jB+5+Pxjf+xBwDZF/N5+y2/q4EqD7IARUTSpPfIo8uf39SYpCxyOCtbyYpUrZ3F/k0zT4A=="],
 
     "@bursora/sdk": ["@bursora/sdk@file:../sdk", { "devDependencies": { "@eslint/js": "^10.0.1", "@types/bun": "^1.3.13", "@types/node": "^25.6.2", "eslint": "^10.3.0", "prettier": "^3.8.3", "prettier-plugin-organize-imports": "^4.1.0", "tsup": "^8.5.1", "typescript": "^6.0.3", "typescript-eslint": "^8.58.1" } }],
+
+    "@clickhouse/client": ["@clickhouse/client@1.19.0", "", { "dependencies": { "@clickhouse/client-common": "1.19.0" } }, "sha512-R/35tIFZjwRyqtTN0cnlvd45zU+YREuQ/cnfi6c+KGGkVSCF+1cl8mZ9kkxshqHx2U4YjcmPVElJaRn2bEqJ4g=="],
+
+    "@clickhouse/client-common": ["@clickhouse/client-common@1.19.0", "", {}, "sha512-HHQw7MUt1aFquSlnoQhlRO8e7zhRw7rJZFNSYiHP2wxzEVeoI0cX8kKoTp+xlVySvFi8s0mAC3bi8D031xmIQg=="],
 
     "@date-fns/tz": ["@date-fns/tz@1.5.0", "", {}, "sha512-lwYN/vDPeNRULcepoE/LO2Pgx+7/RV+S9ARfbc9lr2DtGkOD7pAiruHvbR1RX3Qyf6ja47EWJDMsNK5vK08DJg=="],
 

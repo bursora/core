@@ -1,8 +1,7 @@
 import "server-only";
 
+import { clickhouseClient, type ClickHouse } from "@/lib/clickhouse/client";
 import { db } from "@/lib/db";
-import { usageEvents } from "@/lib/db/schema";
-import { and, count, desc, eq, gte, sql } from "drizzle-orm";
 import type { AnomalyAlert } from "../detection";
 import { drizzleAlertRepository } from "../detection";
 import { DrizzleApiKeyRepository } from "../identity/drizzle-api-key.repository";
@@ -36,6 +35,38 @@ export interface ActivityDeps {
     ) => Promise<readonly SetupErrorEvent[]>;
 }
 
+const HOUR_MS = 60 * 60 * 1000;
+
+/**
+ * Hourly call-count buckets for the activity feed sparkline. Reads the
+ * canonical ClickHouse store: `status='ok'` rows at or after `since`, floored
+ * to the hour by epoch-millisecond division (the timezone-free analog of the PG
+ * `date_trunc('hour', ts)`), newest bucket first.
+ */
+export async function fetchEventBuckets(
+    ch: ClickHouse,
+    workspaceId: string,
+    since: Date,
+): Promise<readonly EventBucket[]> {
+    const rows = await ch.query<{ bucket_ms: string; count: string }>({
+        query: `SELECT
+                intDiv(toUnixTimestamp64Milli(ts), {hourMs:Int64}) * {hourMs:Int64} AS bucket_ms,
+                count() AS count
+            FROM usage_events
+            WHERE workspace_id = {workspaceId:UUID}
+                AND status = 'ok'
+                AND toUnixTimestamp64Milli(ts) >= {sinceMs:Int64}
+            GROUP BY bucket_ms
+            ORDER BY bucket_ms DESC`,
+        query_params: {
+            workspaceId,
+            sinceMs: since.getTime(),
+            hourMs: HOUR_MS,
+        },
+    });
+    return rows.map((r) => ({ at: new Date(Number(r.bucket_ms)), count: Number(r.count) }));
+}
+
 let testOverride: ActivityDeps | null = null;
 
 export function setActivityDepsForTesting(deps: ActivityDeps | null): void {
@@ -49,25 +80,8 @@ export function activityDeps(): ActivityDeps {
     const alertRepo = drizzleAlertRepository(db());
 
     return {
-        fetchEventBuckets: async (workspaceId, since) => {
-            const bucket = sql<Date | string>`date_trunc('hour', ${usageEvents.ts})`;
-            const rows = await db()
-                .select({ bucket, count: count() })
-                .from(usageEvents)
-                .where(
-                    and(
-                        eq(usageEvents.workspaceId, workspaceId),
-                        eq(usageEvents.status, "ok"),
-                        gte(usageEvents.ts, since),
-                    ),
-                )
-                .groupBy(bucket)
-                .orderBy(desc(bucket));
-            return rows.map((r) => ({
-                at: r.bucket instanceof Date ? r.bucket : new Date(r.bucket),
-                count: Number(r.count),
-            }));
-        },
+        fetchEventBuckets: (workspaceId, since) =>
+            fetchEventBuckets(clickhouseClient(), workspaceId, since),
         fetchAlerts: async (workspaceId, since, limit) => {
             const rows = await alertRepo.listForWorkspace({
                 workspaceId,

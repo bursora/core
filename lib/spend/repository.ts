@@ -15,7 +15,7 @@
  *
  * Status is REQUIRED on both methods — callers pick which class of rows
  * (`'ok'`, `'blocked'`, or `'both'`) they want. This matches the boundary
- * contract on `buildMeteringWhereClause`.
+ * contract on `buildClickHouseMeteringWhere`.
  */
 
 import type { ScopeType } from "@/lib/budgeting/budget";

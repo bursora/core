@@ -11,6 +11,7 @@ import { setRateLimitDepsForTesting } from "@/lib/rate-limit/server";
 import { setSetupErrorsDepsForTesting } from "@/lib/setup-errors/server";
 import { InMemorySpikeStateStore } from "@/lib/spike-protection/in-memory.adapter";
 import { setSpikeProtectionDepsForTesting } from "@/lib/spike-protection/server";
+import { InMemoryRequestDedupGuard } from "@/tests/metering/fakes/in-memory-request-dedup.guard";
 import { InMemoryUsageEventRepository } from "@/tests/metering/fakes/in-memory-usage-event.repository";
 import { StubPricingRepository } from "@/tests/metering/fakes/stub-pricing.repository";
 import { InMemoryNotificationsRepository } from "@/tests/notifications/fakes/in-memory-notifications.repository";
@@ -112,7 +113,11 @@ const setupHarness = (rateLimit: number) => {
         revokedAt: null,
     };
 
-    setMeteringDepsForTesting({ eventsRepo: events, pricingRepo: pricing });
+    setMeteringDepsForTesting({
+        eventsRepo: events,
+        pricingRepo: pricing,
+        dedup: new InMemoryRequestDedupGuard(),
+    });
     setSetupErrorsDepsForTesting({
         repo: new InMemorySetupErrorRepository(),
         now: () => new Date(),

@@ -9,12 +9,11 @@ import type { UsageEventRow } from "./usage-event";
 
 export interface UsageEventRepository {
     /**
-     * Persists the batch and returns the number of rows actually written.
-     * Rows that collide on the partial unique index `(workspace_id,
-     * request_id)` are dropped (ON CONFLICT DO NOTHING) and excluded from the
-     * count, so a retried `requestId` reports 0. The caller bills the bundle
-     * by this count, never the input length, or retries would over-count
-     * (issue #1002).
+     * Persists the batch and returns the number of rows written. This is a
+     * plain sink: every row given is written. Idempotency lives upstream in the
+     * ingest use-case, which drops retried `requestId`s via the Redis dedup
+     * guard before they reach here, so the caller bills the bundle by this
+     * count, never the input length (issue #1002).
      */
     insertBatch(rows: readonly UsageEventRow[]): Promise<number>;
 }

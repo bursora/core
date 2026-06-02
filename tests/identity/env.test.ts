@@ -13,6 +13,8 @@ const BASE = {
     NEXT_PUBLIC_APP_URL: "http://localhost:3000",
     GOOGLE_CLIENT_ID: "google-client-id",
     GOOGLE_CLIENT_SECRET: "google-client-secret",
+    REDIS_URL: "redis://localhost:6379",
+    CLICKHOUSE_URL: "http://localhost:8123",
 };
 
 const FULL_CLOUD = {
@@ -21,7 +23,6 @@ const FULL_CLOUD = {
     LEMONSQUEEZY_API_KEY: "ls_test_x",
     LEMONSQUEEZY_WEBHOOK_SECRET: "ls_whsec_x",
     LEMONSQUEEZY_STORE_ID: "store_x",
-    REDIS_URL: "redis://localhost:6379",
 };
 
 describe("loadEnv", () => {
@@ -129,36 +130,34 @@ describe("loadEnv", () => {
     });
 
     test("defaults rate-limit and spike-protection to cloud value", () => {
-        const cloud = loadEnv({ ...FULL_CLOUD, REDIS_URL: "redis://localhost:6379" });
+        const cloud = loadEnv(FULL_CLOUD);
         expect(cloud.BURSORA_RATE_LIMIT_ENABLED).toBe(true);
         expect(cloud.BURSORA_SPIKE_PROTECTION_ENABLED).toBe(true);
-        expect(cloud.REDIS_URL).toBe("redis://localhost:6379");
 
         const oss = loadEnv(BASE);
         expect(oss.BURSORA_RATE_LIMIT_ENABLED).toBe(false);
         expect(oss.BURSORA_SPIKE_PROTECTION_ENABLED).toBe(false);
-        expect(oss.REDIS_URL).toBe("");
     });
 
-    test("requires REDIS_URL when either flag is on", () => {
-        expect(() => loadEnv({ ...BASE, BURSORA_RATE_LIMIT_ENABLED: "true" })).toThrow(/REDIS_URL/);
-        expect(() => loadEnv({ ...BASE, BURSORA_SPIKE_PROTECTION_ENABLED: "true" })).toThrow(
-            /REDIS_URL/,
-        );
+    test("requires REDIS_URL on every path", () => {
+        const missing = { ...BASE };
+        delete (missing as Record<string, string | undefined>).REDIS_URL;
+        expect(() => loadEnv(missing)).toThrow(/REDIS_URL/);
+        expect(() => loadEnv({ ...BASE, REDIS_URL: "" })).toThrow(/REDIS_URL/);
     });
 
-    test("self-host can enable just the rate limiter with REDIS_URL", () => {
-        const e = loadEnv({
-            ...BASE,
-            BURSORA_RATE_LIMIT_ENABLED: "true",
-            REDIS_URL: "redis://r",
-        });
-        expect(e.BURSORA_RATE_LIMIT_ENABLED).toBe(true);
-        expect(e.BURSORA_SPIKE_PROTECTION_ENABLED).toBe(false);
+    test("exposes REDIS_URL", () => {
+        const e = loadEnv({ ...BASE, REDIS_URL: "redis://r" });
         expect(e.REDIS_URL).toBe("redis://r");
     });
 
-    test("cloud can opt out via explicit false", () => {
+    test("self-host can enable just the rate limiter", () => {
+        const e = loadEnv({ ...BASE, BURSORA_RATE_LIMIT_ENABLED: "true" });
+        expect(e.BURSORA_RATE_LIMIT_ENABLED).toBe(true);
+        expect(e.BURSORA_SPIKE_PROTECTION_ENABLED).toBe(false);
+    });
+
+    test("cloud can opt out of the request-cap flags via explicit false", () => {
         const e = loadEnv({
             ...FULL_CLOUD,
             BURSORA_RATE_LIMIT_ENABLED: "false",
@@ -166,7 +165,6 @@ describe("loadEnv", () => {
         });
         expect(e.BURSORA_RATE_LIMIT_ENABLED).toBe(false);
         expect(e.BURSORA_SPIKE_PROTECTION_ENABLED).toBe(false);
-        expect(e.REDIS_URL).toBe("");
     });
 
     test("BETTER_AUTH_TRUSTED_ORIGINS defaults to the env URLs + local dev fallbacks (deduped)", () => {
@@ -244,6 +242,34 @@ describe("loadEnv", () => {
         expect(e.BETTER_AUTH_TRUSTED_ORIGINS).toEqual(["https://app.bursora.com"]);
     });
 
+    test("requires CLICKHOUSE_URL on every path", () => {
+        const missing = { ...BASE };
+        delete (missing as Record<string, string | undefined>).CLICKHOUSE_URL;
+        expect(() => loadEnv(missing)).toThrow(/CLICKHOUSE_URL/);
+        expect(() => loadEnv({ ...BASE, CLICKHOUSE_URL: "" })).toThrow(/CLICKHOUSE_URL/);
+    });
+
+    test("ClickHouse credentials and database default when unset", () => {
+        const e = loadEnv(BASE);
+        expect(e.CLICKHOUSE_USER).toBe("default");
+        expect(e.CLICKHOUSE_PASSWORD).toBe("");
+        expect(e.CLICKHOUSE_DATABASE).toBe("default");
+    });
+
+    test("ClickHouse config reads URL, credentials, and database", () => {
+        const e = loadEnv({
+            ...BASE,
+            CLICKHOUSE_URL: "http://ch:8123",
+            CLICKHOUSE_USER: "bursora",
+            CLICKHOUSE_PASSWORD: "secret",
+            CLICKHOUSE_DATABASE: "events",
+        });
+        expect(e.CLICKHOUSE_URL).toBe("http://ch:8123");
+        expect(e.CLICKHOUSE_USER).toBe("bursora");
+        expect(e.CLICKHOUSE_PASSWORD).toBe("secret");
+        expect(e.CLICKHOUSE_DATABASE).toBe("events");
+    });
+
     test("BETTER_AUTH_TRUSTED_ORIGINS throws when set but empty (commas/whitespace only)", () => {
         expect(() =>
             loadEnv({
@@ -273,6 +299,8 @@ describe("env() cache reset", () => {
         "LEMONSQUEEZY_STORE_ID",
         "BURSORA_RATE_LIMIT_ENABLED",
         "BURSORA_SPIKE_PROTECTION_ENABLED",
+        "REDIS_URL",
+        "CLICKHOUSE_URL",
     ] as const;
     const snapshot = new Map<string, string | undefined>();
 
@@ -298,6 +326,8 @@ describe("env() cache reset", () => {
         process.env.SMTP_PORT = "1025";
         process.env.CRON_SECRET = "cron-secret";
         process.env.NEXT_PUBLIC_APP_URL = "http://localhost:3000";
+        process.env.REDIS_URL = "redis://localhost:6379";
+        process.env.CLICKHOUSE_URL = "http://localhost:8123";
         process.env.IS_CLOUD = "true";
         process.env.BURSORA_RATE_LIMIT_ENABLED = "false";
         process.env.BURSORA_SPIKE_PROTECTION_ENABLED = "false";

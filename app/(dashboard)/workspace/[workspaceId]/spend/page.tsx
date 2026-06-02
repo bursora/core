@@ -12,7 +12,7 @@ import { StatusTag } from "@/components/ui/workspace/status-tag";
 import { requireSessionUI } from "@/lib/auth";
 import { cloudWorkspaceLocked } from "@/lib/billing-gate/server";
 import { getBlockedCallsLastDay } from "@/lib/budgeting/blocked-calls";
-import { db } from "@/lib/db";
+import { clickhouseClient } from "@/lib/clickhouse/client";
 import { flattenScope, listAlerts } from "@/lib/detection";
 import { formatCount, formatDate, formatPercent, formatUsd } from "@/lib/format";
 import { UNTAGGED } from "@/lib/metering";
@@ -118,7 +118,7 @@ export default async function SpendPage({ params, searchParams }: SpendPageProps
                 tenantId: filters.tenantId,
                 agentId: filters.agentId,
             }),
-            getBlockedCallsLastDay({ db: db(), workspaceId, now }),
+            getBlockedCallsLastDay({ ch: clickhouseClient(), workspaceId, now }),
         ]);
 
     const modelSlugs = new Set<string>();

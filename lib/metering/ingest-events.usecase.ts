@@ -27,6 +27,7 @@
 import { UnknownPricingError } from "./pricing/calculate-cost";
 import { createDrizzlePricingResolver, type PricingResolver } from "./pricing/pricing-resolver";
 import type { PricingRepository } from "./pricing/pricing-row";
+import { dedupKey, type RequestDedupGuard } from "./request-dedup";
 import type { UsageEventInput, UsageEventRow } from "./usage-event";
 import type { UsageEventRepository } from "./usage-event.repository";
 
@@ -35,6 +36,12 @@ export interface IngestEventsInput {
     readonly events: readonly UsageEventInput[];
     readonly eventsRepo: UsageEventRepository;
     readonly pricingRepo: PricingRepository;
+    /**
+     * Drops retried `(workspaceId, requestId)` deliveries before they reach the
+     * sink. The repository sink no longer dedups (ClickHouse MergeTree has no
+     * `ON CONFLICT`), so this is the only idempotency layer.
+     */
+    readonly dedup: RequestDedupGuard;
     /**
      * Optional override for the pricing decision. Defaults to a Drizzle-backed
      * resolver wired from `pricingRepo`. Tests inject a hardcoded resolver to
@@ -121,10 +128,41 @@ export async function ingestEventsUseCase(input: IngestEventsInput): Promise<Ing
         }
     }
 
-    // `inserted` is priced rows actually written. Retried `requestId`s dedup at
-    // the unique index and are excluded, so the caller bills the bundle by real
-    // writes, not the requested count (issue #1002).
-    const inserted = rows.length > 0 ? await input.eventsRepo.insertBatch(rows) : 0;
+    // Drop retried `requestId`s before the sink, then bill the bundle by what
+    // actually persists, never the requested count (issue #1002). Rows without
+    // a `requestId` can't dedup and always land.
+    const toInsert = await dedupeRows(rows, input.dedup);
+    const inserted = toInsert.length > 0 ? await input.eventsRepo.insertBatch(toInsert) : 0;
 
     return { inserted, unpriced: [...unpriced.values()] };
+}
+
+/**
+ * Keeps every null-`requestId` row plus the first row per
+ * `(workspaceId, requestId)` the guard reports as unseen in the idempotency
+ * window. Order is preserved; within-batch repeats collapse to one.
+ */
+async function dedupeRows(
+    rows: readonly UsageEventRow[],
+    dedup: RequestDedupGuard,
+): Promise<UsageEventRow[]> {
+    const keys = rows.flatMap((row) =>
+        row.requestId === null ? [] : [dedupKey(row.workspaceId, row.requestId)],
+    );
+    const fresh = await dedup.keepUnseen(keys);
+
+    const used = new Set<string>();
+    const out: UsageEventRow[] = [];
+    for (const row of rows) {
+        if (row.requestId === null) {
+            out.push(row);
+            continue;
+        }
+        const key = dedupKey(row.workspaceId, row.requestId);
+        if (fresh.has(key) && !used.has(key)) {
+            used.add(key);
+            out.push(row);
+        }
+    }
+    return out;
 }

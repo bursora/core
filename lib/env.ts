@@ -9,8 +9,13 @@
  *
  * `BURSORA_RATE_LIMIT_ENABLED` and `BURSORA_SPIKE_PROTECTION_ENABLED` gate
  * the request-cap stack. Both default to `true` on cloud and `false` on
- * self-host. `REDIS_URL` is required only when at least one of the two flags
- * is on — self-host installs that never enable either flag can skip it.
+ * self-host. `REDIS_URL` is always required: the request-id dedup guard reads
+ * Redis on the ingest path regardless of those flags.
+ *
+ * `CLICKHOUSE_URL` is always required: ClickHouse is the usage-event store and
+ * the single source of truth for spend, so every path (ingest, budget
+ * enforcement, dashboards) needs it. `CLICKHOUSE_USER`/`PASSWORD`/`DATABASE`
+ * default to an unauthenticated local instance.
  *
  * Optional things (NODE_ENV, APP_URL) are read directly off `process.env`
  * by their consumers; we don't gate boot on them.
@@ -32,6 +37,8 @@ const ALWAYS_REQUIRED = [
     "NEXT_PUBLIC_APP_URL",
     "GOOGLE_CLIENT_ID",
     "GOOGLE_CLIENT_SECRET",
+    "REDIS_URL",
+    "CLICKHOUSE_URL",
 ] as const;
 
 const CLOUD_REQUIRED = [
@@ -85,7 +92,7 @@ export interface Env {
     readonly LEMONSQUEEZY_MODE: "test" | "live";
     readonly BURSORA_RATE_LIMIT_ENABLED: boolean;
     readonly BURSORA_SPIKE_PROTECTION_ENABLED: boolean;
-    /** Empty string when both rate-limit and spike-protection are off. */
+    /** Redis connection URL. Required: the request-id dedup guard reads it on the ingest path. */
     readonly REDIS_URL: string;
     /**
      * CSRF allow-list for better-auth. Always includes the configured
@@ -96,6 +103,14 @@ export interface Env {
      * the env URLs stay trusted regardless.
      */
     readonly BETTER_AUTH_TRUSTED_ORIGINS: readonly string[];
+    /** ClickHouse HTTP endpoint. Required: the usage-event store. */
+    readonly CLICKHOUSE_URL: string;
+    /** ClickHouse user. Defaults to `default`. */
+    readonly CLICKHOUSE_USER: string;
+    /** ClickHouse password. Empty for an unauthenticated local instance. */
+    readonly CLICKHOUSE_PASSWORD: string;
+    /** ClickHouse database. Defaults to `default`. */
+    readonly CLICKHOUSE_DATABASE: string;
 }
 
 const parseBool = (value: string | undefined, fallback: boolean): boolean => {
@@ -130,7 +145,6 @@ export function loadEnv(source: Record<string, string | undefined>): Env {
     const isCloud = parseBool(source.IS_CLOUD, false);
     const rateLimitEnabled = parseBool(source.BURSORA_RATE_LIMIT_ENABLED, isCloud);
     const spikeProtectionEnabled = parseBool(source.BURSORA_SPIKE_PROTECTION_ENABLED, isCloud);
-    const needsRedis = rateLimitEnabled || spikeProtectionEnabled;
 
     const missing: string[] = [];
     for (const key of ALWAYS_REQUIRED) {
@@ -145,12 +159,6 @@ export function loadEnv(source: Record<string, string | undefined>): Env {
             if (value === undefined || value.length === 0) {
                 missing.push(key);
             }
-        }
-    }
-    if (needsRedis) {
-        const value = source.REDIS_URL;
-        if (value === undefined || value.length === 0) {
-            missing.push("REDIS_URL");
         }
     }
     if (missing.length > 0) {
@@ -233,8 +241,12 @@ export function loadEnv(source: Record<string, string | undefined>): Env {
         LEMONSQUEEZY_MODE: lemonSqueezyMode,
         BURSORA_RATE_LIMIT_ENABLED: rateLimitEnabled,
         BURSORA_SPIKE_PROTECTION_ENABLED: spikeProtectionEnabled,
-        REDIS_URL: needsRedis ? (source.REDIS_URL ?? "") : "",
+        REDIS_URL: getAlways("REDIS_URL"),
         BETTER_AUTH_TRUSTED_ORIGINS: trustedOrigins,
+        CLICKHOUSE_URL: getAlways("CLICKHOUSE_URL"),
+        CLICKHOUSE_USER: source.CLICKHOUSE_USER ?? "default",
+        CLICKHOUSE_PASSWORD: source.CLICKHOUSE_PASSWORD ?? "",
+        CLICKHOUSE_DATABASE: source.CLICKHOUSE_DATABASE ?? "default",
     });
 }
 

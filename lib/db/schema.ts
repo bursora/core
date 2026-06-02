@@ -1,10 +1,9 @@
 /**
  * Bursora V1 schema — Drizzle declarations.
  *
- * The `usage_events` table is partitioned by month at the SQL level (see
- * migration 0000). Drizzle has no first-class partition support yet, so we
- * declare the parent table here for typed queries and let the migration handle
- * the `PARTITION BY RANGE` and partition-creation DDL.
+ * Usage events live in ClickHouse (the canonical event store), not Postgres;
+ * this schema covers the relational tables (auth, workspaces, budgets, pricing,
+ * alerts, notifications, billing, …).
  */
 
 import { sql } from "drizzle-orm";
@@ -313,74 +312,6 @@ export const alerts = pgTable(
         uniqueIndex("alerts_budget_crossing_uniq")
             .on(t.workspaceId, t.scopeId, t.periodFrom)
             .where(sql`${t.kind} = 'budget'`),
-    ],
-);
-
-// --- usage_events (partitioned parent) ---------------------------------------
-// NOTE: Drizzle has no native PARTITION BY support; the migration creates the
-// parent with `PARTITION BY RANGE (ts)` and the per-month partitions. This
-// declaration mirrors the column shape for typed queries only.
-//
-// `decided_by_budget_id` is set on `status='blocked'` rows to the budget that
-// tripped the denial; NULL for `status='ok'` rows (real usage) and for any
-// blocked row written before this column existed. ON DELETE SET NULL keeps
-// blocked rows queryable after the originating budget is removed.
-//
-// `provider` / `model` carry the SDK's intended call target on `'blocked'`
-// rows (real values on `'ok'` rows). `block_reason` is the protocol reason
-// string from `evaluateBudget`. NULL on `'ok'` rows.
-export const usageEvents = pgTable(
-    "usage_events",
-    {
-        id: uuid("id").notNull().defaultRandom(),
-        workspaceId: uuid("workspace_id").notNull(),
-        tenantId: text("tenant_id"),
-        agentId: text("agent_id"),
-        workflowId: text("workflow_id"),
-        provider: text("provider"),
-        model: text("model"),
-        promptTokens: integer("prompt_tokens").notNull().default(0),
-        completionTokens: integer("completion_tokens").notNull().default(0),
-        cacheTokens: integer("cache_tokens").notNull().default(0),
-        latencyMs: integer("latency_ms"),
-        costUsd: numeric("cost_usd", { precision: 14, scale: 8 }).notNull(),
-        requestId: text("request_id"),
-        // Lifecycle of the event row.
-        //   'ok'      → real call accepted by the budget, billed at recorded cost.
-        //   'blocked' → call denied by `evaluateBudget`; `block_reason` and
-        //               `decided_by_budget_id` are populated, cost is 0.
-        // Future states (e.g. 'refunded', 'invoiced') would extend this enum
-        // as billing flows that need to mutate or annotate past rows land.
-        status: text("status").notNull().default("ok"),
-        decidedByBudgetId: uuid("decided_by_budget_id").references(() => budgets.id, {
-            onDelete: "set null",
-        }),
-        // Protocol reason string from `evaluateBudget`
-        // (e.g. `workspace:*:over:1.8/2`). Set only on `'blocked'` rows.
-        blockReason: text("block_reason"),
-        ts: timestamp("ts", { withTimezone: true }).notNull().defaultNow(),
-    },
-    // Composite primary key: Postgres partition tables require the partition
-    // key in the PK. Workspace+status+ts index covers dashboard aggregates that
-    // the lookup btree (workspace, tenant, agent, ts) can't serve without pinned
-    // tenant_id / agent_id.
-    //
-    // Partial unique index `(workspace_id, request_id, ts) WHERE request_id IS
-    // NOT NULL` makes ingest idempotent per `requestId`: retried SDK deliveries
-    // land on the same row instead of double-billing the customer. `ts` is the
-    // trailing key because a partitioned table's unique index must include the
-    // partition key, so dedup is per-time-partition (a retry with a different
-    // `ts` won't collapse; the SDK replays the original `ts`). Rows without a
-    // requestId skip the index (NULL request_id is rejected by the WHERE
-    // clause), so the SDK's optional-requestId contract is preserved. Authored
-    // by hand in migration 0037; drizzle's uniqueIndex builder mirrors columns
-    // only.
-    (t) => [
-        primaryKey({ columns: [t.id, t.ts] }),
-        index("usage_events_workspace_status_ts_idx").on(t.workspaceId, t.status, t.ts),
-        uniqueIndex("usage_events_workspace_request_uidx")
-            .on(t.workspaceId, t.requestId, t.ts)
-            .where(sql`${t.requestId} IS NOT NULL`),
     ],
 );
 

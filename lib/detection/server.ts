@@ -7,6 +7,7 @@
  * `setDetectionDepsForTesting` / `setAlertsDepsForTesting`.
  */
 
+import { clickhouseClient } from "@/lib/clickhouse/client";
 import { db } from "@/lib/db";
 import "server-only";
 import type { EventBus } from "../event-bus";
@@ -14,8 +15,8 @@ import { eventBus } from "../in-memory-event-bus";
 import { ensureNotificationBootstrap } from "../notification/bootstrap";
 import type { Alert, AnomalyAlert, BudgetAlert } from "./alert";
 import type { AlertRepository } from "./alert.repository";
+import { clickHouseSpendSeriesSource } from "./clickhouse-spend-series.source";
 import { drizzleAlertRepository } from "./drizzle-alert.repository";
-import { drizzleSpendSeriesSource } from "./drizzle-spend-series.source";
 import { listAlertsUseCase, type ListAlertsInput } from "./list-alerts.usecase";
 import {
     runAnomalyDetection,
@@ -48,7 +49,7 @@ export function detectionDeps(): DetectionDeps {
     if (detectionOverride !== null) return detectionOverride;
     ensureNotificationBootstrap();
     return {
-        source: drizzleSpendSeriesSource(db()),
+        source: clickHouseSpendSeriesSource(clickhouseClient()),
         alerts: drizzleAlertRepository(db()),
         bus: eventBus(),
     };

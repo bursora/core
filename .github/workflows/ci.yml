@@ -37,11 +37,33 @@ env:
     NEXT_PUBLIC_APP_URL: http://localhost:3000
     GOOGLE_CLIENT_ID: ci-dummy-google-id
     GOOGLE_CLIENT_SECRET: ci-dummy-google-secret
+    # Redis is required app-wide; the suite uses in-memory fakes, so a dummy
+    # URL only satisfies lib/env.ts validation and is never connected.
+    REDIS_URL: redis://localhost:6379
 
 jobs:
     quality:
         name: Lint, typecheck, test, build
         runs-on: ubuntu-latest
+        # CLICKHOUSE_URL is required app-wide, so the full `bun test` needs a live
+        # ClickHouse; the CH-gated tests run here instead of skipping.
+        services:
+            clickhouse:
+                image: clickhouse/clickhouse-server:24.8
+                env:
+                    CLICKHOUSE_SKIP_USER_SETUP: 1
+                ports:
+                    - 8123:8123
+                options: >-
+                    --health-cmd "wget --no-verbose --tries=1 --spider http://localhost:8123/ping || exit 1"
+                    --health-interval 5s
+                    --health-timeout 3s
+                    --health-retries 10
+        env:
+            CLICKHOUSE_URL: http://localhost:8123
+            CLICKHOUSE_USER: default
+            CLICKHOUSE_PASSWORD: ""
+            CLICKHOUSE_DATABASE: default
         steps:
             # core depends on @bursora/sdk via `file:../sdk`, so the sibling repo must
             # sit next to core. Check both out under the workspace as siblings.

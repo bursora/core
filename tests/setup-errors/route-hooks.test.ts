@@ -21,6 +21,7 @@ import {
     setSetupErrorLoggerForTesting,
     setSetupErrorsDepsForTesting,
 } from "@/lib/setup-errors/server";
+import { InMemoryRequestDedupGuard } from "@/tests/metering/fakes/in-memory-request-dedup.guard";
 import { InMemoryUsageEventRepository } from "@/tests/metering/fakes/in-memory-usage-event.repository";
 import { StubPricingRepository } from "@/tests/metering/fakes/stub-pricing.repository";
 import { InMemoryNotificationsRepository } from "@/tests/notifications/fakes/in-memory-notifications.repository";
@@ -133,6 +134,7 @@ const setup = (opts: { existingWorkspaces?: readonly string[] } = {}): Harness =
     setMeteringDepsForTesting({
         eventsRepo: new InMemoryUsageEventRepository(),
         pricingRepo: new StubPricingRepository(),
+        dedup: new InMemoryRequestDedupGuard(),
     });
 
     return { setupErrors, logger };

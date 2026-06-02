@@ -6,10 +6,15 @@
  * `setMetering*DepsForTesting` hooks.
  */
 
+import { clickhouseClient } from "@/lib/clickhouse/client";
 import { db } from "@/lib/db";
+import { redisClient } from "@/lib/redis/client";
+import { clickHouseSpendRepository } from "@/lib/spend";
+import { createSpendCounter, RedisSpendCounterStore, type SpendCounter } from "@/lib/spend-counter";
 import "server-only";
-import { drizzleMeteringReadRepository } from "./drizzle-metering-read.repository";
-import { DrizzleUsageEventRepository } from "./drizzle-usage-event.repository";
+import { env } from "../env";
+import { clickHouseMeteringReadRepository } from "./clickhouse-metering-read.repository";
+import { ClickHouseUsageEventRepository } from "./clickhouse-usage-event.repository";
 import { getSpendSeriesUseCase } from "./get-spend-series.usecase";
 import { getTopSpendersUseCase } from "./get-top-spenders.usecase";
 import { ingestEventsUseCase } from "./ingest-events.usecase";
@@ -22,6 +27,7 @@ import type {
 } from "./metering-read.repository";
 import { drizzlePricingRepository } from "./pricing/drizzle-pricing.repository";
 import type { PricingRepository } from "./pricing/pricing-row";
+import { RedisRequestDedupGuard, type RequestDedupGuard } from "./request-dedup";
 import type { Facet } from "./spend-series";
 import type { UsageEventInput } from "./usage-event";
 import type { UsageEventRepository } from "./usage-event.repository";
@@ -29,6 +35,9 @@ import type { UsageEventRepository } from "./usage-event.repository";
 export interface MeteringDeps {
     readonly eventsRepo: UsageEventRepository;
     readonly pricingRepo: PricingRepository;
+    readonly dedup: RequestDedupGuard;
+    /** Optional in tests; production always wires the Redis-backed counter. */
+    readonly spendCounter?: SpendCounter;
 }
 
 export interface MeteringReadDeps {
@@ -48,15 +57,22 @@ export function setMeteringReadDepsForTesting(deps: MeteringReadDeps | null): vo
 
 export function meteringDeps(): MeteringDeps {
     if (testOverride !== null) return testOverride;
+    const ch = clickhouseClient();
+    const redis = redisClient(env().REDIS_URL);
     return {
-        eventsRepo: new DrizzleUsageEventRepository(db()),
+        eventsRepo: new ClickHouseUsageEventRepository(ch),
         pricingRepo: drizzlePricingRepository(db()),
+        dedup: new RedisRequestDedupGuard(redis),
+        spendCounter: createSpendCounter({
+            store: new RedisSpendCounterStore(redis),
+            spend: clickHouseSpendRepository(ch),
+        }),
     };
 }
 
 function meteringReadDeps(): MeteringReadDeps {
     if (readTestOverride !== null) return readTestOverride;
-    return { readRepo: drizzleMeteringReadRepository(db()) };
+    return { readRepo: clickHouseMeteringReadRepository(clickhouseClient()) };
 }
 
 export async function ingestEvents(input: {
@@ -69,6 +85,9 @@ export async function ingestEvents(input: {
         events: input.events,
         eventsRepo: deps.eventsRepo,
         pricingRepo: deps.pricingRepo,
+        dedup: deps.dedup,
+        now: new Date(),
+        ...(deps.spendCounter === undefined ? {} : { spendCounter: deps.spendCounter }),
     });
 }
 

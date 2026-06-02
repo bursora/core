@@ -10,16 +10,24 @@
  * run against in-memory fakes without DB or Redis.
  */
 
+import { clickhouseClient, type ClickHouse } from "@/lib/clickhouse/client";
 import { db, schema } from "@/lib/db";
 import { isAdminOwnedWorkspace } from "@/lib/identity/server";
-import { and, count, eq, gte, inArray, lt, min, sql, sum } from "drizzle-orm";
+import { redisClient } from "@/lib/redis/client";
+import { clickHouseSpendRepository } from "@/lib/spend";
+import { createSpendCounter, RedisSpendCounterStore } from "@/lib/spend-counter";
+import { and, count, eq, inArray, min } from "drizzle-orm";
 import "server-only";
 import type { AlertRepository } from "../detection/alert.repository";
 import { drizzleAlertRepository } from "../detection/drizzle-alert.repository";
+import { env } from "../env";
 import { errMessage } from "../error-message";
 import type { EventBus } from "../event-bus";
 import { ALERT_RAISED_TOPIC } from "../event-bus";
 import { eventBus } from "../in-memory-event-bus";
+import { ClickHouseUsageEventRepository } from "../metering/clickhouse-usage-event.repository";
+import type { UsageEventRow } from "../metering/usage-event";
+import type { UsageEventRepository } from "../metering/usage-event.repository";
 import { ensureNotificationBootstrap } from "../notification/bootstrap";
 import type { BudgetMode, Decision, ScopeType } from "./budget";
 import type { BudgetListFilter, BudgetRepository, RawBudget } from "./budget.repository";
@@ -30,10 +38,9 @@ import {
     type RecordBlockedCall,
 } from "./decide-budget.usecase";
 import { DrizzleBudgetRepository } from "./drizzle-budget.repository";
-import { DrizzleSpendAggregator } from "./drizzle-spend.aggregator";
 import { periodWindow, type Period } from "./period";
-import { recordBlockedWithRetry, type BlockedRowPayload } from "./record-blocked-with-retry";
 import type { SpendAggregator } from "./spend-aggregator";
+import { SpendCounterAggregator } from "./spend-counter.aggregator";
 import { updateBudgetUseCase, type UpdateBudgetPatch } from "./update-budget.usecase";
 
 export interface BudgetingDeps {
@@ -67,64 +74,58 @@ export function budgetingDeps(): BudgetingDeps {
     ensureNotificationBootstrap();
 
     const ttl = parseTtl(process.env.BURSORA_DECISION_TTL_S);
+    const ch = clickhouseClient();
+    const counter = createSpendCounter({
+        store: new RedisSpendCounterStore(redisClient(env().REDIS_URL)),
+        spend: clickHouseSpendRepository(ch),
+    });
     return {
         budgets: new DrizzleBudgetRepository(db()),
-        spend: new DrizzleSpendAggregator(db()),
+        spend: new SpendCounterAggregator(counter),
         now: () => new Date(),
         bus: eventBus(),
         alerts: drizzleAlertRepository(db()),
-        recordBlocked: defaultRecordBlocked,
+        recordBlocked: clickHouseRecordBlocked(new ClickHouseUsageEventRepository(ch)),
         ...(ttl === undefined ? {} : { ttlSeconds: ttl }),
     };
 }
 
 /**
- * Stamps a `status='blocked'` row into `usage_events` so the dashboard and
- * notification enrichment can count denials without a separate table. Cost
- * stays at `'0'`; `provider`/`model` carry the SDK's intended target (NULL
- * for SDKs that don't send them). `decidedByBudgetId` records the budget
- * that tripped, powering the blocked call drilldown on /budgets.
+ * Builds the blocked-event sink: stamps a `status='blocked'` usage event into
+ * ClickHouse (the canonical store) so the dashboard and notification enrichment
+ * can count denials without a separate table. Cost stays `'0'`; `provider`/
+ * `model` carry the SDK's intended target (empty string when the SDK omitted
+ * them, matching the non-Nullable ClickHouse facet columns). `decidedByBudgetId`
+ * records the budget that tripped, powering the blocked call drilldown on
+ * /budgets; `blockReason` is the protocol reason string from `evaluateBudget`
+ * and surfaces in the Blocks tab.
  *
- * `blockReason` is the protocol reason string from `evaluateBudget` and
- * surfaces in the Blocks tab.
- *
- * The FK `decided_by_budget_id → budgets(id)` can fail when the deciding
- * budget is deleted between decide and write. `recordBlockedWithRetry`
- * inserts a second time with the column nulled so the workspace-wide count
- * stays correct (per-budget attribution is dropped — the budget is gone).
+ * ClickHouse carries no FK on `decided_by_budget_id`, so a budget deleted
+ * between decide and write needs no retry: the row lands with its id intact.
  */
-const insertBlockedRow = async (payload: BlockedRowPayload): Promise<void> => {
-    await db().insert(schema.usageEvents).values({
-        workspaceId: payload.workspaceId,
-        tenantId: payload.tenantId,
-        agentId: payload.agentId,
-        workflowId: payload.workflowId,
-        provider: payload.intendedProvider,
-        model: payload.intendedModel,
-        promptTokens: 0,
-        completionTokens: 0,
-        cacheTokens: 0,
-        costUsd: "0",
-        status: "blocked",
-        decidedByBudgetId: payload.decidedByBudgetId,
-        blockReason: payload.blockReason,
-        ts: payload.ts,
-    });
-};
-
-const defaultRecordBlocked: RecordBlockedCall = async (row) => {
-    await recordBlockedWithRetry(insertBlockedRow, {
-        workspaceId: row.workspaceId,
-        tenantId: row.tenantId,
-        agentId: row.agentId,
-        workflowId: row.workflowId,
-        ts: row.ts,
-        decidedByBudgetId: row.budgetId,
-        intendedProvider: row.intendedProvider,
-        intendedModel: row.intendedModel,
-        blockReason: row.blockReason,
-    });
-};
+export function clickHouseRecordBlocked(events: UsageEventRepository): RecordBlockedCall {
+    return async (row) => {
+        const event: UsageEventRow = {
+            workspaceId: row.workspaceId,
+            tenantId: row.tenantId,
+            agentId: row.agentId,
+            workflowId: row.workflowId,
+            provider: row.intendedProvider ?? "",
+            model: row.intendedModel ?? "",
+            promptTokens: 0,
+            completionTokens: 0,
+            cacheTokens: 0,
+            latencyMs: null,
+            costUsd: "0",
+            requestId: null,
+            ts: row.ts,
+            status: "blocked",
+            decidedByBudgetId: row.budgetId,
+            blockReason: row.blockReason,
+        };
+        await events.insertBatch([event]);
+    };
+}
 
 function parseTtl(raw: string | undefined): number | undefined {
     if (!raw) return undefined;
@@ -302,11 +303,88 @@ const ingestSpendRow = (
     }
 };
 
-const scopeColumn = (scopeType: ScopeType) => {
-    if (scopeType === "tenant") return schema.usageEvents.tenantId;
-    if (scopeType === "agent") return schema.usageEvents.agentId;
-    return schema.usageEvents.workflowId;
+type ScopeColumn = "tenant_id" | "agent_id" | "workflow_id";
+
+const scopeColumn = (scopeType: ScopeType): ScopeColumn => {
+    if (scopeType === "tenant") return "tenant_id";
+    if (scopeType === "agent") return "agent_id";
+    return "workflow_id";
 };
+
+export interface BudgetSpendRollupRow {
+    readonly scopeId: string | null;
+    readonly model: string | null;
+    readonly cost: string | null;
+    readonly calls: number;
+    readonly tokens: string;
+}
+
+/**
+ * Per-(scope?, model) spend rollup for the /budgets dashboard, read from the
+ * canonical ClickHouse store. `status='ok'` rows in the half-open `[from, to)`
+ * window; money and token totals stay strings over the wire (`toString(sum(…))`)
+ * so the caller's `ingestSpendRow` parses full precision. Pass `scope` to
+ * restrict to a tag column and a set of ids (narrowed budgets), grouping by
+ * `(scope, model)`; omit it for the workspace-wide aggregate grouped by model.
+ * Empty-string tags/models map back to `null` to match the PG nullable columns.
+ */
+export async function fetchBudgetSpendRollup(
+    ch: ClickHouse,
+    input: {
+        workspaceId: string;
+        from: Date;
+        to: Date;
+        scope?: { column: ScopeColumn; ids: readonly string[] };
+    },
+): Promise<readonly BudgetSpendRollupRow[]> {
+    const scope = input.scope;
+    if (scope && scope.ids.length === 0) return [];
+
+    const conditions = [
+        "workspace_id = {workspaceId:UUID}",
+        "status = 'ok'",
+        "toUnixTimestamp64Milli(ts) >= {fromMs:Int64}",
+        "toUnixTimestamp64Milli(ts) < {toMs:Int64}",
+    ];
+    const params: Record<string, unknown> = {
+        workspaceId: input.workspaceId,
+        fromMs: input.from.getTime(),
+        toMs: input.to.getTime(),
+    };
+    if (scope) {
+        conditions.push(`${scope.column} IN {scopeIds:Array(String)}`);
+        params.scopeIds = scope.ids;
+    }
+
+    const scopeSelect = scope ? `${scope.column} AS scope_id, ` : "";
+    const groupBy = scope ? "scope_id, model" : "model";
+
+    const rows = await ch.query<{
+        scope_id?: string;
+        model: string;
+        cost: string | null;
+        calls: string;
+        tokens: string | null;
+    }>({
+        query: `SELECT
+                ${scopeSelect}model,
+                toString(sum(cost_usd)) AS cost,
+                count() AS calls,
+                toString(sum(prompt_tokens + completion_tokens + cache_tokens)) AS tokens
+            FROM usage_events
+            WHERE ${conditions.join(" AND ")}
+            GROUP BY ${groupBy}`,
+        query_params: params,
+    });
+
+    return rows.map((r) => ({
+        scopeId: scope ? (r.scope_id ? r.scope_id : null) : null,
+        model: r.model === "" ? null : r.model,
+        cost: r.cost,
+        calls: Number(r.calls),
+        tokens: r.tokens ?? "0",
+    }));
+}
 
 export async function getBudgetStats(
     workspaceId: string,
@@ -316,6 +394,7 @@ export async function getBudgetStats(
     const { now } = budgetingDeps();
     const at = now();
     const conn = db();
+    const ch = clickhouseClient();
 
     // Bucket each budget into a spend group. Workspace-wide and any-with-null-scope
     // budgets all share the same workspace aggregate per period; narrowed budgets
@@ -356,23 +435,11 @@ export async function getBudgetStats(
         if (!win) continue;
         spendQueries.push(
             (async () => {
-                const rows = await conn
-                    .select({
-                        model: schema.usageEvents.model,
-                        cost: sum(schema.usageEvents.costUsd),
-                        calls: count(),
-                        tokens: sql<string>`COALESCE(SUM(${schema.usageEvents.promptTokens} + ${schema.usageEvents.completionTokens} + ${schema.usageEvents.cacheTokens}), 0)`,
-                    })
-                    .from(schema.usageEvents)
-                    .where(
-                        and(
-                            eq(schema.usageEvents.workspaceId, workspaceId),
-                            eq(schema.usageEvents.status, "ok"),
-                            gte(schema.usageEvents.ts, win.from),
-                            lt(schema.usageEvents.ts, win.to),
-                        ),
-                    )
-                    .groupBy(schema.usageEvents.model);
+                const rows = await fetchBudgetSpendRollup(ch, {
+                    workspaceId,
+                    from: win.from,
+                    to: win.to,
+                });
                 for (const b of group) {
                     const bucket = spendByBudget.get(b.id);
                     if (!bucket) continue;
@@ -390,26 +457,13 @@ export async function getBudgetStats(
         if (scopeIds.length === 0) continue;
         spendQueries.push(
             (async () => {
-                const rows = await conn
-                    .select({
-                        scopeId: column,
-                        model: schema.usageEvents.model,
-                        cost: sum(schema.usageEvents.costUsd),
-                        calls: count(),
-                        tokens: sql<string>`COALESCE(SUM(${schema.usageEvents.promptTokens} + ${schema.usageEvents.completionTokens} + ${schema.usageEvents.cacheTokens}), 0)`,
-                    })
-                    .from(schema.usageEvents)
-                    .where(
-                        and(
-                            eq(schema.usageEvents.workspaceId, workspaceId),
-                            eq(schema.usageEvents.status, "ok"),
-                            gte(schema.usageEvents.ts, win.from),
-                            lt(schema.usageEvents.ts, win.to),
-                            inArray(column, scopeIds),
-                        ),
-                    )
-                    .groupBy(column, schema.usageEvents.model);
-                const byScope = new Map<string, typeof rows>();
+                const rows = await fetchBudgetSpendRollup(ch, {
+                    workspaceId,
+                    from: win.from,
+                    to: win.to,
+                    scope: { column, ids: scopeIds },
+                });
+                const byScope = new Map<string, BudgetSpendRollupRow[]>();
                 for (const r of rows) {
                     if (r.scopeId === null) continue;
                     const arr = byScope.get(r.scopeId) ?? [];

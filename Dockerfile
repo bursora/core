@@ -43,6 +43,7 @@ COPY --from=build --chown=bursora:bursora /workspace/core/public ./core/public
 COPY --from=build --chown=bursora:bursora /workspace/core/next.config.ts ./core/next.config.ts
 COPY --from=build --chown=bursora:bursora /workspace/core/drizzle ./core/drizzle
 COPY --from=build --chown=bursora:bursora /workspace/core/drizzle.config.ts ./core/drizzle.config.ts
+COPY --from=build --chown=bursora:bursora /workspace/core/clickhouse ./core/clickhouse
 COPY --from=build --chown=bursora:bursora /workspace/core/lib ./core/lib
 COPY --from=build --chown=bursora:bursora /workspace/core/app ./core/app
 COPY --from=build --chown=bursora:bursora /workspace/core/components ./core/components

@@ -6,16 +6,15 @@
  * flows; lower-level tests in `tests/metering/` cover the deep paths.
  */
 
-import { usageEvents } from "@/lib/db/schema";
 import {
     getSpendSeriesUseCase,
     getTopSpendersUseCase,
-    ingestEventsUseCase,
-    pruneEvents,
     UNTAGGED,
     type UsageEventInput,
 } from "@/lib/metering";
+import { ingestEventsUseCase } from "@/lib/metering/ingest-events.usecase";
 import { InMemoryMeteringReadRepository } from "@/tests/metering/fakes/in-memory-metering-read.repository";
+import { InMemoryRequestDedupGuard } from "@/tests/metering/fakes/in-memory-request-dedup.guard";
 import { InMemoryUsageEventRepository } from "@/tests/metering/fakes/in-memory-usage-event.repository";
 import { StubPricingRepository } from "@/tests/metering/fakes/stub-pricing.repository";
 import { describe, expect, test } from "bun:test";
@@ -39,10 +38,6 @@ const sampleEvent = (overrides: Partial<UsageEventInput> = {}): UsageEventInput 
 });
 
 describe("@/lib/metering public API", () => {
-    test("schema table is re-exported", () => {
-        expect(usageEvents).toBeDefined();
-    });
-
     test("UNTAGGED literal is re-exported for facet pages", () => {
         expect(UNTAGGED).toBeDefined();
         expect(typeof UNTAGGED).toBe("string");
@@ -69,6 +64,7 @@ describe("@/lib/metering public API", () => {
             events: [sampleEvent({ promptTokens: 1000, completionTokens: 1000 })],
             eventsRepo,
             pricingRepo,
+            dedup: new InMemoryRequestDedupGuard(),
         });
 
         expect(summary.inserted).toBe(1);
@@ -139,9 +135,5 @@ describe("@/lib/metering public API", () => {
 
         const count = await repo.countEvents({ workspaceId: WORKSPACE });
         expect(count).toBe(2);
-    });
-
-    test("pruneEvents partition rollover entry is re-exported", () => {
-        expect(typeof pruneEvents).toBe("function");
     });
 });

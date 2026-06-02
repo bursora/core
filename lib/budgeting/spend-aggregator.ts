@@ -9,6 +9,7 @@
  */
 
 import type { ScopeType } from "./budget";
+import type { Period } from "./period";
 
 export interface SpendAggregatorQuery {
     readonly workspaceId: string;
@@ -16,6 +17,18 @@ export interface SpendAggregatorQuery {
     readonly scopeId: string | null;
     readonly from: Date;
     readonly to: Date;
+    /**
+     * Budget period for this window. The counter-backed adapter uses it to
+     * address the right spend counter key; a window-only caller (dashboard
+     * headroom) omits it and the adapter recovers it from the window duration.
+     */
+    readonly period?: Period;
+    /**
+     * Wall clock for this preflight. The counter-backed adapter passes it to
+     * select the current window; a window-only caller omits it and the adapter
+     * falls back to the window start.
+     */
+    readonly now?: Date;
 }
 
 export interface SpendAggregator {

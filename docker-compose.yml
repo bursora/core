@@ -1,20 +1,17 @@
-# Self-host only. Bursora Cloud uses a shared host-level bun container.
-#
 # Bursora self-host compose. Run from the umbrella repo root (which holds
 # core/ and sdk/) so the build context resolves the sibling SDK package:
 #
 #   cp core/.env.example core/.env
 #   # edit core/.env: set BURSORA_API_KEY_PEPPER, BETTER_AUTH_SECRET, CRON_SECRET
 #   docker compose -f core/docker-compose.yml up -d
+#   docker compose -f core/docker-compose.yml run --rm bursora bun run db:migrate
 #
-# Brings up the Next.js app, Postgres, and Redis. Migrations run once on
-# startup via the `migrate` service before the app boots. Put a reverse
-# proxy (Caddy, nginx, Traefik) in front for TLS.
+# Brings up the Next.js app, Postgres, Redis, and ClickHouse. Run the one-off
+# `db:migrate` command above once after `up` to provision both Postgres and
+# ClickHouse. Put a reverse proxy (Caddy, nginx, Traefik) in front for TLS.
 #
-# Dev workflow (mounts source, runs `bun run dev`) lives behind a profile:
-#   docker compose -f core/docker-compose.yml --profile dev up
-# That target attaches to the host's external `develop` network and reuses
-# its postgres/mailhog instead of the bundled services here.
+# Local dev: run `bun run dev` on the host against these datastores. Add the
+# mailhog SMTP catcher with `--profile dev up` to view dev emails at :8100.
 
 services:
     bursora:
@@ -31,8 +28,8 @@ services:
                 condition: service_healthy
             redis:
                 condition: service_started
-            migrate:
-                condition: service_completed_successfully
+            clickhouse-server:
+                condition: service_healthy
         healthcheck:
             test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/"]
             interval: 30s
@@ -40,25 +37,10 @@ services:
             retries: 5
             start_period: 30s
 
-    migrate:
-        build:
-            context: ..
-            dockerfile: core/Dockerfile
-        image: bursora:latest
-        restart: "no"
-        env_file: .env
-        command: ["bun", "run", "db:migrate"]
-        depends_on:
-            postgres:
-                condition: service_healthy
-
     postgres:
         image: postgres:16-alpine
         restart: unless-stopped
-        environment:
-            POSTGRES_USER: ${POSTGRES_USER:-bursora}
-            POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-bursora}
-            POSTGRES_DB: ${POSTGRES_DB:-bursora}
+        env_file: .env
         volumes:
             - postgres_data:/var/lib/postgresql/data
         healthcheck:
@@ -74,34 +56,40 @@ services:
         volumes:
             - redis_data:/data
 
-    # Dev-only: reuses the host VPS's shared `develop` network and its
-    # existing postgres/mailhog containers. Run with `--profile dev up`.
-    app:
-        profiles: ["dev"]
-        image: oven/bun:1.3
-        working_dir: /app
-        command: bun run dev
-        environment:
-            DATABASE_URL: postgres://postgres:postgres@postgres:5432/bursora_dev
-            SMTP_HOST: mailhog
-            SMTP_PORT: "1025"
-            APP_URL: http://localhost:3000
-            NODE_ENV: development
-            BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-dev-secret-change-me}
-            BETTER_AUTH_URL: http://localhost:3000
-        ports:
-            - "3000:3000"
+    clickhouse-server:
+        image: clickhouse/clickhouse-server:24.8
+        restart: unless-stopped
+        ulimits:
+            nofile:
+                soft: 262144
+                hard: 262144
+        expose:
+            - "8123"
         volumes:
-            - .:/app
-            - bursora_node_modules:/app/node_modules
-        networks:
-            - develop
+            - clickhouse_data:/var/lib/clickhouse
+        healthcheck:
+            test:
+                [
+                    "CMD-SHELL",
+                    "wget --no-verbose --tries=1 --spider http://127.0.0.1:8123/ping || exit 1",
+                ]
+            interval: 10s
+            timeout: 5s
+            retries: 5
+            start_period: 10s
+
+    # Dev SMTP catcher. Run `bun run dev` on the host with SMTP pointed at it
+    # (localhost:8003). Dev-only: starts with `--profile dev`, not on `up -d`.
+    mailhog:
+        profiles: ["dev"]
+        image: mailhog/mailhog
+        logging:
+            driver: "none"
+        ports:
+            - "8003:1025"
+            - "8100:8025"
 
 volumes:
     postgres_data: {}
     redis_data: {}
-    bursora_node_modules: {}
-
-networks:
-    develop:
-        external: true
+    clickhouse_data: {}

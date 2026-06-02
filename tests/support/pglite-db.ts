@@ -52,12 +52,6 @@ export interface TestDbHandle {
 export async function createTestDb(): Promise<TestDbHandle> {
     const pg = await PGlite.create({ extensions: { btree_gist, pgcrypto } });
     await applyMigrations(pg);
-    // The usage_events migration only provisions 13 monthly partitions from
-    // `date_trunc('month', now())`, so a fresh boot rejects any ts outside the
-    // current+12 months — which would make fixed test timestamps fail once the
-    // wall clock rolls past them. A catch-all DEFAULT partition keeps inserts
-    // valid for any ts regardless of when the suite runs.
-    await pg.exec(`CREATE TABLE usage_events_default PARTITION OF "usage_events" DEFAULT`);
     // PGlite is a real Postgres engine; its drizzle client differs from the
     // postgres-js `Db` only in the phantom driver generic, so the cast is sound
     // at runtime. Single legitimate driver-bridge cast — keeps test files clean.

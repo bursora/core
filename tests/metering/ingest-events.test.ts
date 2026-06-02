@@ -12,16 +12,18 @@
  *      priced spend.
  *   4. Multiple events in one batch are inserted as a single batch call.
  *   5. Pricing lookup uses ts (not now) to honor versioned rates.
- *   6. Idempotency: replaying the same (workspace, requestId) does not insert
- *      a duplicate row (issue #914).
+ *   6. Idempotency (app layer): replaying the same (workspace, requestId) does
+ *      not insert a duplicate row; the Redis dedup guard drops it before the
+ *      sink (issue #914). Rows without a requestId always insert.
  */
 
 import type { UsageEventInput } from "@/lib/metering";
-import { ingestEventsUseCase } from "@/lib/metering";
+import { ingestEventsUseCase } from "@/lib/metering/ingest-events.usecase";
 import { UnknownPricingError } from "@/lib/metering/pricing/calculate-cost";
 import { money } from "@/lib/metering/pricing/money";
 import type { PricingResolver } from "@/lib/metering/pricing/pricing-resolver";
 import { describe, expect, test } from "bun:test";
+import { InMemoryRequestDedupGuard } from "./fakes/in-memory-request-dedup.guard";
 import { InMemoryUsageEventRepository } from "./fakes/in-memory-usage-event.repository";
 import { StubPricingRepository } from "./fakes/stub-pricing.repository";
 
@@ -44,28 +46,31 @@ const event = (overrides: Partial<UsageEventInput> = {}): UsageEventInput => ({
     ...overrides,
 });
 
+const gptPricingRow = {
+    id: "row-1",
+    workspaceId: null,
+    provider: "openai",
+    model: "gpt-4o",
+    region: "global",
+    inputPer1mUsd: "2.5",
+    outputPer1mUsd: "10",
+    cachePer1mUsd: null,
+    effectiveFrom: new Date("2024-01-01T00:00:00Z"),
+    effectiveTo: null,
+};
+
 describe("ingestEventsUseCase", () => {
     test("persists every event with cost computed from the matching pricing row", async () => {
         const events = new InMemoryUsageEventRepository();
         const pricing = new StubPricingRepository();
-        pricing.addRow({
-            id: "row-1",
-            workspaceId: null,
-            provider: "openai",
-            model: "gpt-4o",
-            region: "global",
-            inputPer1mUsd: "2.5",
-            outputPer1mUsd: "10",
-            cachePer1mUsd: "1.25",
-            effectiveFrom: new Date("2024-01-01T00:00:00Z"),
-            effectiveTo: null,
-        });
+        pricing.addRow({ ...gptPricingRow, cachePer1mUsd: "1.25" });
 
         const result = await ingestEventsUseCase({
             workspaceId: WORKSPACE_A,
             events: [event()],
             eventsRepo: events,
             pricingRepo: pricing,
+            dedup: new InMemoryRequestDedupGuard(),
         });
 
         expect(result.inserted).toBe(1);
@@ -77,24 +82,14 @@ describe("ingestEventsUseCase", () => {
     test("workspaceId is the api-key-derived value (not from body)", async () => {
         const events = new InMemoryUsageEventRepository();
         const pricing = new StubPricingRepository();
-        pricing.addRow({
-            id: "row-1",
-            workspaceId: null,
-            provider: "openai",
-            model: "gpt-4o",
-            region: "global",
-            inputPer1mUsd: "2.5",
-            outputPer1mUsd: "10",
-            cachePer1mUsd: null,
-            effectiveFrom: new Date("2024-01-01T00:00:00Z"),
-            effectiveTo: null,
-        });
+        pricing.addRow(gptPricingRow);
 
         await ingestEventsUseCase({
             workspaceId: WORKSPACE_A,
             events: [event()],
             eventsRepo: events,
             pricingRepo: pricing,
+            dedup: new InMemoryRequestDedupGuard(),
         });
 
         expect(events.rows[0]?.workspaceId).toBe(WORKSPACE_A);
@@ -110,6 +105,7 @@ describe("ingestEventsUseCase", () => {
             events: [event({ provider: "openai", model: "gpt-7-unreleased" })],
             eventsRepo: events,
             pricingRepo: pricing,
+            dedup: new InMemoryRequestDedupGuard(),
         });
 
         // Nothing was priceable, so nothing persists and nothing bills, but the
@@ -124,18 +120,7 @@ describe("ingestEventsUseCase", () => {
     test("unknown pricing in a mixed batch → priced rows persist, unpriced reported", async () => {
         const events = new InMemoryUsageEventRepository();
         const pricing = new StubPricingRepository();
-        pricing.addRow({
-            id: "row-1",
-            workspaceId: null,
-            provider: "openai",
-            model: "gpt-4o",
-            region: "global",
-            inputPer1mUsd: "2.5",
-            outputPer1mUsd: "10",
-            cachePer1mUsd: null,
-            effectiveFrom: new Date("2024-01-01T00:00:00Z"),
-            effectiveTo: null,
-        });
+        pricing.addRow(gptPricingRow);
 
         const result = await ingestEventsUseCase({
             workspaceId: WORKSPACE_A,
@@ -145,6 +130,7 @@ describe("ingestEventsUseCase", () => {
             ],
             eventsRepo: events,
             pricingRepo: pricing,
+            dedup: new InMemoryRequestDedupGuard(),
         });
 
         // Known spend must land even though a sibling event was unpriced. One
@@ -159,18 +145,7 @@ describe("ingestEventsUseCase", () => {
     test("repeated unpriced (provider, model) pairs are deduped in the report", async () => {
         const events = new InMemoryUsageEventRepository();
         const pricing = new StubPricingRepository();
-        pricing.addRow({
-            id: "row-1",
-            workspaceId: null,
-            provider: "openai",
-            model: "gpt-4o",
-            region: "global",
-            inputPer1mUsd: "2.5",
-            outputPer1mUsd: "10",
-            cachePer1mUsd: null,
-            effectiveFrom: new Date("2024-01-01T00:00:00Z"),
-            effectiveTo: null,
-        });
+        pricing.addRow(gptPricingRow);
 
         const result = await ingestEventsUseCase({
             workspaceId: WORKSPACE_A,
@@ -182,6 +157,7 @@ describe("ingestEventsUseCase", () => {
             ],
             eventsRepo: events,
             pricingRepo: pricing,
+            dedup: new InMemoryRequestDedupGuard(),
         });
 
         expect(result.inserted).toBe(1);
@@ -225,6 +201,7 @@ describe("ingestEventsUseCase", () => {
             events: [event({ ts: new Date("2023-06-01T00:00:00Z") })],
             eventsRepo: events,
             pricingRepo: pricing,
+            dedup: new InMemoryRequestDedupGuard(),
         });
 
         // Should use OLD row ($1/1M): 1000*1/1_000_000 + 500*1/1_000_000 = 0.0015
@@ -234,24 +211,14 @@ describe("ingestEventsUseCase", () => {
     test("batch of multiple events is persisted in one call", async () => {
         const events = new InMemoryUsageEventRepository();
         const pricing = new StubPricingRepository();
-        pricing.addRow({
-            id: "row-1",
-            workspaceId: null,
-            provider: "openai",
-            model: "gpt-4o",
-            region: "global",
-            inputPer1mUsd: "2.5",
-            outputPer1mUsd: "10",
-            cachePer1mUsd: null,
-            effectiveFrom: new Date("2024-01-01T00:00:00Z"),
-            effectiveTo: null,
-        });
+        pricing.addRow(gptPricingRow);
 
         await ingestEventsUseCase({
             workspaceId: WORKSPACE_A,
             events: [event(), event(), event()],
             eventsRepo: events,
             pricingRepo: pricing,
+            dedup: new InMemoryRequestDedupGuard(),
         });
 
         expect(events.batchInsertCalls).toBe(1);
@@ -267,6 +234,7 @@ describe("ingestEventsUseCase", () => {
             events: [],
             eventsRepo: events,
             pricingRepo: pricing,
+            dedup: new InMemoryRequestDedupGuard(),
         });
 
         expect(result.inserted).toBe(0);
@@ -276,18 +244,8 @@ describe("ingestEventsUseCase", () => {
     test("same (workspace, requestId) replayed → second call does not insert a duplicate", async () => {
         const events = new InMemoryUsageEventRepository();
         const pricing = new StubPricingRepository();
-        pricing.addRow({
-            id: "row-1",
-            workspaceId: null,
-            provider: "openai",
-            model: "gpt-4o",
-            region: "global",
-            inputPer1mUsd: "2.5",
-            outputPer1mUsd: "10",
-            cachePer1mUsd: null,
-            effectiveFrom: new Date("2024-01-01T00:00:00Z"),
-            effectiveTo: null,
-        });
+        pricing.addRow(gptPricingRow);
+        const dedup = new InMemoryRequestDedupGuard();
 
         const replayed = event({ requestId: "req-abc" });
 
@@ -296,12 +254,14 @@ describe("ingestEventsUseCase", () => {
             events: [replayed],
             eventsRepo: events,
             pricingRepo: pricing,
+            dedup,
         });
         await ingestEventsUseCase({
             workspaceId: WORKSPACE_A,
             events: [replayed],
             eventsRepo: events,
             pricingRepo: pricing,
+            dedup,
         });
 
         // SAFE-not-sorry: do not double-bill. Only one row, regardless of how
@@ -312,18 +272,8 @@ describe("ingestEventsUseCase", () => {
     test("replayed requestId → inserted count reflects rows actually written, not input length", async () => {
         const events = new InMemoryUsageEventRepository();
         const pricing = new StubPricingRepository();
-        pricing.addRow({
-            id: "row-1",
-            workspaceId: null,
-            provider: "openai",
-            model: "gpt-4o",
-            region: "global",
-            inputPer1mUsd: "2.5",
-            outputPer1mUsd: "10",
-            cachePer1mUsd: null,
-            effectiveFrom: new Date("2024-01-01T00:00:00Z"),
-            effectiveTo: null,
-        });
+        pricing.addRow(gptPricingRow);
+        const dedup = new InMemoryRequestDedupGuard();
 
         const replayed = event({ requestId: "req-abc" });
 
@@ -332,12 +282,14 @@ describe("ingestEventsUseCase", () => {
             events: [replayed],
             eventsRepo: events,
             pricingRepo: pricing,
+            dedup,
         });
         const second = await ingestEventsUseCase({
             workspaceId: WORKSPACE_A,
             events: [replayed],
             eventsRepo: events,
             pricingRepo: pricing,
+            dedup,
         });
 
         // First delivery persists; the retry dedups. The bundle counter is
@@ -349,18 +301,8 @@ describe("ingestEventsUseCase", () => {
     test("mixed batch [new, new, duplicate] → inserted count is 2", async () => {
         const events = new InMemoryUsageEventRepository();
         const pricing = new StubPricingRepository();
-        pricing.addRow({
-            id: "row-1",
-            workspaceId: null,
-            provider: "openai",
-            model: "gpt-4o",
-            region: "global",
-            inputPer1mUsd: "2.5",
-            outputPer1mUsd: "10",
-            cachePer1mUsd: null,
-            effectiveFrom: new Date("2024-01-01T00:00:00Z"),
-            effectiveTo: null,
-        });
+        pricing.addRow(gptPricingRow);
+        const dedup = new InMemoryRequestDedupGuard();
 
         // Seed the row that the duplicate in the next batch will collide with.
         await ingestEventsUseCase({
@@ -368,6 +310,7 @@ describe("ingestEventsUseCase", () => {
             events: [event({ requestId: "dup" })],
             eventsRepo: events,
             pricingRepo: pricing,
+            dedup,
         });
 
         const result = await ingestEventsUseCase({
@@ -379,6 +322,7 @@ describe("ingestEventsUseCase", () => {
             ],
             eventsRepo: events,
             pricingRepo: pricing,
+            dedup,
         });
 
         expect(result.inserted).toBe(2);
@@ -388,34 +332,26 @@ describe("ingestEventsUseCase", () => {
     test("null requestId rows are never deduped — both inserts land", async () => {
         const events = new InMemoryUsageEventRepository();
         const pricing = new StubPricingRepository();
-        pricing.addRow({
-            id: "row-1",
-            workspaceId: null,
-            provider: "openai",
-            model: "gpt-4o",
-            region: "global",
-            inputPer1mUsd: "2.5",
-            outputPer1mUsd: "10",
-            cachePer1mUsd: null,
-            effectiveFrom: new Date("2024-01-01T00:00:00Z"),
-            effectiveTo: null,
-        });
+        pricing.addRow(gptPricingRow);
+        const dedup = new InMemoryRequestDedupGuard();
 
         await ingestEventsUseCase({
             workspaceId: WORKSPACE_A,
             events: [event({ requestId: null })],
             eventsRepo: events,
             pricingRepo: pricing,
+            dedup,
         });
         await ingestEventsUseCase({
             workspaceId: WORKSPACE_A,
             events: [event({ requestId: null })],
             eventsRepo: events,
             pricingRepo: pricing,
+            dedup,
         });
 
-        // Pre-existing SDK behavior: requestId is optional. Rows without one
-        // can not be deduped — each delivery records its own row.
+        // requestId is optional. Rows without one can not be deduped — each
+        // delivery records its own row.
         expect(events.rows.length).toBe(2);
     });
 
@@ -433,6 +369,7 @@ describe("ingestEventsUseCase", () => {
             events: [event()],
             eventsRepo: events,
             pricingRepo: pricing,
+            dedup: new InMemoryRequestDedupGuard(),
             pricingResolver: resolver,
         });
 
@@ -460,6 +397,7 @@ describe("ingestEventsUseCase", () => {
             events: [event({ provider: "openai", model: "mystery-model" })],
             eventsRepo: events,
             pricingRepo: pricing,
+            dedup: new InMemoryRequestDedupGuard(),
             pricingResolver: resolver,
         });
 
@@ -485,6 +423,7 @@ describe("ingestEventsUseCase", () => {
                 events: [event()],
                 eventsRepo: events,
                 pricingRepo: pricing,
+                dedup: new InMemoryRequestDedupGuard(),
                 pricingResolver: resolver,
             });
         } catch (err) {
@@ -501,34 +440,26 @@ describe("ingestEventsUseCase", () => {
     test("same requestId in different workspaces does NOT dedupe", async () => {
         const events = new InMemoryUsageEventRepository();
         const pricing = new StubPricingRepository();
-        pricing.addRow({
-            id: "row-1",
-            workspaceId: null,
-            provider: "openai",
-            model: "gpt-4o",
-            region: "global",
-            inputPer1mUsd: "2.5",
-            outputPer1mUsd: "10",
-            cachePer1mUsd: null,
-            effectiveFrom: new Date("2024-01-01T00:00:00Z"),
-            effectiveTo: null,
-        });
+        pricing.addRow(gptPricingRow);
+        const dedup = new InMemoryRequestDedupGuard();
 
         await ingestEventsUseCase({
             workspaceId: WORKSPACE_A,
             events: [event({ requestId: "req-abc" })],
             eventsRepo: events,
             pricingRepo: pricing,
+            dedup,
         });
         await ingestEventsUseCase({
             workspaceId: WORKSPACE_B,
             events: [event({ requestId: "req-abc" })],
             eventsRepo: events,
             pricingRepo: pricing,
+            dedup,
         });
 
-        // Tenant isolation: the unique index is partial on (workspace, requestId),
-        // so two distinct workspaces never collide.
+        // The dedup key is scoped by workspace, so two distinct workspaces never
+        // collide on the same requestId.
         expect(events.rows.length).toBe(2);
     });
 });

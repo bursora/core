@@ -24,9 +24,12 @@
  * unpriced event would lose real, priced spend.
  */
 
+import { errMessage } from "../error-message";
+import type { RecordSpendEvent, SpendCounter } from "../spend-counter";
 import { UnknownPricingError } from "./pricing/calculate-cost";
 import { createDrizzlePricingResolver, type PricingResolver } from "./pricing/pricing-resolver";
 import type { PricingRepository } from "./pricing/pricing-row";
+import { dedupKey, type RequestDedupGuard } from "./request-dedup";
 import type { UsageEventInput, UsageEventRow } from "./usage-event";
 import type { UsageEventRepository } from "./usage-event.repository";
 
@@ -36,11 +39,26 @@ export interface IngestEventsInput {
     readonly eventsRepo: UsageEventRepository;
     readonly pricingRepo: PricingRepository;
     /**
+     * Drops retried `(workspaceId, requestId)` deliveries before they reach the
+     * sink. The repository sink no longer dedups (ClickHouse MergeTree has no
+     * `ON CONFLICT`), so this is the only idempotency layer.
+     */
+    readonly dedup: RequestDedupGuard;
+    /**
      * Optional override for the pricing decision. Defaults to a Drizzle-backed
      * resolver wired from `pricingRepo`. Tests inject a hardcoded resolver to
      * avoid touching pricing infrastructure.
      */
     readonly pricingResolver?: PricingResolver;
+    /**
+     * Bumps the Redis spend counters after a successful insert, sharing this
+     * path's single dedup decision so a retried delivery neither double-inserts
+     * nor double-increments. Optional — omitted in unit tests that only assert
+     * the write path.
+     */
+    readonly spendCounter?: SpendCounter;
+    /** Wall clock for counter TTLs. Defaults to now when the counter is wired. */
+    readonly now?: Date;
 }
 
 export interface UnpricedModel {
@@ -121,10 +139,72 @@ export async function ingestEventsUseCase(input: IngestEventsInput): Promise<Ing
         }
     }
 
-    // `inserted` is priced rows actually written. Retried `requestId`s dedup at
-    // the unique index and are excluded, so the caller bills the bundle by real
-    // writes, not the requested count (issue #1002).
-    const inserted = rows.length > 0 ? await input.eventsRepo.insertBatch(rows) : 0;
+    // Drop retried `requestId`s before the sink, then bill the bundle by what
+    // actually persists, never the requested count (issue #1002). Rows without
+    // a `requestId` can't dedup and always land.
+    const toInsert = await dedupeRows(rows, input.dedup);
+    const inserted = toInsert.length > 0 ? await input.eventsRepo.insertBatch(toInsert) : 0;
+
+    // Bump the spend counters off the SAME deduped set the sink received, so the
+    // one dedup decision covers both the insert and the increment. ClickHouse is
+    // canonical: a counter failure self-heals on the next reconcile-on-miss, so
+    // it must never fail an already-persisted insert.
+    if (input.spendCounter !== undefined && toInsert.length > 0) {
+        await bumpSpendCounters(input.spendCounter, toInsert, input.now ?? new Date());
+    }
 
     return { inserted, unpriced: [...unpriced.values()] };
+}
+
+async function bumpSpendCounters(
+    spendCounter: SpendCounter,
+    rows: readonly UsageEventRow[],
+    now: Date,
+): Promise<void> {
+    const okEvents: RecordSpendEvent[] = rows
+        .filter((row) => (row.status ?? "ok") === "ok")
+        .map((row) => ({
+            workspaceId: row.workspaceId,
+            tenantId: row.tenantId,
+            agentId: row.agentId,
+            workflowId: row.workflowId,
+            costUsd: row.costUsd,
+            ts: row.ts,
+        }));
+    if (okEvents.length === 0) return;
+    try {
+        await spendCounter.record(okEvents, now);
+    } catch (err) {
+        console.warn("spend_counter.record_failed", { error: errMessage(err) });
+    }
+}
+
+/**
+ * Keeps every null-`requestId` row plus the first row per
+ * `(workspaceId, requestId)` the guard reports as unseen in the idempotency
+ * window. Order is preserved; within-batch repeats collapse to one.
+ */
+async function dedupeRows(
+    rows: readonly UsageEventRow[],
+    dedup: RequestDedupGuard,
+): Promise<UsageEventRow[]> {
+    const keys = rows.flatMap((row) =>
+        row.requestId === null ? [] : [dedupKey(row.workspaceId, row.requestId)],
+    );
+    const fresh = await dedup.keepUnseen(keys);
+
+    const used = new Set<string>();
+    const out: UsageEventRow[] = [];
+    for (const row of rows) {
+        if (row.requestId === null) {
+            out.push(row);
+            continue;
+        }
+        const key = dedupKey(row.workspaceId, row.requestId);
+        if (fresh.has(key) && !used.has(key)) {
+            used.add(key);
+            out.push(row);
+        }
+    }
+    return out;
 }

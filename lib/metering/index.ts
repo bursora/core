@@ -2,9 +2,8 @@
  * Public API of the metering feature.
  *
  * Consumers in `app/` and other features import everything they need from
- * here: schema tables, the pure `calculateCost` deep module, read-side
- * queries (Postgres-backed read repository), the ingest action, and the
- * partition rollover service used by the retention cron.
+ * here: the pure `calculateCost` deep module, read-side queries (the
+ * ClickHouse-backed read repository), and the ingest action.
  */
 
 export { UnknownPricingError, calculateCost, type Usage } from "./pricing/calculate-cost";
@@ -21,13 +20,16 @@ export { getTopSpendersUseCase, type GetTopSpendersInput } from "./get-top-spend
 
 export type { MeteringDeps, MeteringReadDeps } from "./server";
 
-export {
-    ingestEventsUseCase,
-    type IngestEventsInput,
-    type IngestSummary,
-} from "./ingest-events.usecase";
+// Type-only: `ingest-events.usecase` transitively imports the `server-only`
+// `request-dedup` guard, so re-exporting its runtime function here would pull
+// server-only code into any client bundle that imports this barrel (the
+// activity/spend filter constants). Server callers import `ingestEventsUseCase`
+// from `./ingest-events.usecase` directly.
+export type { IngestEventsInput, IngestSummary } from "./ingest-events.usecase";
 
-export { pruneEvents, type PerWorkspaceSummary, type PruneSummary } from "./prune-events.usecase";
+// Type-only for the same reason: `request-dedup` is `server-only`. Runtime
+// consumers import the guard and `dedupKey` from `./request-dedup` directly.
+export type { RequestDedupGuard } from "./request-dedup";
 
 export { decodeBlockedEventsCursor, encodeBlockedEventsCursor } from "./metering-read.repository";
 
@@ -50,12 +52,7 @@ export type {
     TopSpenderRow,
     TopSpendersQuery,
 } from "./metering-read.repository";
-export { CLOUD_RETENTION_DAYS, LONGEST_RETENTION_DAYS } from "./retention-policy";
-export type {
-    PartitionInfo,
-    RetentionRepository,
-    WorkspaceRetention,
-} from "./retention.repository";
+export { CLOUD_RETENTION_DAYS } from "./retention-policy";
 export {
     UNTAGGED,
     type Facet,

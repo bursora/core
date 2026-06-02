@@ -119,6 +119,8 @@ export async function decideBudgetUseCase(input: DecideBudgetInput): Promise<Dec
                 scopeId: row.scopeId,
                 from: window.from,
                 to: window.to,
+                period: row.period,
+                now: input.now,
             }),
         ),
     );

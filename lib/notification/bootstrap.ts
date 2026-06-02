@@ -14,6 +14,7 @@
 
 import "server-only";
 
+import { clickhouseClient } from "@/lib/clickhouse/client";
 import { db } from "@/lib/db";
 import { countBlockedSinceTrip } from "../budgeting/blocked-calls";
 import { ALERT_RAISED_TOPIC, type AlertRaisedEvent } from "../event-bus";
@@ -71,7 +72,7 @@ export function ensureNotificationBootstrap(): void {
         const deniedSinceTrip =
             event.kind === "budget"
                 ? await countBlockedSinceTrip({
-                      db: db(),
+                      ch: clickhouseClient(),
                       workspaceId: event.workspaceId,
                       since: event.raisedAt,
                   }).catch(() => 0)

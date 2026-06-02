@@ -30,6 +30,7 @@ import { setSpikeProtectionDepsForTesting } from "@/lib/spike-protection/server"
 import { InMemoryNotificationsRepository } from "@/tests/notifications/fakes/in-memory-notifications.repository";
 import { InMemorySetupErrorRepository } from "@/tests/setup-errors/fakes/in-memory-setup-error.repository";
 import { afterEach, beforeAll, describe, expect, mock, spyOn, test } from "bun:test";
+import { InMemoryRequestDedupGuard } from "./fakes/in-memory-request-dedup.guard";
 import { InMemoryUsageEventRepository } from "./fakes/in-memory-usage-event.repository";
 import { StubPricingRepository } from "./fakes/stub-pricing.repository";
 
@@ -130,6 +131,7 @@ const setupHarness = (opts: { knownKey?: boolean } = {}): Harness => {
     setMeteringDepsForTesting({
         eventsRepo: events,
         pricingRepo: pricing,
+        dedup: new InMemoryRequestDedupGuard(),
     });
 
     setEventBundleDepsForTesting({

@@ -224,7 +224,7 @@ describe("listBlockedEventsForBudget", () => {
     });
 
     test("pages through rows with identical timestamps without losing any", async () => {
-        // Regression: at high block rates, `defaultRecordBlocked` stamps
+        // Regression: at high block rates, `clickHouseRecordBlocked` stamps
         // `ts: input.now` for every denial. A burst with equal ts at the
         // page boundary used to silently skip rows because the cursor was a
         // bare `ts < cursor`. The cursor now carries `{ts, id}` and the

@@ -39,18 +39,21 @@ const HOUR_MS = 60 * 60 * 1000;
 
 /**
  * Hourly call-count buckets for the activity feed sparkline. Reads the
- * canonical ClickHouse store: `status='ok'` rows at or after `since`, floored
+ * canonical ClickHouse store: `status='ok'` rows at or after `since`, grouped
  * to the hour by epoch-millisecond division (the timezone-free analog of the PG
- * `date_trunc('hour', ts)`), newest bucket first.
+ * `date_trunc('hour', ts)`), newest bucket first. Each bucket is stamped at the
+ * latest actual event time within it (`max(ts)`), not the hour floor, so a row
+ * reads as the real time it happened rather than up to an hour stale.
  */
 export async function fetchEventBuckets(
     ch: ClickHouse,
     workspaceId: string,
     since: Date,
 ): Promise<readonly EventBucket[]> {
-    const rows = await ch.query<{ bucket_ms: string; count: string }>({
+    const rows = await ch.query<{ bucket_ms: string; last_ms: string; count: string }>({
         query: `SELECT
                 intDiv(toUnixTimestamp64Milli(ts), {hourMs:Int64}) * {hourMs:Int64} AS bucket_ms,
+                max(toUnixTimestamp64Milli(ts)) AS last_ms,
                 count() AS count
             FROM usage_events
             WHERE workspace_id = {workspaceId:UUID}
@@ -64,7 +67,7 @@ export async function fetchEventBuckets(
             hourMs: HOUR_MS,
         },
     });
-    return rows.map((r) => ({ at: new Date(Number(r.bucket_ms)), count: Number(r.count) }));
+    return rows.map((r) => ({ at: new Date(Number(r.last_ms)), count: Number(r.count) }));
 }
 
 let testOverride: ActivityDeps | null = null;

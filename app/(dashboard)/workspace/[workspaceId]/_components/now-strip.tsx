@@ -71,7 +71,7 @@ export async function NowStrip({ workspaceId, dashboardWindow }: NowStripProps) 
     return (
         <NowStripView
             suffix={suffix}
-            deltaCaption={`vs prior ${suffix}`}
+            deltaCaption="vs prior"
             spend={{ total: spendTotal, delta: spendDelta, series: spendSeries }}
             calls={{ count: callsCount, delta: callsDelta, series: callsSeries }}
             budgets={{ active: activeBudgets, deltaLabel: budgetsDeltaLabel, tone: budgetsTone }}

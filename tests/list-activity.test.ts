@@ -87,7 +87,21 @@ describe("listActivityUseCase", () => {
         });
         expect(out.length).toBe(1);
         expect(out[0]?.kind).toBe("event_ingested");
-        expect(out[0]?.summary).toBe("3 events in past hour");
+        expect(out[0]?.summary).toBe("3 events");
+    });
+
+    test("clamps future event-bucket timestamps to now", async () => {
+        const future = new Date(NOW.getTime() + 21_000);
+        const out = await listActivityUseCase({
+            workspaceId: WORKSPACE,
+            now: NOW,
+            fetchEventBuckets: async () => [{ at: future, count: 2 }],
+            fetchAlerts: async () => [],
+            fetchKeyEvents: async () => [],
+        });
+        expect(out.length).toBe(1);
+        expect(out[0]?.kind).toBe("event_ingested");
+        expect(out[0]?.at.getTime()).toBe(NOW.getTime());
     });
 
     test("respects limit cap on merged stream", async () => {

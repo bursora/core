@@ -16,6 +16,8 @@ export interface ActivityItem {
     readonly summary: string;
     readonly severity?: ActivitySeverity;
     readonly scope?: string;
+    /** Event count for `event_ingested` rows; lets the UI total a day without reparsing the summary. */
+    readonly count?: number;
 }
 
 export interface EventBucket {
@@ -71,6 +73,7 @@ function mergeActivity(args: {
     readonly keyEvents: readonly KeyEvent[];
     readonly setupErrors: readonly SetupErrorEvent[];
     readonly since: Date;
+    readonly now: Date;
 }): ActivityItem[] {
     const items: ActivityItem[] = [];
 
@@ -78,8 +81,9 @@ function mergeActivity(args: {
         if (b.count <= 0) continue;
         items.push({
             kind: "event_ingested",
-            at: b.at,
-            summary: `${b.count} event${b.count === 1 ? "" : "s"} in past hour`,
+            at: new Date(Math.min(b.at.getTime(), args.now.getTime())),
+            summary: `${b.count} event${b.count === 1 ? "" : "s"}`,
+            count: b.count,
         });
     }
 
@@ -146,7 +150,7 @@ export async function listActivityUseCase(
         input.fetchSetupErrors?.(input.workspaceId, since) ?? Promise.resolve([]),
     ]);
 
-    return mergeActivity({ buckets, alerts, keyEvents, setupErrors, since }).slice(0, limit);
+    return mergeActivity({ buckets, alerts, keyEvents, setupErrors, since, now }).slice(0, limit);
 }
 
 export interface ActivityFilters {
@@ -215,7 +219,7 @@ export async function listActivityPageUseCase(input: ListActivityPageInput): Pro
         input.fetchSetupErrors?.(input.workspaceId, since) ?? Promise.resolve([]),
     ]);
 
-    let merged = mergeActivity({ buckets, alerts, keyEvents, setupErrors, since });
+    let merged = mergeActivity({ buckets, alerts, keyEvents, setupErrors, since, now });
 
     if (filters.to !== undefined) {
         const toMs = filters.to.getTime();

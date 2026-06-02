@@ -73,7 +73,6 @@ const monthWindow = (now: Date): DashboardWindow => {
     const from = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
     const length = now.getTime() - from.getTime();
     return {
-        key: "month",
         from,
         to: now,
         priorFrom: new Date(from.getTime() - length),
@@ -88,7 +87,6 @@ const todayWindow = (now: Date, hoursElapsed: number): DashboardWindow => {
     const DAY_MS = 24 * HOUR_MS;
     const to = new Date(dayStart.getTime() + hoursElapsed * HOUR_MS);
     return {
-        key: "today",
         from: dayStart,
         to,
         priorFrom: new Date(dayStart.getTime() - DAY_MS),

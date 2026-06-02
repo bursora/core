@@ -77,7 +77,6 @@ const monthWindow = (now: Date): DashboardWindow => {
     const from = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
     const length = now.getTime() - from.getTime();
     return {
-        key: "month",
         from,
         to: now,
         priorFrom: new Date(from.getTime() - length),
@@ -95,7 +94,6 @@ const weekWindow = (now: Date): DashboardWindow => {
         Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - daysSinceMonday),
     );
     return {
-        key: "week",
         from,
         to: now,
         priorFrom: new Date(from.getTime() - WEEK_DAYS * DAY_MS),
@@ -119,7 +117,6 @@ describe("TopSpendersSnapshot", () => {
             workspaceId: WORKSPACE,
             dashboardWindow: monthWindow(new Date()),
             facet: "tenant",
-            windowKey: "month",
         });
         const html = renderToStaticMarkup(element);
 
@@ -139,7 +136,6 @@ describe("TopSpendersSnapshot", () => {
             workspaceId: WORKSPACE,
             dashboardWindow: w,
             facet: "tenant",
-            windowKey: "month",
         });
 
         expect(repo.lastTopSpendersQuery).not.toBeNull();
@@ -163,7 +159,6 @@ describe("TopSpendersSnapshot", () => {
             workspaceId: WORKSPACE,
             dashboardWindow: w,
             facet: "tenant",
-            windowKey: "week",
         });
 
         const q = repo.lastTopSpendersQuery;
@@ -186,7 +181,6 @@ describe("TopSpendersSnapshot", () => {
             workspaceId: WORKSPACE,
             dashboardWindow: monthWindow(new Date()),
             facet: "tenant",
-            windowKey: "month",
         });
         const html = renderToStaticMarkup(element);
 
@@ -208,7 +202,6 @@ describe("TopSpendersSnapshot", () => {
             workspaceId: WORKSPACE,
             dashboardWindow: weekWindow(new Date("2026-05-17T12:00:00Z")),
             facet: "tenant",
-            windowKey: "week",
         });
         const html = renderToStaticMarkup(element);
 
@@ -233,7 +226,6 @@ describe("TopSpendersSnapshot", () => {
             workspaceId: WORKSPACE,
             dashboardWindow: monthWindow(new Date()),
             facet: "model",
-            windowKey: "month",
         });
         const html = renderToStaticMarkup(element);
 

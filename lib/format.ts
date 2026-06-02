@@ -223,11 +223,15 @@ export function formatRelativeTime(at: Date, nowMs: number = Date.now()): string
 
     const sign = diffMs < 0 ? -1 : 1;
 
-    if (absSec < 60) return RTF.format(sign * Math.round(absSec), "second");
-    const absMin = absSec / 60;
-    if (absMin < 60) return RTF.format(sign * Math.round(absMin), "minute");
-    const absHr = absMin / 60;
-    if (absHr < 24) return RTF.format(sign * Math.round(absHr), "hour");
-    const absDay = absHr / 24;
-    return RTF.format(sign * Math.round(absDay), "day");
+    // Round first, then pick the unit: a value like 59.6 minutes must roll up
+    // to "1 hour", not display as "60 minutes". Comparing the unrounded value
+    // against the threshold while rendering the rounded one leaks "60 minutes",
+    // "60 seconds", and "24 hours".
+    const sec = Math.round(absSec);
+    if (sec < 60) return RTF.format(sign * sec, "second");
+    const min = Math.round(absSec / 60);
+    if (min < 60) return RTF.format(sign * min, "minute");
+    const hr = Math.round(absSec / 3600);
+    if (hr < 24) return RTF.format(sign * hr, "hour");
+    return RTF.format(sign * Math.round(absSec / 86400), "day");
 }

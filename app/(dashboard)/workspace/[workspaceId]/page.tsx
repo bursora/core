@@ -3,14 +3,14 @@ import { PageHeader } from "@/components/shell/page-header";
 import { SpendCompositionPanel } from "@/components/ui/dashboard-views/spend-composition-panel";
 import { WhatsBreakingPanel } from "@/components/ui/dashboard-views/whats-breaking";
 import { Skeleton } from "@/components/ui/skeleton";
-import { WindowFilter } from "@/components/ui/workspace/filters/window-filter";
+import { DateRangeFilter } from "@/components/ui/workspace/filters/date-range-filter";
 import { RefreshControls } from "@/components/ui/workspace/refresh-controls";
 import { requireSessionUI } from "@/lib/auth";
 import { cloudWorkspaceLocked } from "@/lib/billing-gate/server";
 import { getSpendComposition } from "@/lib/compose/spend-composition";
 import { getCustomerTrajectories, getModelTrajectories } from "@/lib/compose/trajectories";
 import { getWhatsBreaking } from "@/lib/compose/whats-breaking";
-import { parseWindowKey, resolveWindow, type DashboardWindow } from "@/lib/dashboard-window";
+import { dashboardWindowFromRange, type DashboardWindow } from "@/lib/dashboard-window";
 import { buildWorkspacePath } from "@/lib/routes";
 import { FACETS, type Facet } from "@/lib/spend-types";
 import { Suspense } from "react";
@@ -23,10 +23,11 @@ import { RunwayProjection } from "./_components/runway-projection";
 import { StatusStrip } from "./_components/status-strip";
 import { TopSpendersSnapshot } from "./_components/top-spenders-snapshot";
 import { TrajectoriesToWatchPanel } from "./_components/trajectories-to-watch";
+import { resolveSpendWindow } from "./spend/_lib/resolve-window";
 
 interface DashboardPageProps {
     params: Promise<{ workspaceId: string }>;
-    searchParams: Promise<{ window?: string | string[]; facet?: string }>;
+    searchParams: Promise<{ from?: string; to?: string; facet?: string }>;
 }
 
 export default async function DashboardPage({ params, searchParams }: DashboardPageProps) {
@@ -46,9 +47,9 @@ export default async function DashboardPage({ params, searchParams }: DashboardP
         );
     }
 
-    const { window: rawWindow, facet: rawFacet } = await searchParams;
-    const windowKey = parseWindowKey(rawWindow);
-    const dashboardWindow = resolveWindow(windowKey, new Date());
+    const { from: rawFrom, to: rawTo, facet: rawFacet } = await searchParams;
+    const { from, to } = resolveSpendWindow({ from: rawFrom, to: rawTo, now: new Date() });
+    const dashboardWindow = dashboardWindowFromRange(from, to);
     const facet: Facet =
         rawFacet !== undefined && (FACETS as readonly string[]).includes(rawFacet)
             ? (rawFacet as Facet)
@@ -60,8 +61,8 @@ export default async function DashboardPage({ params, searchParams }: DashboardP
                 title="Dashboard"
                 subtitle={`Welcome, ${session.user.email}.`}
                 actions={
-                    <div className="flex items-center gap-2">
-                        <WindowFilter value={windowKey} />
+                    <div className="flex flex-wrap items-center gap-2">
+                        <DateRangeFilter from={from} to={to} />
                         <RefreshControls />
                     </div>
                 }
@@ -81,7 +82,6 @@ export default async function DashboardPage({ params, searchParams }: DashboardP
                         workspaceId={workspaceId}
                         dashboardWindow={dashboardWindow}
                         facet={facet}
-                        windowKey={windowKey}
                     />
                 </Suspense>
                 <Suspense fallback={<PanelSkeleton rows={5} />}>

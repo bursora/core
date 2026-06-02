@@ -9,7 +9,7 @@
 
 import { NowStrip } from "@/app/(dashboard)/workspace/[workspaceId]/_components/now-strip";
 import type { RawBudget } from "@/lib/budgeting/budget.repository";
-import { resolveWindow, type DashboardWindow, type WindowKey } from "@/lib/dashboard-window";
+import { dashboardWindowFromRange, type DashboardWindow } from "@/lib/dashboard-window";
 import {
     setDashboardStatsDepsForTesting,
     type DashboardStatsDeps,
@@ -81,13 +81,16 @@ class StubAlertRepo implements AlertRepository {
 interface RenderInput {
     readonly stats?: Partial<DashboardStatsDeps>;
     readonly alerts?: readonly Alert[];
-    readonly windowKey?: WindowKey;
+    readonly spanMs?: number;
 }
 
-function buildWindow(key: WindowKey = "month"): DashboardWindow {
-    // Pin `now` mid-May so the month window has a deterministic length and
-    // boundaries; matches the dashboard-stats fixture vintage.
-    return resolveWindow(key, new Date("2026-05-17T15:00:00Z"));
+const NOW = new Date("2026-05-17T15:00:00Z");
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function buildWindow(spanMs: number = 30 * DAY_MS): DashboardWindow {
+    // Pin `now` mid-May and span back a whole number of days so the window has
+    // a deterministic length, boundaries, and short label ("30d", "7d", ...).
+    return dashboardWindowFromRange(new Date(NOW.getTime() - spanMs), NOW);
 }
 
 async function render(input: RenderInput = {}): Promise<string> {
@@ -95,7 +98,7 @@ async function render(input: RenderInput = {}): Promise<string> {
     setAlertsDepsForTesting({ alerts: new StubAlertRepo(input.alerts ?? []) });
     const element = await NowStrip({
         workspaceId: WORKSPACE,
-        dashboardWindow: buildWindow(input.windowKey),
+        dashboardWindow: buildWindow(input.spanMs),
     });
     return renderToStaticMarkup(element);
 }
@@ -109,8 +112,8 @@ describe("NowStrip", () => {
     test("renders all four tile labels", async () => {
         const html = await render();
 
-        expect(html).toContain("Spend, month");
-        expect(html).toContain("Calls, month");
+        expect(html).toContain("Spend, 30d");
+        expect(html).toContain("Calls, 30d");
         expect(html).toContain("Active budgets");
         expect(html).toContain("Alerts, 24h");
     });
@@ -131,15 +134,15 @@ describe("NowStrip", () => {
         expect(html).toContain("9,876");
     });
 
-    test("delta caption reads 'vs prior <window-label>'", async () => {
-        const html = await render({ windowKey: "week" });
-        expect(html).toContain("vs prior week");
+    test("delta caption reads 'vs prior'", async () => {
+        const html = await render();
+        expect(html).toContain("vs prior");
     });
 
-    test("renders window-relative labels (Spend, week / Calls, week) when window is 'week'", async () => {
-        const html = await render({ windowKey: "week" });
-        expect(html).toContain("Spend, week");
-        expect(html).toContain("Calls, week");
+    test("renders window-relative labels (Spend, 7d / Calls, 7d) for a 7-day window", async () => {
+        const html = await render({ spanMs: 7 * DAY_MS });
+        expect(html).toContain("Spend, 7d");
+        expect(html).toContain("Calls, 7d");
     });
 
     test("renders the active-budgets count via listBudgets", async () => {

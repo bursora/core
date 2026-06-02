@@ -6,7 +6,7 @@
  * shape the dashboard page expects.
  */
 
-import { resolveWindow } from "@/lib/dashboard-window";
+import { dashboardWindowFromRange } from "@/lib/dashboard-window";
 import {
     computeDelta,
     confidenceLabel,
@@ -558,8 +558,10 @@ describe("dashboard-stats", () => {
     });
 
     test("getDailyRateInWindow treats today as a single day (partial day → daysElapsed=1)", async () => {
-        const now = new Date("2026-05-17T15:00:00Z");
-        const window = resolveWindow("today", now);
+        const window = dashboardWindowFromRange(
+            new Date("2026-05-17T00:00:00Z"),
+            new Date("2026-05-17T15:00:00Z"),
+        );
         let captured: { since?: Date; until?: Date } = {};
         setDashboardStatsDepsForTesting(
             baseDeps({
@@ -579,9 +581,11 @@ describe("dashboard-stats", () => {
     });
 
     test("getDailyRateInWindow divides week spend by whole days elapsed (min 1)", async () => {
-        // 2026-05-17 is a Sunday → ISO Monday-anchor is 2026-05-11; 7 days elapsed.
-        const now = new Date("2026-05-17T15:00:00Z");
-        const window = resolveWindow("week", now);
+        // Mon 2026-05-11 00:00 → Sun 2026-05-17 15:00 is 6.6 days → 7 whole days.
+        const window = dashboardWindowFromRange(
+            new Date("2026-05-11T00:00:00Z"),
+            new Date("2026-05-17T15:00:00Z"),
+        );
         setDashboardStatsDepsForTesting(
             baseDeps({
                 sumSpendBetween: async () => "70.00000000",
@@ -595,9 +599,11 @@ describe("dashboard-stats", () => {
     });
 
     test("getDailyRateInWindow divides month spend by whole days elapsed (min 1)", async () => {
-        // 2026-05-10T12:00 → 9 full days + half of day 10 → 10 whole-days-elapsed.
-        const now = new Date("2026-05-10T12:00:00Z");
-        const window = resolveWindow("month", now);
+        // 2026-05-01 00:00 → 2026-05-10 12:00 = 9.5 days → 10 whole-days-elapsed.
+        const window = dashboardWindowFromRange(
+            new Date("2026-05-01T00:00:00Z"),
+            new Date("2026-05-10T12:00:00Z"),
+        );
         setDashboardStatsDepsForTesting(
             baseDeps({
                 sumSpendBetween: async () => "50.00000000",
@@ -611,8 +617,10 @@ describe("dashboard-stats", () => {
     });
 
     test("getDailyRateInWindow returns zero rate when there's no spend", async () => {
-        const now = new Date("2026-05-17T15:00:00Z");
-        const window = resolveWindow("month", now);
+        const window = dashboardWindowFromRange(
+            new Date("2026-05-01T00:00:00Z"),
+            new Date("2026-05-17T15:00:00Z"),
+        );
         setDashboardStatsDepsForTesting(
             baseDeps({
                 sumSpendBetween: async () => "0.00000000",
@@ -626,8 +634,10 @@ describe("dashboard-stats", () => {
     });
 
     test("getSpendPaceInWindow compares window spend vs prior-period spend at same elapsed fraction", async () => {
-        const now = new Date("2026-05-17T15:00:00Z");
-        const window = resolveWindow("week", now);
+        const window = dashboardWindowFromRange(
+            new Date("2026-05-11T00:00:00Z"),
+            new Date("2026-05-17T15:00:00Z"),
+        );
         const elapsed = window.to.getTime() - window.from.getTime();
         const priorEnd = new Date(window.priorFrom.getTime() + elapsed);
 

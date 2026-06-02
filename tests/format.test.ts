@@ -15,6 +15,7 @@ import {
     formatDashboardUsd,
     formatPercent,
     formatPreciseUsd,
+    formatRelativeTime,
     formatSignedPercent,
     formatTokens,
     formatUsd,
@@ -22,6 +23,27 @@ import {
     formatWholeUsd,
 } from "@/lib/format";
 import { describe, expect, test } from "bun:test";
+
+describe("formatRelativeTime", () => {
+    const now = new Date("2026-06-02T13:59:39Z").getTime();
+    const ago = (ms: number) => formatRelativeTime(new Date(now - ms), now);
+
+    test("renders past and future in the right direction", () => {
+        expect(ago(30_000)).toBe("30 seconds ago");
+        expect(formatRelativeTime(new Date(now + 90_000), now)).toBe("in 2 minutes");
+    });
+
+    test("treats sub-threshold deltas as 'just now'", () => {
+        expect(ago(2_000)).toBe("just now");
+    });
+
+    test("rolls a near-full unit up instead of showing its ceiling", () => {
+        // The boundary bug: 59.6 of a unit rounds to 60/24 and must carry over.
+        expect(ago(59.6 * 1_000)).toBe("1 minute ago");
+        expect(ago(59.6 * 60_000)).toBe("1 hour ago");
+        expect(ago(23.6 * 3_600_000)).toBe("yesterday");
+    });
+});
 
 describe("formatUsd", () => {
     test("formats positive numbers with two fractional digits", () => {

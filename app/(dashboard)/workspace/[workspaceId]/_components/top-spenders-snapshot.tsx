@@ -1,6 +1,5 @@
 import { TopSpendersSnapshotView } from "@/components/ui/dashboard-views/top-spenders-snapshot-view";
-import type { DashboardWindow, WindowKey } from "@/lib/dashboard-window";
-import { DEFAULT_WINDOW_KEY } from "@/lib/dashboard-window";
+import type { DashboardWindow } from "@/lib/dashboard-window";
 import { getSpendInWindow } from "@/lib/dashboard/dashboard-stats";
 import { getTopSpenders } from "@/lib/metering/server";
 import { resolveModelProviders } from "@/lib/models-server";
@@ -11,15 +10,9 @@ interface Props {
     readonly workspaceId: string;
     readonly dashboardWindow: DashboardWindow;
     readonly facet: Facet;
-    readonly windowKey: WindowKey;
 }
 
-export async function TopSpendersSnapshot({
-    workspaceId,
-    dashboardWindow,
-    facet,
-    windowKey,
-}: Props) {
+export async function TopSpendersSnapshot({ workspaceId, dashboardWindow, facet }: Props) {
     const { from, to, label } = dashboardWindow;
     const suffix = label.toLowerCase();
     const [rows, totalSpend] = await Promise.all([
@@ -40,7 +33,7 @@ export async function TopSpendersSnapshot({
             groupBy={{
                 mode: "link",
                 basePath: buildWorkspacePath(workspaceId),
-                otherParams: windowKey !== DEFAULT_WINDOW_KEY ? { window: windowKey } : {},
+                otherParams: { from: from.toISOString(), to: to.toISOString() },
             }}
             workspaceId={workspaceId}
             from={from}

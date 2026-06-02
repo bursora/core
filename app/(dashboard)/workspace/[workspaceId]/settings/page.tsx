@@ -23,7 +23,7 @@ interface SettingsPageProps {
         severity?: string;
         from?: string;
         to?: string;
-        cursor?: string;
+        shown?: string;
         pricing_q?: string;
         pricing_provider?: string;
         pricing_status?: string;
@@ -131,9 +131,7 @@ export default async function SettingsPage({ params, searchParams }: SettingsPag
                                         : {}),
                                     ...(search.from !== undefined ? { from: search.from } : {}),
                                     ...(search.to !== undefined ? { to: search.to } : {}),
-                                    ...(search.cursor !== undefined
-                                        ? { cursor: search.cursor }
-                                        : {}),
+                                    ...(search.shown !== undefined ? { shown: search.shown } : {}),
                                 }}
                             />
                         ),

@@ -1,4 +1,9 @@
-import { Button } from "@/components/ui/button";
+import {
+    Accordion,
+    AccordionContent,
+    AccordionItem,
+    AccordionTrigger,
+} from "@/components/ui/accordion";
 import { DashboardSection } from "@/components/ui/workspace/dashboard-section";
 import { DateRangeFilter } from "@/components/ui/workspace/filters/date-range-filter";
 import { StatusTag } from "@/components/ui/workspace/status-tag";
@@ -7,7 +12,6 @@ import { formatRelativeTime } from "@/lib/format";
 import {
     ACTIVITY_KIND_LABELS,
     deserializeActivityFilters,
-    serializeActivityFilters,
     type ActivityFilters as ActivityFilterValues,
     type ActivityItem,
     type ActivityKind,
@@ -28,6 +32,7 @@ import {
 import type { Route } from "next";
 import Link from "next/link";
 import { ActivityActiveFilters } from "./activity-active-filters";
+import { LoadMoreButton } from "./load-more-button";
 
 const KIND_ICON: Record<ActivityKind, LucideIcon> = {
     event_ingested: TrendingUp,
@@ -44,11 +49,21 @@ export interface ActivityTabProps {
         readonly severity?: string;
         readonly from?: string;
         readonly to?: string;
-        readonly cursor?: string;
+        readonly shown?: string;
     };
 }
 
 const DEFAULT_ACTIVITY_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+const ACTIVITY_PAGE_SIZE = 50;
+const MAX_ACTIVITY_SHOWN = 500;
+
+// "Load more" grows this count so rows accumulate from newest, rather than
+// paging to older items and dropping what was already on screen.
+function parseShown(raw: string | undefined): number {
+    const n = Number.parseInt(raw ?? "", 10);
+    if (!Number.isFinite(n) || n < ACTIVITY_PAGE_SIZE) return ACTIVITY_PAGE_SIZE;
+    return Math.min(n, MAX_ACTIVITY_SHOWN);
+}
 
 function toSearchParams(input: ActivityTabProps["searchParams"]): URLSearchParams {
     const out = new URLSearchParams();
@@ -56,7 +71,6 @@ function toSearchParams(input: ActivityTabProps["searchParams"]): URLSearchParam
     if (input.severity !== undefined) out.set("severity", input.severity);
     if (input.from !== undefined) out.set("from", input.from);
     if (input.to !== undefined) out.set("to", input.to);
-    if (input.cursor !== undefined) out.set("cursor", input.cursor);
     return out;
 }
 
@@ -65,7 +79,7 @@ export async function ActivityTab({
     searchParams,
 }: ActivityTabProps): Promise<React.JSX.Element> {
     const parsed = deserializeActivityFilters(toSearchParams(searchParams));
-    const cursor = parsed.cursor ?? null;
+    const shown = parseShown(searchParams.shown);
 
     const now = new Date();
     const to = parsed.to ?? now;
@@ -77,7 +91,7 @@ export async function ActivityTab({
         ...(parsed.severity !== undefined ? { severity: parsed.severity } : {}),
     };
 
-    const page = await listActivityPage({ workspaceId, now, filters, cursor });
+    const page = await listActivityPage({ workspaceId, now, filters, limit: shown });
     const groups = groupByDay(page.items, now);
 
     return (
@@ -98,25 +112,15 @@ export async function ActivityTab({
                     {groups.map((group) => (
                         <li key={group.key}>
                             <DayHeader label={group.label} />
-                            <ul className="divide-y divide-border/40">
-                                {group.items.map((item, idx) => (
-                                    <ActivityRow
-                                        key={`${item.at.toISOString()}-${idx}`}
-                                        item={item}
-                                        workspaceId={workspaceId}
-                                    />
-                                ))}
-                            </ul>
+                            <DayItems items={group.items} workspaceId={workspaceId} />
                         </li>
                     ))}
                 </ul>
             )}
 
             {page.nextCursor !== null ? (
-                <LoadMore
-                    workspaceId={workspaceId}
-                    searchParams={searchParams}
-                    cursor={page.nextCursor}
+                <LoadMoreButton
+                    href={loadMoreHref(workspaceId, searchParams, shown + ACTIVITY_PAGE_SIZE)}
                 />
             ) : null}
         </DashboardSection>
@@ -172,6 +176,80 @@ function DayHeader({ label }: DayHeaderProps): React.JSX.Element {
         <div className="sticky top-0 z-10 border-b bg-background/95 px-5 py-1.5 font-mono text-[10px] uppercase tracking-[0.08em] text-muted-foreground/70 backdrop-blur">
             {label}
         </div>
+    );
+}
+
+interface DayItemsProps {
+    readonly items: readonly ActivityItem[];
+    readonly workspaceId: string;
+}
+
+/**
+ * Within a day, fold the per-hour event buckets into a single expandable
+ * "N events" summary. Alerts and key changes always render as their own rows.
+ */
+function DayItems({ items, workspaceId }: DayItemsProps): React.JSX.Element {
+    const events = items.filter((i) => i.kind === "event_ingested");
+    const others = items.filter((i) => i.kind !== "event_ingested");
+
+    return (
+        <ul className="divide-y divide-border/40">
+            {events.length >= 2 ? (
+                <li>
+                    <DayEventSummary events={events} workspaceId={workspaceId} />
+                </li>
+            ) : (
+                events.map((item, idx) => (
+                    <ActivityRow
+                        key={`${item.at.toISOString()}-e${idx}`}
+                        item={item}
+                        workspaceId={workspaceId}
+                    />
+                ))
+            )}
+            {others.map((item, idx) => (
+                <ActivityRow
+                    key={`${item.at.toISOString()}-o${idx}`}
+                    item={item}
+                    workspaceId={workspaceId}
+                />
+            ))}
+        </ul>
+    );
+}
+
+interface DayEventSummaryProps {
+    readonly events: readonly ActivityItem[];
+    readonly workspaceId: string;
+}
+
+function DayEventSummary({ events, workspaceId }: DayEventSummaryProps): React.JSX.Element {
+    const total = events.reduce((sum, e) => sum + (e.count ?? 0), 0);
+
+    return (
+        <Accordion type="single" collapsible>
+            <AccordionItem value="events" className="border-b-0">
+                <AccordionTrigger className="items-center gap-3 px-5 py-2.5 font-normal hover:bg-muted/40 hover:no-underline focus-visible:bg-muted/50 focus-visible:ring-0">
+                    <span className="grid size-7 shrink-0 place-items-center rounded-md border bg-card text-muted-foreground">
+                        <TrendingUp aria-hidden="true" className="size-3.5" />
+                    </span>
+                    <span className="min-w-0 flex-1 truncate text-left text-sm">
+                        <span className="font-medium text-foreground">{total} events</span>
+                    </span>
+                </AccordionTrigger>
+                <AccordionContent className="p-0">
+                    <ul className="divide-y divide-border/40 border-t border-border/40">
+                        {events.map((item, idx) => (
+                            <ActivityRow
+                                key={`${item.at.toISOString()}-${idx}`}
+                                item={item}
+                                workspaceId={workspaceId}
+                            />
+                        ))}
+                    </ul>
+                </AccordionContent>
+            </AccordionItem>
+        </Accordion>
     );
 }
 
@@ -276,27 +354,15 @@ function EmptyState(): React.JSX.Element {
     );
 }
 
-interface LoadMoreProps {
-    readonly workspaceId: string;
-    readonly searchParams: ActivityTabProps["searchParams"];
-    readonly cursor: string;
-}
-
-function LoadMore({ workspaceId, searchParams, cursor }: LoadMoreProps): React.JSX.Element {
-    const filterParams = deserializeActivityFilters(toSearchParams(searchParams));
-    const out = serializeActivityFilters({ ...filterParams, cursor });
-    const query: Record<string, string> = { tab: "activity" };
-    out.forEach((value, key) => {
-        query[key] = value;
-    });
-
-    const href = buildWorkspacePath(workspaceId, "settings", query);
-
-    return (
-        <div className="border-t px-5 py-3">
-            <Button asChild variant="outline" size="sm" className="w-full sm:w-auto">
-                <Link href={href}>Load more</Link>
-            </Button>
-        </div>
-    );
+function loadMoreHref(
+    workspaceId: string,
+    searchParams: ActivityTabProps["searchParams"],
+    shown: number,
+): Route {
+    const query: Record<string, string> = { tab: "activity", shown: String(shown) };
+    if (searchParams.kind !== undefined) query.kind = searchParams.kind;
+    if (searchParams.severity !== undefined) query.severity = searchParams.severity;
+    if (searchParams.from !== undefined) query.from = searchParams.from;
+    if (searchParams.to !== undefined) query.to = searchParams.to;
+    return buildWorkspacePath(workspaceId, "settings", query);
 }

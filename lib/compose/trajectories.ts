@@ -83,7 +83,9 @@ export async function getCustomerTrajectories(input: {
     readonly workspaceId: string;
     readonly window: DashboardWindow;
 }): Promise<readonly CustomerTrajectory[]> {
-    if (input.window.key === "today") return [];
+    // A window of a day or less is too short to project a customer trajectory;
+    // skip rather than extrapolate from a single day of spend.
+    if (input.window.to.getTime() - input.window.from.getTime() < 2 * MS_PER_DAY) return [];
 
     const { window, workspaceId } = input;
     const [currentSeries, priorSeries, budgets] = await Promise.all([
@@ -148,7 +150,8 @@ export async function getModelTrajectories(input: {
     readonly workspaceId: string;
     readonly window: DashboardWindow;
 }): Promise<readonly ModelTrajectory[]> {
-    if (input.window.key === "today") return [];
+    // Too short to project a trend; same guard as the customer trajectories.
+    if (input.window.to.getTime() - input.window.from.getTime() < 2 * MS_PER_DAY) return [];
 
     const { window, workspaceId } = input;
     const [currentSeries, priorSeries] = await Promise.all([

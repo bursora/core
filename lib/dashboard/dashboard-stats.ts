@@ -487,9 +487,9 @@ export interface DailyRate {
 }
 
 /**
- * Burn rate for a dashboard window. `today` collapses to a single day so the
- * displayed `$/day` is just the day's spend; `week`/`month` divide by the
- * count of whole UTC days elapsed (min 1).
+ * Burn rate for a dashboard window: window spend divided by the count of whole
+ * days the window covers, rounded up and floored at 1. A sub-day window (e.g.
+ * today, or the 24h preset) reads as a single day; a 7-day window divides by 7.
  */
 export async function getDailyRateInWindow(input: {
     workspaceId: string;
@@ -500,13 +500,10 @@ export async function getDailyRateInWindow(input: {
     const spend = Number.parseFloat(
         await deps().sumSpendBetween(workspaceId, window.from, window.to, filters),
     );
-    const daysElapsed =
-        window.key === "today"
-            ? 1
-            : Math.max(
-                  1,
-                  Math.floor((window.to.getTime() - window.from.getTime()) / MS_PER_DAY) + 1,
-              );
+    const daysElapsed = Math.max(
+        1,
+        Math.ceil((window.to.getTime() - window.from.getTime()) / MS_PER_DAY),
+    );
     const safeSpend = Number.isFinite(spend) ? spend : 0;
     return { dailyRate: safeSpend / daysElapsed, daysElapsed };
 }

@@ -42,7 +42,7 @@ const db = drizzle(sql);
 
 const [user] = await db
     .insert(users)
-    .values({ email: "dev@bursora.local", name: "Dev User", emailVerified: true })
+    .values({ email: "dev@bursora.local", name: "Dev User", emailVerified: true, role: "admin" })
     .returning();
 if (!user) throw new Error("failed to insert user");
 

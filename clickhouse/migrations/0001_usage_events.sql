@@ -33,7 +33,11 @@ CREATE TABLE IF NOT EXISTS usage_events (
     decided_by_budget_id Nullable(UUID),
     -- Protocol reason string from evaluateBudget. Set only on 'blocked' rows.
     block_reason Nullable(String),
-    ts DateTime64(3),
+    -- Pinned to UTC so the zoneless `'YYYY-MM-DD HH:MM:SS.mmm'` insert literal
+    -- (always formatted from a UTC instant) parses to the same instant on any
+    -- server, and toYYYYMM partitioning is UTC-based. A non-UTC server TZ would
+    -- otherwise shift stored instants away from the UTC budget-window bounds.
+    ts DateTime64(3, 'UTC'),
     INDEX idx_tenant_id tenant_id TYPE bloom_filter GRANULARITY 1,
     INDEX idx_agent_id agent_id TYPE bloom_filter GRANULARITY 1,
     INDEX idx_workflow_id workflow_id TYPE bloom_filter GRANULARITY 1,
@@ -43,4 +47,3 @@ CREATE TABLE IF NOT EXISTS usage_events (
 ENGINE = MergeTree
 PARTITION BY toYYYYMM(ts)
 ORDER BY (workspace_id, ts)
-TTL toDateTime(ts) + INTERVAL 90 DAY

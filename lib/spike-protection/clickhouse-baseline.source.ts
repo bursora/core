@@ -15,6 +15,7 @@
 import "server-only";
 
 import type { ClickHouse } from "@/lib/clickhouse/client";
+import { safeCount } from "@/lib/clickhouse/decode";
 import type { BaselineSource } from "./types";
 
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
@@ -58,7 +59,7 @@ export function clickHouseBaselineSource(ch: ClickHouse): BaselineSource {
             for (const row of rows) {
                 const idx = Math.floor((Number(row.bucketMs) - startMs) / MINUTE_MS);
                 if (idx >= 0 && idx < series.length) {
-                    series[idx] = Number(row.n);
+                    series[idx] = safeCount(row.n);
                 }
             }
             return series;

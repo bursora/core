@@ -115,7 +115,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     }
 
     // Bill the bundle by rows actually written, not the requested count.
-    // Retried deliveries dedup at the unique index; counting them would
+    // Retried deliveries dedup in Redis (SET NX); counting them would
     // over-bill the customer toward their plan bundle (issue #1002).
     await recordEventBundleUsage({
         workspaceId: authz.apiKey.workspaceId,

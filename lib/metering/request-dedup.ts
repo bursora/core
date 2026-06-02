@@ -8,9 +8,9 @@
  * scoped to the idempotency window. A key seen before is dropped so the caller
  * inserts and counts it exactly once.
  *
- * Standalone and reusable: the metering ingest sink and the spend counter
- * (slice #145) both must skip a `request_id` they have already processed, so
- * both import this module and build keys via `dedupKey`.
+ * Standalone and reusable: the metering ingest sink must skip a `request_id`
+ * it has already processed, so it imports this module and builds keys via
+ * `dedupKey`.
  *
  * Ordering trade-off: keys are marked seen *before* the insert. Concurrent
  * retries then race on the atomic `SET NX`, so only one wins and double-write

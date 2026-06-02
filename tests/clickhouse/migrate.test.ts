@@ -2,6 +2,7 @@ import {
     applyMigrations,
     dropAllTables,
     loadMigrations,
+    selectMigrations,
     splitStatements,
 } from "@/clickhouse/migrate";
 import type { ClickHouse, ClickHouseInsert, ClickHouseQuery } from "@/lib/clickhouse/client";
@@ -110,6 +111,24 @@ describe("applyMigrations", () => {
             "CREATE TABLE a (x Int)",
             "CREATE TABLE b (x Int)",
         ]);
+    });
+});
+
+describe("selectMigrations", () => {
+    const migrations = [
+        { version: "0001_usage_events", sql: "CREATE TABLE usage_events (x Int)" },
+        {
+            version: "0002_usage_events_cloud_ttl.cloud",
+            sql: "ALTER TABLE usage_events MODIFY TTL",
+        },
+    ];
+
+    test("keeps every migration on cloud", () => {
+        expect(selectMigrations(migrations, true)).toEqual(migrations);
+    });
+
+    test("drops `.cloud` migrations on self-host", () => {
+        expect(selectMigrations(migrations, false)).toEqual(migrations.slice(0, 1));
     });
 });
 

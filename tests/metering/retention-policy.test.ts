@@ -1,9 +1,10 @@
 /**
  * Retention promise guard.
  *
- * `CLOUD_RETENTION_DAYS` is the documented number; the ClickHouse table TTL is
- * what actually enforces it. This test reads the real DDL and asserts the two
- * agree, so the constant can't silently drift from the enforced window.
+ * `CLOUD_RETENTION_DAYS` is the documented number; the cloud-only ClickHouse
+ * TTL migration is what actually enforces it. This test reads the real DDL and
+ * asserts the two agree, so the constant can't silently drift from the enforced
+ * window.
  */
 
 import { CLOUD_RETENTION_DAYS } from "@/lib/metering";
@@ -14,7 +15,7 @@ import { fileURLToPath } from "node:url";
 
 const DDL_PATH = join(
     dirname(fileURLToPath(import.meta.url)),
-    "../../clickhouse/migrations/0001_usage_events.sql",
+    "../../clickhouse/migrations/0002_usage_events_cloud_ttl.cloud.sql",
 );
 
 const TTL_RE = /TTL\s+toDateTime\(ts\)\s*\+\s*INTERVAL\s+(\d+)\s+DAY/i;

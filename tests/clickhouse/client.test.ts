@@ -37,9 +37,9 @@ function createFakeNative(
 describe("clickHouseClientOptions", () => {
     test("maps config to native options and leaves inserts synchronous", () => {
         const options = clickHouseClientOptions(CONFIG);
-        // No async-insert override: a recorded event is queryable before ingest
-        // returns, so the budget preflight's live SUM is always current.
-        expect(options.clickhouse_settings).toBeUndefined();
+        // Pins async_insert off so a recorded event is queryable before ingest
+        // returns, keeping the budget preflight's live SUM current.
+        expect(options.clickhouse_settings).toEqual({ async_insert: 0, wait_for_async_insert: 1 });
         expect(options.url).toBe("http://ch:8123");
         expect(options.username).toBe("bursora");
         expect(options.password).toBe("secret");

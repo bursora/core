@@ -22,17 +22,4 @@ export interface SpendAggregatorQuery {
 
 export interface SpendAggregator {
     getSpendForScopePeriod(query: SpendAggregatorQuery): Promise<number>;
-    /**
-     * Batched variant. Resolves spend totals for many `(scopeType, scopeId,
-     * from, to)` tuples sharing one workspace. Order of the returned array
-     * matches the input items. Implementations group by (period, scopeType)
-     * so the underlying read collapses to one SQL per group.
-     *
-     * Optional: implementations may opt out (returning `undefined`-marked
-     * support); callers fall back to repeated `getSpendForScopePeriod` calls.
-     */
-    getSpendForScopePeriodBatch?(query: {
-        readonly workspaceId: string;
-        readonly items: readonly Omit<SpendAggregatorQuery, "workspaceId">[];
-    }): Promise<readonly number[]>;
 }

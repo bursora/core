@@ -50,6 +50,23 @@ export function splitStatements(sql: string): string[] {
         .filter((statement) => statement.length > 0);
 }
 
+/**
+ * Drop cloud-only migrations on self-host. A `.cloud` version suffix (filename
+ * `*.cloud.sql`) marks a migration that only applies when IS_CLOUD is truthy;
+ * self-host keeps usage_events indefinitely, so the retention TTL never runs
+ * there. Cloud deploys keep every migration.
+ */
+export function selectMigrations(migrations: readonly Migration[], isCloud: boolean): Migration[] {
+    if (isCloud) return [...migrations];
+    return migrations.filter((migration) => !migration.version.endsWith(".cloud"));
+}
+
+/** Truthy IS_CLOUD parse, matching the values `lib/env.ts` accepts. */
+function isCloudEnv(source: Record<string, string | undefined>): boolean {
+    const value = (source.IS_CLOUD ?? "").trim().toLowerCase();
+    return value === "true" || value === "1" || value === "yes";
+}
+
 /** Read `.sql` files from `dir` in lexical order; version is the basename. */
 export async function loadMigrations(dir: string): Promise<Migration[]> {
     const files = (await readdir(dir)).filter((name) => name.endsWith(".sql")).sort();
@@ -163,7 +180,10 @@ async function main(): Promise<void> {
         await dropAllTables(ch);
     }
 
-    const migrations = await loadMigrations(join(import.meta.dir, "migrations"));
+    const migrations = selectMigrations(
+        await loadMigrations(join(import.meta.dir, "migrations")),
+        isCloudEnv(process.env),
+    );
     const applied = await applyMigrations(ch, migrations);
     if (applied.length === 0) {
         console.log("ch-migrate: nothing pending");

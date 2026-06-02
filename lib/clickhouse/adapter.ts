@@ -40,6 +40,10 @@ export function clickHouseClientOptions(config: ClickHouseConfig): ClickHouseCli
         username: config.username,
         password: config.password,
         database: config.database,
+        // Pin synchronous inserts. A server defaulting to async_insert=1 would
+        // ack before the row is queryable, letting a burst slip past the budget
+        // SUM the next preflight reads. Matches the migrate + test-harness clients.
+        clickhouse_settings: { async_insert: 0, wait_for_async_insert: 1 },
     };
 }
 

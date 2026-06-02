@@ -20,6 +20,7 @@
 import "server-only";
 
 import type { ClickHouse } from "@/lib/clickhouse/client";
+import { tagOrNull } from "@/lib/clickhouse/decode";
 import type { SpendPoint } from "./detect-anomaly";
 import type { ScopedSpendSeries, ScopeKey, SpendSeriesSource } from "./spend-series-source";
 
@@ -66,8 +67,8 @@ export function clickHouseSpendSeriesSource(ch: ClickHouse): SpendSeriesSource {
             for (const row of rows) {
                 const scope: ScopeKey = {
                     workspaceId: row.workspaceId,
-                    tenantId: row.tenantId === "" ? null : row.tenantId,
-                    agentId: row.agentId === "" ? null : row.agentId,
+                    tenantId: tagOrNull(row.tenantId),
+                    agentId: tagOrNull(row.agentId),
                 };
                 const key = scopeKey(scope);
                 let entry = grouped.get(key);

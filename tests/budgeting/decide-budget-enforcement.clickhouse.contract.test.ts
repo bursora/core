@@ -22,6 +22,8 @@ import type {
 } from "@/lib/budgeting/budget.repository";
 import { ClickHouseSpendAggregator } from "@/lib/budgeting/clickhouse-spend.aggregator";
 import { decideBudgetUseCase } from "@/lib/budgeting/decide-budget.usecase";
+import { clickHouseRecordBlocked } from "@/lib/budgeting/server";
+import { ClickHouseUsageEventRepository } from "@/lib/metering/clickhouse-usage-event.repository";
 import { clickHouseSpendRepository } from "@/lib/spend";
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import {
@@ -131,6 +133,46 @@ describe("decideBudgetUseCase over live ClickHouse spend", () => {
 
         expect(decision.allow).toBe(true);
     });
+
+    test.skipIf(!hasClickHouse)(
+        "stamps a status='blocked' row through the CH sink when a block budget trips",
+        async () => {
+            // Budget id must be a real UUID: the blocked-row write lands it in the
+            // `decided_by_budget_id UUID` column.
+            const budgetId = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
+            await insertUsageEvent(handle.ch, { costUsd: "1.50000000", ts: TS });
+
+            const sink = clickHouseRecordBlocked(new ClickHouseUsageEventRepository(handle.ch));
+            let written: Promise<void> | undefined;
+            const { decision } = await decideBudgetUseCase({
+                workspaceId: CONTRACT_WORKSPACE,
+                tenantId: null,
+                agentId: null,
+                workflowId: null,
+                now: NOW,
+                intendedProvider: "openai",
+                intendedModel: "gpt-4o",
+                budgets: new StaticBudgetRepo([{ ...workspaceBlockBudget("1.00"), id: budgetId }]),
+                spend: new ClickHouseSpendAggregator(clickHouseSpendRepository(handle.ch)),
+                recordBlocked: (row) => (written = sink(row)),
+            });
+
+            expect(decision.allow).toBe(false);
+            // recordBlocked is fire-and-forget; await the captured write so the
+            // row is durable before reading it back (synchronous insert).
+            await written;
+
+            const rows = await handle.ch.query<{ n: string; budget: string | null }>({
+                query: `SELECT count() AS n, any(decided_by_budget_id) AS budget
+                        FROM usage_events
+                        WHERE workspace_id = toUUID({ws:String}) AND status = 'blocked'`,
+                query_params: { ws: CONTRACT_WORKSPACE },
+            });
+
+            expect(Number(rows[0]?.n)).toBe(1);
+            expect(rows[0]?.budget).toBe(budgetId);
+        },
+    );
 
     test.skipIf(!hasClickHouse)(
         "runaway burst: each preflight sees the accumulating live sum and trips at the cap",

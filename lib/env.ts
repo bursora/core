@@ -9,8 +9,8 @@
  *
  * `BURSORA_RATE_LIMIT_ENABLED` and `BURSORA_SPIKE_PROTECTION_ENABLED` gate
  * the request-cap stack. Both default to `true` on cloud and `false` on
- * self-host. `REDIS_URL` is always required: the spend counter reads Redis on
- * every request path regardless of those flags.
+ * self-host. `REDIS_URL` is always required: the request-id dedup guard reads
+ * Redis on the ingest path regardless of those flags.
  *
  * `CLICKHOUSE_URL` is always required: ClickHouse is the usage-event store and
  * the single source of truth for spend, so every path (ingest, budget
@@ -92,7 +92,7 @@ export interface Env {
     readonly LEMONSQUEEZY_MODE: "test" | "live";
     readonly BURSORA_RATE_LIMIT_ENABLED: boolean;
     readonly BURSORA_SPIKE_PROTECTION_ENABLED: boolean;
-    /** Redis connection URL. Required: the spend counter reads it on every path. */
+    /** Redis connection URL. Required: the request-id dedup guard reads it on the ingest path. */
     readonly REDIS_URL: string;
     /**
      * CSRF allow-list for better-auth. Always includes the configured

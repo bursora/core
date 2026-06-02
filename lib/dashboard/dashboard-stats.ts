@@ -8,6 +8,7 @@ import {
 import { startOfDayUtc } from "@/lib/budgeting/period";
 import { budgetingDeps, listBudgets } from "@/lib/budgeting/server";
 import { clickhouseClient, type ClickHouse } from "@/lib/clickhouse/client";
+import { safeCount } from "@/lib/clickhouse/decode";
 import type { DashboardWindow } from "@/lib/dashboard-window";
 import { listAlerts } from "@/lib/detection";
 import { buildClickHouseMeteringWhere } from "@/lib/metering/clickhouse-usage-events-filters";
@@ -55,9 +56,8 @@ export interface DashboardStatsDeps {
     }) => Promise<number>;
     /**
      * Batched variant for headroom-style reads that resolve many budgets at
-     * once. Returns totals keyed by `${scopeType}:${scopeId ?? ""}:${from.toISOString()}`
-     * matching the input items. Production groups by (period, scopeType) so
-     * each group hits one SQL.
+     * once. Returns totals in the same order as the input items, one windowed
+     * SUM per item.
      */
     readonly getBudgetPeriodSpendBatch?: (input: {
         workspaceId: string;
@@ -107,8 +107,7 @@ export async function countUsageEventsInWindow(
         query: `SELECT count() AS c FROM usage_events WHERE ${conditions.join(" AND ")}`,
         query_params: params,
     });
-    const v = Number(rows[0]?.c ?? 0);
-    return Number.isFinite(v) && v >= 0 ? Math.trunc(v) : 0;
+    return safeCount(rows[0]?.c);
 }
 
 let testOverride: DashboardStatsDeps | null = null;
@@ -161,9 +160,6 @@ const productionDeps = (): DashboardStatsDeps => {
             }),
         getBudgetPeriodSpendBatch: async ({ workspaceId, items }) => {
             const spend = budgetingDeps().spend;
-            if (spend.getSpendForScopePeriodBatch) {
-                return spend.getSpendForScopePeriodBatch({ workspaceId, items });
-            }
             return Promise.all(
                 items.map((it) =>
                     spend.getSpendForScopePeriod({

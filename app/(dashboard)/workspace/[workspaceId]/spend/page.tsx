@@ -13,6 +13,7 @@ import { requireSessionUI } from "@/lib/auth";
 import { cloudWorkspaceLocked } from "@/lib/billing-gate/server";
 import { getBlockedCallsLastDay } from "@/lib/budgeting/blocked-calls";
 import { clickhouseClient } from "@/lib/clickhouse/client";
+import { dashboardWindowFromRange, deltaWindows } from "@/lib/dashboard-window";
 import { flattenScope, listAlerts } from "@/lib/detection";
 import { formatCount, formatDate, formatPercent, formatUsd } from "@/lib/format";
 import { UNTAGGED } from "@/lib/metering";
@@ -63,6 +64,7 @@ export default async function SpendPage({ params, searchParams }: SpendPageProps
     const search = await searchParams;
     await requireSessionUI();
 
+    const now = new Date();
     const facet: Facet =
         search.facet !== undefined && (FACETS as readonly string[]).includes(search.facet)
             ? (search.facet as Facet)
@@ -70,15 +72,14 @@ export default async function SpendPage({ params, searchParams }: SpendPageProps
     const { from, to } = resolveSpendWindow({
         from: search.from,
         to: search.to,
-        now: new Date(),
+        now,
     });
     const scopeId = readParam(search.scope_id);
     const filters = readMeteringFilters(search);
     const status = readMeteringStatus(search.status);
     const anyFilterActive = Object.values(filters).some((v) => v && v.length > 0);
 
-    const prior = priorWindow(from, to);
-    const now = new Date();
+    const prior = priorWindow(from, to, now);
 
     const [series, top, priorSeries, optionsByScope, anomalyAlerts, blockedCalls] =
         await Promise.all([
@@ -159,14 +160,20 @@ export default async function SpendPage({ params, searchParams }: SpendPageProps
         status: "blocked",
     });
 
-    const perCall = series.totalCalls > 0 ? totalUsd / series.totalCalls : null;
-    const priorPerCall = priorSeries.totalCalls > 0 ? priorTotalUsd / priorSeries.totalCalls : null;
+    // Cost per call is only meaningful for cost-bearing ('ok') calls. Under a
+    // blocked/both filter the call count includes zero-cost denied calls, which
+    // would understate the true per-successful-call cost, so it reads "—".
+    const perCall = status === "ok" && series.totalCalls > 0 ? totalUsd / series.totalCalls : null;
+    const priorPerCall =
+        status === "ok" && priorSeries.totalCalls > 0
+            ? priorTotalUsd / priorSeries.totalCalls
+            : null;
     const perCallDelta =
         perCall !== null && priorPerCall !== null ? relativeDelta(perCall, priorPerCall) : null;
 
     const peak = computePeakDay(series.points);
 
-    const untaggedShare = computeUntaggedShare(top, series.totalUsd);
+    const untaggedShare = computeUntaggedShare(series.points, series.totalUsd);
 
     return (
         <section className="flex flex-col gap-6">
@@ -241,11 +248,13 @@ export default async function SpendPage({ params, searchParams }: SpendPageProps
                             value={perCall === null ? "—" : formatUsd(perCall)}
                             tone={spendDirection(perCallDelta)}
                             delta={
-                                perCall === null
-                                    ? "No calls in range"
-                                    : perCallDelta === null
-                                      ? "No prior calls to compare"
-                                      : `${formatSignedPercent(perCallDelta)} vs prior`
+                                status !== "ok"
+                                    ? "OK calls only"
+                                    : perCall === null
+                                      ? "No calls in range"
+                                      : perCallDelta === null
+                                        ? "No prior calls to compare"
+                                        : `${formatSignedPercent(perCallDelta)} vs prior`
                             }
                         />
                         <Kpi
@@ -363,16 +372,22 @@ function formatSignedPercent(delta: number): string {
     return delta > 0 ? `+${formatted}` : formatted;
 }
 
+// Untagged share of total spend. Sums the UNTAGGED cost across the full series
+// (every tag, every bucket) rather than the top-N table, so the banner stays
+// correct even when untagged spend ranks below the visible rows.
 function computeUntaggedShare(
-    top: readonly { tag: string; costUsd: string }[],
+    points: readonly { tag: string; costUsd: string }[],
     totalUsd: string,
 ): number {
     const total = Number.parseFloat(totalUsd);
     if (!Number.isFinite(total) || total <= 0) return 0;
-    const untagged = top.find((r) => r.tag === UNTAGGED);
-    if (!untagged) return 0;
-    const cost = Number.parseFloat(untagged.costUsd);
-    return Number.isFinite(cost) ? cost / total : 0;
+    let untagged = 0;
+    for (const p of points) {
+        if (p.tag !== UNTAGGED) continue;
+        const cost = Number.parseFloat(p.costUsd);
+        if (Number.isFinite(cost)) untagged += cost;
+    }
+    return untagged / total;
 }
 
 function formatWindowSubtitle(from: Date, to: Date): string {
@@ -392,9 +407,12 @@ function spendDirection(delta: number | null): KpiTone {
     return delta > 0 ? "up" : "down";
 }
 
-function priorWindow(from: Date, to: Date): { from: Date; to: Date } {
-    const span = to.getTime() - from.getTime();
-    return { from: new Date(from.getTime() - span), to: from };
+// Prior comparison window for "vs prior" deltas. Delegates to the shared
+// `deltaWindows` so the in-progress truncation policy (clamp current to `now`,
+// match the prior period's elapsed span) lives in one place.
+function priorWindow(from: Date, to: Date, now: Date): { from: Date; to: Date } {
+    const { priorFrom, priorTo } = deltaWindows(dashboardWindowFromRange(from, to), now);
+    return { from: priorFrom, to: priorTo };
 }
 
 function relativeDelta(current: number, prior: number): number | null {

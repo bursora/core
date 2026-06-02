@@ -47,6 +47,7 @@ const eventSchema = z.object({
     workflowId: z.string().max(128).nullable().optional(),
     latencyMs: z.number().int().nonnegative().nullable().optional(),
     requestId: z.string().max(128).nullable().optional(),
+    errored: z.boolean().optional(),
 });
 
 const bodySchema = z.object({
@@ -96,6 +97,7 @@ export async function POST(request: Request): Promise<NextResponse> {
             workflowId: e.workflowId ?? null,
             latencyMs: e.latencyMs ?? null,
             requestId: e.requestId ?? null,
+            errored: e.errored ?? false,
         })),
     });
 
@@ -114,12 +116,13 @@ export async function POST(request: Request): Promise<NextResponse> {
         });
     }
 
-    // Bill the bundle by rows actually written, not the requested count.
-    // Retried deliveries dedup in Redis (SET NX); counting them would
-    // over-bill the customer toward their plan bundle (issue #1002).
+    // Bill the bundle by billable rows written, not the requested count.
+    // Retried deliveries dedup in Redis (SET NX); counting them would over-bill
+    // toward the plan bundle (issue #1002). Errored calls are written but carry
+    // no value, so `billable` excludes them.
     await recordEventBundleUsage({
         workspaceId: authz.apiKey.workspaceId,
-        eventCount: summary.inserted,
+        eventCount: summary.billable,
     });
 
     const body: Record<string, unknown> = { status: "accepted" };

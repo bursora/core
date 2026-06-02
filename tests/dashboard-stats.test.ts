@@ -43,6 +43,7 @@ const baseDeps = (over: Partial<DashboardStatsDeps> = {}): DashboardStatsDeps =>
     sumSpendBetween: async () => "0.00000000",
     countCallsSince: async () => 0,
     countCallsBetween: async () => 0,
+    usageSeriesByDay: async () => [],
     listBudgets: async () => [],
     getBudgetPeriodSpend: async () => 0,
     ...over,
@@ -435,13 +436,26 @@ describe("dashboard-stats", () => {
         expect(delta).toBeCloseTo(0.5, 5);
     });
 
-    test("getSpendSeries returns one bucket per UTC day across [from, to] for a multi-day window", async () => {
-        const calls: Array<{ since: Date; until: Date }> = [];
+    test("getSpendSeries maps one grouped read onto a UTC-day grid across [from, to]", async () => {
+        let callCount = 0;
+        let captured: { from: Date; to: Date } | undefined;
         setDashboardStatsDepsForTesting(
             baseDeps({
-                sumSpendBetween: async (_w, since, until) => {
-                    calls.push({ since, until });
-                    return String(calls.length);
+                usageSeriesByDay: async (_w, from, to) => {
+                    callCount += 1;
+                    captured = { from, to };
+                    return [
+                        {
+                            bucketMs: new Date("2026-05-11T00:00:00Z").getTime(),
+                            cost: 1,
+                            count: 10,
+                        },
+                        {
+                            bucketMs: new Date("2026-05-13T00:00:00Z").getTime(),
+                            cost: 3,
+                            count: 30,
+                        },
+                    ];
                 },
             }),
         );
@@ -452,19 +466,23 @@ describe("dashboard-stats", () => {
             to: new Date("2026-05-17T09:00:00Z"),
         });
 
-        // 7 daily buckets covering Mon..Sun.
-        expect(series).toHaveLength(7);
-        expect(calls[0]?.since.toISOString()).toBe("2026-05-11T00:00:00.000Z");
-        expect(calls[6]?.until.toISOString()).toBe("2026-05-18T00:00:00.000Z");
+        // 7 daily buckets covering Mon..Sun; only the 11th and 13th have spend.
+        expect(series).toEqual([1, 0, 3, 0, 0, 0, 0]);
+        // One grouped read, widened to whole UTC days.
+        expect(callCount).toBe(1);
+        expect(captured?.from.toISOString()).toBe("2026-05-11T00:00:00.000Z");
+        expect(captured?.to.toISOString()).toBe("2026-05-18T00:00:00.000Z");
     });
 
     test("getSpendSeries returns a single bucket for a sub-day window (today)", async () => {
         let callCount = 0;
         setDashboardStatsDepsForTesting(
             baseDeps({
-                sumSpendBetween: async () => {
+                usageSeriesByDay: async () => {
                     callCount += 1;
-                    return "5";
+                    return [
+                        { bucketMs: new Date("2026-05-17T00:00:00Z").getTime(), cost: 5, count: 2 },
+                    ];
                 },
             }),
         );
@@ -475,16 +493,17 @@ describe("dashboard-stats", () => {
             to: new Date("2026-05-17T15:00:00Z"),
         });
 
-        expect(series).toHaveLength(1);
+        expect(series).toEqual([5]);
         expect(callCount).toBe(1);
-        expect(series[0]).toBe(5);
     });
 
-    test("getCallsSeries returns one bucket per UTC day across the window", async () => {
-        let n = 0;
+    test("getCallsSeries maps call counts onto one bucket per UTC day", async () => {
         setDashboardStatsDepsForTesting(
             baseDeps({
-                countCallsBetween: async () => ++n,
+                usageSeriesByDay: async () => [
+                    { bucketMs: new Date("2026-05-11T00:00:00Z").getTime(), cost: 0, count: 7 },
+                    { bucketMs: new Date("2026-05-12T00:00:00Z").getTime(), cost: 0, count: 4 },
+                ],
             }),
         );
 
@@ -494,8 +513,8 @@ describe("dashboard-stats", () => {
             to: new Date("2026-05-13T12:00:00Z"),
         });
 
-        // Mon, Tue, Wed-so-far → 3 buckets.
-        expect(series).toHaveLength(3);
+        // Mon, Tue, Wed-so-far → 3 buckets; Wed has no rows yet.
+        expect(series).toEqual([7, 4, 0]);
     });
 
     test("getSpendInWindow returns the sumSpendBetween total as a number", async () => {
@@ -661,9 +680,49 @@ describe("dashboard-stats", () => {
             }),
         );
 
-        const delta = await getSpendPaceInWindow({ workspaceId: WORKSPACE, window });
+        const delta = await getSpendPaceInWindow({
+            workspaceId: WORKSPACE,
+            window,
+            now: window.to,
+        });
 
         expect(delta).toBeCloseTo(0.2, 5);
+    });
+
+    test("getSpendPaceInWindow clamps current to now and truncates prior to the elapsed slice", async () => {
+        // Window runs to end-of-day (future); now is 6h in.
+        const window = dashboardWindowFromRange(
+            new Date("2026-05-17T00:00:00.000Z"),
+            new Date("2026-05-17T23:59:59.999Z"),
+        );
+        const now = new Date("2026-05-17T06:00:00.000Z");
+        const priorTruncEnd = new Date(window.priorFrom.getTime() + 6 * 60 * 60 * 1000);
+
+        setDashboardStatsDepsForTesting(
+            baseDeps({
+                sumSpendBetween: async (_w, since, until) => {
+                    // current = [from, now) → 60; prior = [priorFrom, +6h) → 50.
+                    if (
+                        since.getTime() === window.from.getTime() &&
+                        until.getTime() === now.getTime()
+                    ) {
+                        return "60";
+                    }
+                    if (
+                        since.getTime() === window.priorFrom.getTime() &&
+                        until.getTime() === priorTruncEnd.getTime()
+                    ) {
+                        return "50";
+                    }
+                    // Full-window or full-prior reads must NOT be used.
+                    return "999";
+                },
+            }),
+        );
+
+        const delta = await getSpendPaceInWindow({ workspaceId: WORKSPACE, window, now });
+
+        expect(delta).toBeCloseTo(0.2, 5); // (60 - 50) / 50, not a partial-vs-full figure
     });
 });
 

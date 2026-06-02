@@ -48,7 +48,8 @@ export default async function DashboardPage({ params, searchParams }: DashboardP
     }
 
     const { from: rawFrom, to: rawTo, facet: rawFacet } = await searchParams;
-    const { from, to } = resolveSpendWindow({ from: rawFrom, to: rawTo, now: new Date() });
+    const now = new Date();
+    const { from, to } = resolveSpendWindow({ from: rawFrom, to: rawTo, now });
     const dashboardWindow = dashboardWindowFromRange(from, to);
     const facet: Facet =
         rawFacet !== undefined && (FACETS as readonly string[]).includes(rawFacet)
@@ -73,7 +74,7 @@ export default async function DashboardPage({ params, searchParams }: DashboardP
             </Suspense>
 
             <Suspense fallback={<NowStripSkeleton dashboardWindow={dashboardWindow} />}>
-                <NowStrip workspaceId={workspaceId} dashboardWindow={dashboardWindow} />
+                <NowStrip workspaceId={workspaceId} dashboardWindow={dashboardWindow} now={now} />
             </Suspense>
 
             <div className="grid gap-4 lg:grid-cols-[1.4fr_1fr] lg:items-start">
@@ -110,7 +111,11 @@ export default async function DashboardPage({ params, searchParams }: DashboardP
                         <BurnRateTile workspaceId={workspaceId} dashboardWindow={dashboardWindow} />
                     </Suspense>
                     <Suspense fallback={<TileSkeleton label="Pace" />}>
-                        <PaceTile workspaceId={workspaceId} dashboardWindow={dashboardWindow} />
+                        <PaceTile
+                            workspaceId={workspaceId}
+                            dashboardWindow={dashboardWindow}
+                            now={now}
+                        />
                     </Suspense>
                 </div>
             </div>

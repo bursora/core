@@ -5,11 +5,11 @@ import {
     type RawBudget,
     type ScopeType,
 } from "@/lib/budgeting";
-import { startOfDayUtc } from "@/lib/budgeting/period";
+import { startOfDayUtc, startOfMonthUtc } from "@/lib/budgeting/period";
 import { budgetingDeps, listBudgets } from "@/lib/budgeting/server";
 import { clickhouseClient, type ClickHouse } from "@/lib/clickhouse/client";
 import { safeCount } from "@/lib/clickhouse/decode";
-import type { DashboardWindow } from "@/lib/dashboard-window";
+import { deltaWindows, type DashboardWindow } from "@/lib/dashboard-window";
 import { listAlerts } from "@/lib/detection";
 import { buildClickHouseMeteringWhere } from "@/lib/metering/clickhouse-usage-events-filters";
 import type { MeteringFilters } from "@/lib/metering/metering-read.repository";
@@ -18,6 +18,14 @@ import { withRequestMemo } from "./per-request-cache";
 
 /** Subset of MeteringFilters that maps onto alert scope tags. */
 export type AlertScopeFilters = Pick<MeteringFilters, "tenantId" | "agentId">;
+
+/** One UTC day's spend and call count, from the grouped series read. */
+export interface UsageDayPoint {
+    /** Epoch-ms floor of the UTC day; equals `startOfDayUtc(...).getTime()`. */
+    readonly bucketMs: number;
+    readonly cost: number;
+    readonly count: number;
+}
 
 export interface DashboardStatsDeps {
     /** Sum of usage_events.cost_usd for the workspace at or after `since`. */
@@ -46,6 +54,17 @@ export interface DashboardStatsDeps {
         until: Date,
         filters?: MeteringFilters,
     ) => Promise<number>;
+    /**
+     * Spend and call count per UTC day in [from, to) for `status='ok'`, as a
+     * single grouped read. Backs the dashboard sparklines (spend/calls series),
+     * replacing the prior per-day query fan-out.
+     */
+    readonly usageSeriesByDay: (
+        workspaceId: string,
+        from: Date,
+        to: Date,
+        filters?: MeteringFilters,
+    ) => Promise<readonly UsageDayPoint[]>;
     readonly listBudgets: (workspaceId: string) => Promise<readonly RawBudget[]>;
     readonly getBudgetPeriodSpend: (input: {
         workspaceId: string;
@@ -110,6 +129,49 @@ export async function countUsageEventsInWindow(
     return safeCount(rows[0]?.c);
 }
 
+/**
+ * Spend and call count grouped by UTC day for `status='ok'` events in
+ * [from, to). One read replaces the per-day query fan-out the sparklines used.
+ * The bucket floor matches `bucketBoundaries` so each row maps onto one day.
+ */
+async function usageSeriesByDayQuery(
+    ch: ClickHouse,
+    input: {
+        workspaceId: string;
+        from: Date;
+        to: Date;
+        filters?: MeteringFilters;
+    },
+): Promise<readonly UsageDayPoint[]> {
+    const { conditions, params } = buildClickHouseMeteringWhere({
+        workspaceId: input.workspaceId,
+        status: "ok",
+        ...(input.filters !== undefined ? { filters: input.filters } : {}),
+    });
+    conditions.push(
+        "toUnixTimestamp64Milli(ts) >= {fromMs:Int64}",
+        "toUnixTimestamp64Milli(ts) < {toMs:Int64}",
+    );
+    params.fromMs = input.from.getTime();
+    params.toMs = input.to.getTime();
+    params.dayMs = MS_PER_DAY;
+    const rows = await ch.query<{ bucket_ms: string; cost: string | null; calls: string }>({
+        query: `SELECT
+                intDiv(toUnixTimestamp64Milli(ts), {dayMs:Int64}) * {dayMs:Int64} AS bucket_ms,
+                toString(sum(cost_usd)) AS cost,
+                count() AS calls
+            FROM usage_events
+            WHERE ${conditions.join(" AND ")}
+            GROUP BY bucket_ms`,
+        query_params: params,
+    });
+    return rows.map((r) => ({
+        bucketMs: Number(r.bucket_ms),
+        cost: Number(r.cost ?? "0"),
+        count: safeCount(r.calls),
+    }));
+}
+
 let testOverride: DashboardStatsDeps | null = null;
 
 export function setDashboardStatsDepsForTesting(deps: DashboardStatsDeps | null): void {
@@ -149,6 +211,13 @@ const productionDeps = (): DashboardStatsDeps => {
                 to: until,
                 ...(filters !== undefined ? { filters } : {}),
             }),
+        usageSeriesByDay: (workspaceId, from, to, filters) =>
+            usageSeriesByDayQuery(ch, {
+                workspaceId,
+                from,
+                to,
+                ...(filters !== undefined ? { filters } : {}),
+            }),
         listBudgets: (workspaceId) => listBudgets(workspaceId),
         getBudgetPeriodSpend: ({ workspaceId, scopeType, scopeId, from, to }) =>
             budgetingDeps().spend.getSpendForScopePeriod({
@@ -176,10 +245,6 @@ const productionDeps = (): DashboardStatsDeps => {
 };
 
 const deps = (): DashboardStatsDeps => testOverride ?? productionDeps();
-
-export function startOfMonthUtc(now: Date): Date {
-    return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
-}
 
 async function getSpendMtdImpl(input: {
     workspaceId: string;
@@ -271,16 +336,40 @@ function bucketBoundaries(from: Date, to: Date): readonly { since: Date; until: 
     });
 }
 
+/**
+ * One grouped read of per-UTC-day usage, keyed to a `bucketMs` map. Shared by
+ * the spend and calls sparklines: `withRequestMemo` collapses both into a
+ * single ClickHouse query per render. The query window is widened to whole UTC
+ * days so each `bucketBoundaries` slot is a full-day aggregate.
+ */
+const getUsageSeriesByDay = withRequestMemo(
+    async (input: {
+        workspaceId: string;
+        from: Date;
+        to: Date;
+        filters?: MeteringFilters;
+    }): Promise<ReadonlyMap<number, UsageDayPoint>> => {
+        const gridStart = startOfDayUtc(input.from);
+        const gridEnd = new Date(startOfDayUtc(input.to).getTime() + MS_PER_DAY);
+        const points = await deps().usageSeriesByDay(
+            input.workspaceId,
+            gridStart,
+            gridEnd,
+            input.filters,
+        );
+        return new Map(points.map((p) => [p.bucketMs, p] as const));
+    },
+);
+
 async function getSpendSeriesImpl(input: {
     workspaceId: string;
     from: Date;
     to: Date;
     filters?: MeteringFilters;
 }): Promise<readonly number[]> {
-    const dep = deps().sumSpendBetween;
-    const buckets = bucketBoundaries(input.from, input.to);
-    return Promise.all(
-        buckets.map((b) => dep(input.workspaceId, b.since, b.until, input.filters).then(Number)),
+    const byDay = await getUsageSeriesByDay(input);
+    return bucketBoundaries(input.from, input.to).map(
+        (b) => byDay.get(b.since.getTime())?.cost ?? 0,
     );
 }
 
@@ -292,9 +381,10 @@ async function getCallsSeriesImpl(input: {
     to: Date;
     filters?: MeteringFilters;
 }): Promise<readonly number[]> {
-    const dep = deps().countCallsBetween;
-    const buckets = bucketBoundaries(input.from, input.to);
-    return Promise.all(buckets.map((b) => dep(input.workspaceId, b.since, b.until, input.filters)));
+    const byDay = await getUsageSeriesByDay(input);
+    return bucketBoundaries(input.from, input.to).map(
+        (b) => byDay.get(b.since.getTime())?.count ?? 0,
+    );
 }
 
 export const getCallsSeries = withRequestMemo(getCallsSeriesImpl);
@@ -509,23 +599,24 @@ export async function getDailyRateInWindow(input: {
 }
 
 /**
- * Window-aware pace delta. Compares spend in `[from, to)` against the prior
- * period truncated to the same elapsed length, so the two figures share an
- * equal denominator. Returns a signed fractional delta (e.g. +0.2 = 20% hotter).
+ * Window-aware pace delta. Compares spend in the current window (clamped to
+ * `now`) against the prior period truncated to the same elapsed length, so the
+ * two figures share an equal denominator even mid-period. Returns a signed
+ * fractional delta (e.g. +0.2 = 20% hotter). See `deltaWindows`.
  */
 export async function getSpendPaceInWindow(input: {
     workspaceId: string;
     window: DashboardWindow;
+    now: Date;
     filters?: MeteringFilters;
 }): Promise<number> {
-    const { workspaceId, window, filters } = input;
-    const elapsedMs = window.to.getTime() - window.from.getTime();
-    const priorEnd = new Date(window.priorFrom.getTime() + elapsedMs);
+    const { workspaceId, window, now, filters } = input;
+    const dw = deltaWindows(window, now);
 
     const dep = deps().sumSpendBetween;
     const [recent, prior] = await Promise.all([
-        dep(workspaceId, window.from, window.to, filters).then(Number),
-        dep(workspaceId, window.priorFrom, priorEnd, filters).then(Number),
+        dep(workspaceId, dw.from, dw.to, filters).then(Number),
+        dep(workspaceId, dw.priorFrom, dw.priorTo, filters).then(Number),
     ]);
     return computeDelta(recent, prior);
 }

@@ -26,6 +26,7 @@ const baseStatsDeps = (over: Partial<DashboardStatsDeps> = {}): DashboardStatsDe
     sumSpendBetween: async () => "0.00000000",
     countCallsSince: async () => 0,
     countCallsBetween: async () => 0,
+    usageSeriesByDay: async () => [],
     listBudgets: async () => [],
     getBudgetPeriodSpend: async () => 0,
     ...over,
@@ -99,6 +100,7 @@ async function render(input: RenderInput = {}): Promise<string> {
     const element = await NowStrip({
         workspaceId: WORKSPACE,
         dashboardWindow: buildWindow(input.spanMs),
+        now: NOW,
     });
     return renderToStaticMarkup(element);
 }
@@ -157,10 +159,14 @@ describe("NowStrip", () => {
     });
 
     test("renders the Spend sparkline inside the Spend tile", async () => {
-        // sumSpendBetween is what the spark series calls. Returning a positive
-        // value for any bucket guarantees the SVG renders a path.
+        // usageSeriesByDay backs the spark series. A positive bucket inside the
+        // window guarantees the SVG renders a path.
         const html = await render({
-            stats: { sumSpendBetween: async () => "5.00" },
+            stats: {
+                usageSeriesByDay: async () => [
+                    { bucketMs: new Date("2026-05-17T00:00:00Z").getTime(), cost: 5, count: 1 },
+                ],
+            },
         });
 
         // The SparkChart renders an <svg>; check for that and the spend tile

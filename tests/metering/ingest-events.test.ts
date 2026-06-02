@@ -79,6 +79,36 @@ describe("ingestEventsUseCase", () => {
         expect(events.rows[0]?.costUsd).toBe("0.00750000");
     });
 
+    test("an errored event persists as status='errored' with zero cost and is not billable", async () => {
+        const events = new InMemoryUsageEventRepository();
+        const pricing = new StubPricingRepository();
+        pricing.addRow(gptPricingRow);
+
+        const result = await ingestEventsUseCase({
+            workspaceId: WORKSPACE_A,
+            events: [
+                event({ promptTokens: 0, completionTokens: 0, errored: true }),
+                event({ requestId: "ok-1" }),
+            ],
+            eventsRepo: events,
+            pricingRepo: pricing,
+            dedup: new InMemoryRequestDedupGuard(),
+        });
+
+        // Both rows are written, but the errored one does not count toward the
+        // fair-use bundle.
+        expect(result.inserted).toBe(2);
+        expect(result.billable).toBe(1);
+        expect(result.unpriced).toEqual([]);
+
+        const errored = events.rows.find((r) => r.status === "errored");
+        expect(errored).toBeDefined();
+        expect(errored?.costUsd).toBe("0");
+        // The successful sibling is unaffected: priced, default ('ok') status.
+        const okRow = events.rows.find((r) => r.status !== "errored");
+        expect(okRow?.costUsd).toBe("0.00750000");
+    });
+
     test("workspaceId is the api-key-derived value (not from body)", async () => {
         const events = new InMemoryUsageEventRepository();
         const pricing = new StubPricingRepository();

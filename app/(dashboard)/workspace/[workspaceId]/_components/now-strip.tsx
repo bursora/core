@@ -1,7 +1,7 @@
 import { NowStripView } from "@/components/ui/dashboard-views/now-strip-view";
 import type { KpiTone } from "@/components/ui/kpi";
 import { BUDGET_USAGE_WARN_THRESHOLD } from "@/lib/budgeting";
-import type { DashboardWindow } from "@/lib/dashboard-window";
+import { deltaWindows, type DashboardWindow } from "@/lib/dashboard-window";
 import {
     countActiveBudgets,
     getBudgetHeadroom,
@@ -18,16 +18,20 @@ import { formatCount } from "@/lib/format";
 interface NowStripProps {
     readonly workspaceId: string;
     readonly dashboardWindow: DashboardWindow;
+    readonly now: Date;
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const HEADROOM_LIMIT = 50;
 const AT_RISK_PCT_LABEL = `${Math.round(BUDGET_USAGE_WARN_THRESHOLD * 100)}%+`;
 
-export async function NowStrip({ workspaceId, dashboardWindow }: NowStripProps) {
-    const { from, to, priorFrom, priorTo, label } = dashboardWindow;
+export async function NowStrip({ workspaceId, dashboardWindow, now }: NowStripProps) {
+    const { from, to, label } = dashboardWindow;
     const since24h = new Date(to.getTime() - DAY_MS);
     const suffix = label.toLowerCase();
+    // Compare today-so-far vs the same elapsed slice of the prior period, not a
+    // partial current window against a full prior one (see deltaWindows).
+    const d = deltaWindows(dashboardWindow, now);
 
     const [
         spendTotal,
@@ -42,8 +46,20 @@ export async function NowStrip({ workspaceId, dashboardWindow }: NowStripProps) 
     ] = await Promise.all([
         getSpendInWindow({ workspaceId, from, to }),
         getCallsInWindow({ workspaceId, from, to }),
-        getCallsDelta({ workspaceId, from, to, priorFrom, priorTo }),
-        getSpendDelta({ workspaceId, from, to, priorFrom, priorTo }),
+        getCallsDelta({
+            workspaceId,
+            from: d.from,
+            to: d.to,
+            priorFrom: d.priorFrom,
+            priorTo: d.priorTo,
+        }),
+        getSpendDelta({
+            workspaceId,
+            from: d.from,
+            to: d.to,
+            priorFrom: d.priorFrom,
+            priorTo: d.priorTo,
+        }),
         getSpendSeries({ workspaceId, from, to }),
         getCallsSeries({ workspaceId, from, to }),
         countActiveBudgets(workspaceId),

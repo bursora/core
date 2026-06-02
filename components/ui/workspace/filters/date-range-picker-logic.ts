@@ -1,5 +1,6 @@
 /** Pure date math for the spend page date range picker. */
 
+import { endOfDayUtc, startOfDayUtc, startOfMonthUtc } from "@/lib/budgeting/period";
 import type { SpendWindow } from "@/lib/metering";
 
 const HOUR_MS = 60 * 60 * 1000;
@@ -27,46 +28,39 @@ export const PRESETS: readonly Preset[] = [
     { id: "last-30-days", label: "Last 30 days" },
 ];
 
-function startOfDayLocal(d: Date): Date {
-    return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
-}
-
-function endOfDayLocal(d: Date): Date {
-    return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999);
-}
-
-// Why: Sunday is the project-wide week start; locale-aware first-day-of-week
-// is out of scope. Date constructor normalizes across DST boundaries.
-function startOfWeekLocal(d: Date): Date {
-    return new Date(d.getFullYear(), d.getMonth(), d.getDate() - d.getDay(), 0, 0, 0, 0);
-}
-
-function startOfMonthLocal(d: Date): Date {
-    return new Date(d.getFullYear(), d.getMonth(), 1, 0, 0, 0, 0);
+// Preset windows are UTC, the same frame ClickHouse buckets/partitions in, so a
+// quick-pick range lines up with the chart buckets and reads identically on any
+// host timezone. Day/month boundaries come from the shared period helpers;
+// startOfWeekUtc stays local because the picker's Sunday week start differs from
+// period.ts's ISO/Monday budget weeks.
+function startOfWeekUtc(d: Date): Date {
+    return new Date(
+        Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() - d.getUTCDay(), 0, 0, 0, 0),
+    );
 }
 
 export function computePresetWindow(preset: PresetId, now: Date): SpendWindow {
     switch (preset) {
         case "today":
-            return { from: startOfDayLocal(now), to: endOfDayLocal(now) };
+            return { from: startOfDayUtc(now), to: endOfDayUtc(now) };
         case "week-to-date":
-            return { from: startOfWeekLocal(now), to: endOfDayLocal(now) };
+            return { from: startOfWeekUtc(now), to: endOfDayUtc(now) };
         case "month-to-date":
-            return { from: startOfMonthLocal(now), to: endOfDayLocal(now) };
+            return { from: startOfMonthUtc(now), to: endOfDayUtc(now) };
         case "last-7-days":
             return {
-                from: startOfDayLocal(new Date(now.getTime() - 6 * DAY_MS)),
-                to: endOfDayLocal(now),
+                from: startOfDayUtc(new Date(now.getTime() - 6 * DAY_MS)),
+                to: endOfDayUtc(now),
             };
         case "last-14-days":
             return {
-                from: startOfDayLocal(new Date(now.getTime() - 13 * DAY_MS)),
-                to: endOfDayLocal(now),
+                from: startOfDayUtc(new Date(now.getTime() - 13 * DAY_MS)),
+                to: endOfDayUtc(now),
             };
         case "last-30-days":
             return {
-                from: startOfDayLocal(new Date(now.getTime() - 29 * DAY_MS)),
-                to: endOfDayLocal(now),
+                from: startOfDayUtc(new Date(now.getTime() - 29 * DAY_MS)),
+                to: endOfDayUtc(now),
             };
     }
 }

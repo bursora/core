@@ -43,7 +43,11 @@ export function buildClickHouseMeteringWhere(
     const conditions = ["workspace_id = {workspaceId:UUID}"];
     const params: Record<string, unknown> = { workspaceId: input.workspaceId };
 
-    if (input.status !== "both") {
+    if (input.status === "both") {
+        // 'both' means the two budget outcomes the spend UI exposes — ok and
+        // blocked — never `status='errored'` failures, which are not spend.
+        conditions.push("status IN ('ok', 'blocked')");
+    } else {
         conditions.push("status = {status:String}");
         params.status = input.status;
     }

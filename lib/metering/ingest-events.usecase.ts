@@ -28,7 +28,7 @@ import { UnknownPricingError } from "./pricing/calculate-cost";
 import { createDrizzlePricingResolver, type PricingResolver } from "./pricing/pricing-resolver";
 import type { PricingRepository } from "./pricing/pricing-row";
 import { dedupKey, type RequestDedupGuard } from "./request-dedup";
-import type { UsageEventInput, UsageEventRow } from "./usage-event";
+import { erroredUsageEventRow, type UsageEventInput, type UsageEventRow } from "./usage-event";
 import type { UsageEventRepository } from "./usage-event.repository";
 
 export interface IngestEventsInput {
@@ -57,6 +57,12 @@ export interface UnpricedModel {
 
 export interface IngestSummary {
     readonly inserted: number;
+    /**
+     * Inserted rows that count toward the fair-use event bundle: successful and
+     * blocked calls, excluding `status='errored'` failures (which carry no value
+     * and no cost).
+     */
+    readonly billable: number;
     /** Deduped (provider, model) pairs whose events had no pricing row. */
     readonly unpriced: readonly UnpricedModel[];
 }
@@ -67,7 +73,7 @@ type ResolvedEvent =
 
 export async function ingestEventsUseCase(input: IngestEventsInput): Promise<IngestSummary> {
     if (input.events.length === 0) {
-        return { inserted: 0, unpriced: [] };
+        return { inserted: 0, billable: 0, unpriced: [] };
     }
 
     const resolver =
@@ -75,6 +81,12 @@ export async function ingestEventsUseCase(input: IngestEventsInput): Promise<Ing
 
     const resolved: ResolvedEvent[] = await Promise.all(
         input.events.map(async (event): Promise<ResolvedEvent> => {
+            // Failed calls carry no tokens and no cost. Skip pricing entirely
+            // (an unpriced model must not drop the failure) and persist as
+            // `status='errored'`, which every spend/calls read excludes.
+            if (event.errored === true) {
+                return { kind: "priced", row: erroredUsageEventRow(input.workspaceId, event) };
+            }
             try {
                 const cost = await resolver.resolveCost({
                     workspaceId: input.workspaceId,
@@ -133,8 +145,9 @@ export async function ingestEventsUseCase(input: IngestEventsInput): Promise<Ing
     // a `requestId` can't dedup and always land.
     const toInsert = await dedupeRows(rows, input.dedup);
     const inserted = toInsert.length > 0 ? await input.eventsRepo.insertBatch(toInsert) : 0;
+    const billable = toInsert.filter((row) => row.status !== "errored").length;
 
-    return { inserted, unpriced: [...unpriced.values()] };
+    return { inserted, billable, unpriced: [...unpriced.values()] };
 }
 
 /**

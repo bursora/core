@@ -6,10 +6,11 @@
  * Pure: no clock reads, no DB. Caller passes the parsed range.
  */
 
-import { dashboardWindowFromRange, windowLabel } from "@/lib/dashboard-window";
+import { dashboardWindowFromRange, deltaWindows, windowLabel } from "@/lib/dashboard-window";
 import { describe, expect, test } from "bun:test";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+const HOUR_MS = 60 * 60 * 1000;
 
 describe("dashboardWindowFromRange", () => {
     test("keeps from/to and derives the prior slice of equal length ending at from", () => {
@@ -53,5 +54,50 @@ describe("windowLabel", () => {
         const to = new Date("2026-05-19T00:00:00Z");
         // Month/day formatting is locale-dependent; assert the separator shape.
         expect(windowLabel(from, to)).toContain("–");
+    });
+});
+
+describe("deltaWindows", () => {
+    test("in-progress window clamps current to now and truncates prior to the same elapsed", () => {
+        const window = dashboardWindowFromRange(
+            new Date("2026-05-17T00:00:00.000Z"),
+            new Date("2026-05-17T23:59:59.999Z"),
+        );
+        const now = new Date("2026-05-17T06:00:00.000Z");
+        const d = deltaWindows(window, now);
+
+        // Current slice ends at `now`, not the future end-of-day.
+        expect(d.from.toISOString()).toBe("2026-05-17T00:00:00.000Z");
+        expect(d.to.toISOString()).toBe("2026-05-17T06:00:00.000Z");
+        // Prior slice is anchored at the prior period's start and is the same length.
+        expect(d.priorFrom.toISOString()).toBe(window.priorFrom.toISOString());
+        expect(d.priorTo.getTime() - d.priorFrom.getTime()).toBe(6 * HOUR_MS);
+        expect(d.to.getTime() - d.from.getTime()).toBe(d.priorTo.getTime() - d.priorFrom.getTime());
+    });
+
+    test("completed window (now >= to) keeps the full prior period", () => {
+        const window = dashboardWindowFromRange(
+            new Date("2026-05-10T00:00:00.000Z"),
+            new Date("2026-05-17T00:00:00.000Z"),
+        );
+        const now = new Date("2026-05-20T00:00:00.000Z");
+        const d = deltaWindows(window, now);
+
+        expect(d.to.toISOString()).toBe(window.to.toISOString());
+        expect(d.priorFrom.toISOString()).toBe(window.priorFrom.toISOString());
+        expect(d.priorTo.toISOString()).toBe(window.priorTo.toISOString());
+    });
+
+    test("a window entirely in the future yields a zero-length comparison", () => {
+        const window = dashboardWindowFromRange(
+            new Date("2026-05-17T00:00:00.000Z"),
+            new Date("2026-05-18T00:00:00.000Z"),
+        );
+        const now = new Date("2026-05-16T00:00:00.000Z");
+        const d = deltaWindows(window, now);
+
+        // Clamped to `from`: no elapsed time, both slices collapse to zero length.
+        expect(d.to.getTime()).toBe(d.from.getTime());
+        expect(d.priorTo.getTime()).toBe(d.priorFrom.getTime());
     });
 });

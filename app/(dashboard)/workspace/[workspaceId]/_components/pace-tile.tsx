@@ -11,10 +11,11 @@ import { getSpendPaceInWindow, paceDirection } from "@/lib/dashboard/dashboard-s
 interface PaceTileProps {
     readonly workspaceId: string;
     readonly dashboardWindow: DashboardWindow;
+    readonly now: Date;
 }
 
-export async function PaceTile({ workspaceId, dashboardWindow }: PaceTileProps) {
-    const delta = await getSpendPaceInWindow({ workspaceId, window: dashboardWindow });
+export async function PaceTile({ workspaceId, dashboardWindow, now }: PaceTileProps) {
+    const delta = await getSpendPaceInWindow({ workspaceId, window: dashboardWindow, now });
 
     return (
         <PaceTileView

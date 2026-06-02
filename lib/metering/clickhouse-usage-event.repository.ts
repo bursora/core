@@ -40,7 +40,7 @@ interface ClickHouseUsageEventRow {
     latency_ms: number | null;
     cost_usd: string;
     request_id: string | null;
-    status: "ok" | "blocked";
+    status: "ok" | "blocked" | "errored";
     decided_by_budget_id: string | null;
     block_reason: string | null;
     ts: string;

@@ -25,6 +25,12 @@ export interface UsageEventInput {
     readonly workflowId: string | null;
     readonly latencyMs: number | null;
     readonly requestId: string | null;
+    /**
+     * True when the wrapped provider call threw/aborted. Errored calls carry no
+     * tokens and no cost; they persist as `status='errored'` so they stay out
+     * of spend and successful-call counts while remaining visible as failures.
+     */
+    readonly errored?: boolean;
 }
 
 export interface UsageEventRow {
@@ -43,10 +49,11 @@ export interface UsageEventRow {
     readonly ts: Date;
     /**
      * Persisted call status. Defaults to `'ok'` for successful calls; budget
-     * denials stamp `'blocked'` rows. On a denial, `provider`/`model` hold
-     * the SDK's intended target (or NULL for older SDKs); `costUsd` stays 0.
+     * denials stamp `'blocked'` rows; failed provider calls stamp `'errored'`.
+     * On a denial, `provider`/`model` hold the SDK's intended target (or NULL
+     * for older SDKs); both `'blocked'` and `'errored'` keep `costUsd` at 0.
      */
-    readonly status?: "ok" | "blocked";
+    readonly status?: "ok" | "blocked" | "errored";
     /**
      * For `status='blocked'` rows, the id of the budget whose cap tripped this
      * call. NULL for `status='ok'` rows and for blocked rows persisted before
@@ -99,5 +106,30 @@ export function blockedUsageEventRow(event: BlockedUsageEvent): UsageEventRow {
         status: "blocked",
         decidedByBudgetId: event.budgetId,
         blockReason: event.blockReason,
+    };
+}
+
+/**
+ * Builds the persisted row for a failed provider call: zeroed cost (failures
+ * carry no tokens), `status='errored'`. Tags, ts, latency, and requestId are
+ * kept so the failure stays attributable; pricing is skipped entirely since the
+ * cost is definitionally 0.
+ */
+export function erroredUsageEventRow(workspaceId: string, event: UsageEventInput): UsageEventRow {
+    return {
+        workspaceId,
+        tenantId: event.tenantId,
+        agentId: event.agentId,
+        workflowId: event.workflowId,
+        provider: event.provider,
+        model: event.model,
+        promptTokens: event.promptTokens,
+        completionTokens: event.completionTokens,
+        cacheTokens: event.cacheTokens,
+        latencyMs: event.latencyMs,
+        costUsd: "0",
+        requestId: event.requestId,
+        ts: event.ts,
+        status: "errored",
     };
 }

@@ -88,14 +88,14 @@ const bucketStart = (ts: Date, bucketSeconds: number): Date => {
 };
 
 /**
- * Mirrors `statusFilter` in the Drizzle repository: rows match when the
- * filter is `'both'`, when it matches `row.status`, or when omitted/undefined
- * and the row is `'ok'` (status defaults to `'ok'` for rows persisted without
- * an explicit value).
+ * Mirrors the ClickHouse WHERE builder: rows match when the filter matches
+ * `row.status`, or when omitted/undefined and the row is `'ok'` (status
+ * defaults to `'ok'`). `'both'` means the two budget outcomes ok + blocked,
+ * never `'errored'` failures.
  */
 const matchesStatus = (row: UsageEventRow, status: MeteringStatusFilter | undefined): boolean => {
     const effective = status ?? "ok";
-    if (effective === "both") return true;
+    if (effective === "both") return (row.status ?? "ok") !== "errored";
     return (row.status ?? "ok") === effective;
 };
 
@@ -223,8 +223,7 @@ export class InMemoryMeteringReadRepository implements MeteringReadRepository {
             if (!this.matchesMeteringFilters(row, query)) continue;
 
             const key = tag ?? "__untagged__";
-            const rowStatus: "ok" | "blocked" = row.status ?? "ok";
-            const isBlocked = rowStatus === "blocked";
+            const isBlocked = row.status === "blocked";
 
             // `blockedCount` is computed unconditionally so the dashboard can
             // show it next to cost. The query's `status` filter gates only

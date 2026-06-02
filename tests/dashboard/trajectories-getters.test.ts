@@ -34,6 +34,7 @@ const baseStatsDeps = (over: Partial<DashboardStatsDeps> = {}): DashboardStatsDe
     sumSpendBetween: async () => "0.00000000",
     countCallsSince: async () => 0,
     countCallsBetween: async () => 0,
+    usageSeriesByDay: async () => [],
     listBudgets: async () => [],
     getBudgetPeriodSpend: async () => 0,
     ...over,

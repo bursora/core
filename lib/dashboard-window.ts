@@ -48,3 +48,38 @@ export function dashboardWindowFromRange(from: Date, to: Date): DashboardWindow 
         label: windowLabel(from, to),
     };
 }
+
+/** A `[from, to)` current slice and its like-for-like prior comparison slice. */
+export interface DeltaWindow {
+    readonly from: Date;
+    readonly to: Date;
+    readonly priorFrom: Date;
+    readonly priorTo: Date;
+}
+
+/**
+ * Windows for an honest "vs prior" delta on a possibly in-progress period.
+ *
+ * The selected window's `to` runs to the end of the period (the future for
+ * today / this-week / this-month), so comparing the full current window against
+ * the full prior period pits a partial period against a complete one; e.g.
+ * today-so-far vs all-of-yesterday reads as a steep drop while spend is flat.
+ *
+ * This clamps the current side to `now` and truncates the prior period to the
+ * same elapsed length measured from its start (`window.priorFrom`), so the two
+ * sides cover an equal span anchored the same way: today-so-far vs
+ * yesterday-by-this-time. A window already fully in the past (`now >= to`)
+ * collapses to the full prior period, unchanged.
+ */
+export function deltaWindows(window: DashboardWindow, now: Date): DeltaWindow {
+    // Clamp `now` into [from, to] so the current slice never inverts (future
+    // window) or overruns the selected period.
+    const curToMs = Math.min(window.to.getTime(), Math.max(window.from.getTime(), now.getTime()));
+    const elapsed = curToMs - window.from.getTime();
+    return {
+        from: window.from,
+        to: new Date(curToMs),
+        priorFrom: window.priorFrom,
+        priorTo: new Date(window.priorFrom.getTime() + elapsed),
+    };
+}

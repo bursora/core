@@ -13,74 +13,75 @@ import {
 import { describe, expect, test } from "bun:test";
 
 describe("computePresetWindow", () => {
-    // Mon 2026-05-11 14:30 local (PT). Day-of-week math is deterministic
-    // because process.env.TZ is pinned at the top of this file.
+    // Mon 2026-05-11 14:30 PT = 2026-05-11 21:30 UTC. Preset boundaries are UTC;
+    // the LA pin at the top of this file proves they don't shift with host TZ.
     const now = new Date(2026, 4, 11, 14, 30, 0);
 
-    test("today: from = 00:00, to = 23:59:59.999 local", () => {
+    test("today: from = 00:00, to = 23:59:59.999 UTC", () => {
         const { from, to } = computePresetWindow("today", now);
-        expect(from.getFullYear()).toBe(2026);
-        expect(from.getMonth()).toBe(4);
-        expect(from.getDate()).toBe(11);
-        expect(from.getHours()).toBe(0);
-        expect(from.getMinutes()).toBe(0);
-        expect(to.getDate()).toBe(11);
-        expect(to.getHours()).toBe(23);
-        expect(to.getMinutes()).toBe(59);
-        expect(to.getSeconds()).toBe(59);
-        expect(to.getMilliseconds()).toBe(999);
+        expect(from.getUTCFullYear()).toBe(2026);
+        expect(from.getUTCMonth()).toBe(4);
+        expect(from.getUTCDate()).toBe(11);
+        expect(from.getUTCHours()).toBe(0);
+        expect(from.getUTCMinutes()).toBe(0);
+        expect(to.getUTCDate()).toBe(11);
+        expect(to.getUTCHours()).toBe(23);
+        expect(to.getUTCMinutes()).toBe(59);
+        expect(to.getUTCSeconds()).toBe(59);
+        expect(to.getUTCMilliseconds()).toBe(999);
     });
 
-    test("week-to-date: from = Sunday-of-this-week 00:00 local, to = end-of-today", () => {
+    test("week-to-date: from = Sunday-of-this-week 00:00 UTC, to = end-of-today", () => {
         const { from, to } = computePresetWindow("week-to-date", now);
-        // Sunday before Mon 2026-05-11 PT is Sun 2026-05-10 00:00 PT.
-        expect(from.getFullYear()).toBe(2026);
-        expect(from.getMonth()).toBe(4);
-        expect(from.getDate()).toBe(10);
-        expect(from.getHours()).toBe(0);
-        expect(from.getMinutes()).toBe(0);
-        expect(to.getDate()).toBe(11);
-        expect(to.getHours()).toBe(23);
-        expect(to.getMinutes()).toBe(59);
+        // Sunday before Mon 2026-05-11 UTC is Sun 2026-05-10 00:00 UTC.
+        expect(from.getUTCFullYear()).toBe(2026);
+        expect(from.getUTCMonth()).toBe(4);
+        expect(from.getUTCDate()).toBe(10);
+        expect(from.getUTCHours()).toBe(0);
+        expect(from.getUTCMinutes()).toBe(0);
+        expect(to.getUTCDate()).toBe(11);
+        expect(to.getUTCHours()).toBe(23);
+        expect(to.getUTCMinutes()).toBe(59);
     });
 
-    test("week-to-date: when `now` is Sunday, from = today 00:00 local", () => {
+    test("week-to-date: when `now` is Sunday, from = today 00:00 UTC", () => {
+        // 2026-05-10 09:00 PT = 2026-05-10 16:00 UTC, a Sunday in UTC.
         const sunday = new Date(2026, 4, 10, 9, 0, 0);
         const { from } = computePresetWindow("week-to-date", sunday);
-        expect(from.getDate()).toBe(10);
-        expect(from.getHours()).toBe(0);
+        expect(from.getUTCDate()).toBe(10);
+        expect(from.getUTCHours()).toBe(0);
     });
 
-    test("month-to-date: from = first of month 00:00 local, to = end-of-today", () => {
+    test("month-to-date: from = first of month 00:00 UTC, to = end-of-today", () => {
         const { from, to } = computePresetWindow("month-to-date", now);
-        expect(from.getFullYear()).toBe(2026);
-        expect(from.getMonth()).toBe(4);
-        expect(from.getDate()).toBe(1);
-        expect(from.getHours()).toBe(0);
-        expect(to.getDate()).toBe(11);
-        expect(to.getHours()).toBe(23);
+        expect(from.getUTCFullYear()).toBe(2026);
+        expect(from.getUTCMonth()).toBe(4);
+        expect(from.getUTCDate()).toBe(1);
+        expect(from.getUTCHours()).toBe(0);
+        expect(to.getUTCDate()).toBe(11);
+        expect(to.getUTCHours()).toBe(23);
     });
 
-    test("last-7-days: from = 6 days ago 00:00, to = end-of-today", () => {
+    test("last-7-days: from = 6 days ago 00:00 UTC, to = end-of-today", () => {
         const { from, to } = computePresetWindow("last-7-days", now);
-        expect(from.getDate()).toBe(5);
-        expect(from.getHours()).toBe(0);
-        expect(to.getDate()).toBe(11);
-        expect(to.getHours()).toBe(23);
+        expect(from.getUTCDate()).toBe(5);
+        expect(from.getUTCHours()).toBe(0);
+        expect(to.getUTCDate()).toBe(11);
+        expect(to.getUTCHours()).toBe(23);
     });
 
-    test("last-14-days: from = 13 days ago 00:00", () => {
+    test("last-14-days: from = 13 days ago 00:00 UTC", () => {
         const { from } = computePresetWindow("last-14-days", now);
-        expect(from.getMonth()).toBe(3);
-        expect(from.getDate()).toBe(28);
-        expect(from.getHours()).toBe(0);
+        expect(from.getUTCMonth()).toBe(3);
+        expect(from.getUTCDate()).toBe(28);
+        expect(from.getUTCHours()).toBe(0);
     });
 
-    test("last-30-days: from = 29 days ago 00:00", () => {
+    test("last-30-days: from = 29 days ago 00:00 UTC", () => {
         const { from } = computePresetWindow("last-30-days", now);
-        expect(from.getMonth()).toBe(3);
-        expect(from.getDate()).toBe(12);
-        expect(from.getHours()).toBe(0);
+        expect(from.getUTCMonth()).toBe(3);
+        expect(from.getUTCDate()).toBe(12);
+        expect(from.getUTCHours()).toBe(0);
     });
 
     test("PRESETS exposes the preset keys in order", () => {

@@ -22,7 +22,7 @@ services:
         restart: unless-stopped
         env_file: .env
         ports:
-            - "3000:3000"
+            - "${APP_PORT:-3000}:3000"
         depends_on:
             postgres:
                 condition: service_healthy
@@ -31,7 +31,7 @@ services:
             clickhouse-server:
                 condition: service_healthy
         healthcheck:
-            test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/"]
+            test: ["CMD", "wget", "--quiet", "--spider", "http://127.0.0.1:3000/login"]
             interval: 30s
             timeout: 5s
             retries: 5
@@ -61,15 +61,13 @@ services:
         restart: unless-stopped
         environment:
             # The 24.8 image locks the default user unless setup is skipped.
-            # ClickHouse is only exposed on the internal compose network (no host
-            # port), so the open default user stays inside the stack.
             CLICKHOUSE_SKIP_USER_SETUP: "1"
         ulimits:
             nofile:
                 soft: 262144
                 hard: 262144
-        expose:
-            - "8123"
+        ports:
+            - "${CLICKHOUSE_PORT:-8123}:8123"
         volumes:
             - clickhouse_data:/var/lib/clickhouse
         healthcheck:

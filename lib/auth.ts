@@ -26,57 +26,75 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { cache } from "react";
 
-const mailer = defaultSmtpMailer();
-
-export const auth = betterAuth({
-    baseURL: env().BETTER_AUTH_URL,
-    secret: env().BETTER_AUTH_SECRET,
-    trustedOrigins: [...env().BETTER_AUTH_TRUSTED_ORIGINS],
-    database: drizzleAdapter(db(), { provider: "pg", schema }),
-    advanced: { database: { generateId: "uuid" } },
-    user: {
-        modelName: "users",
-        additionalFields: {
-            // Global platform role surfaced on the session user object.
-            // `input: false` makes it non-writable from any client input
-            // (signup, profile update, or any API), so only server-side code
-            // can ever change it. Per-workspace roles live separately on
-            // workspace_members.role.
-            role: {
-                type: "string",
-                required: false,
-                defaultValue: USER_ROLE.user,
-                input: false,
+/**
+ * Lazily-constructed better-auth instance. Deferred behind a function so
+ * `next build` — which imports every route module — never reads env before the
+ * real secrets exist. The first call at request time builds and memoizes it.
+ */
+function buildAuth() {
+    const mailer = defaultSmtpMailer();
+    return betterAuth({
+        baseURL: env().BETTER_AUTH_URL,
+        secret: env().BETTER_AUTH_SECRET,
+        trustedOrigins: [...env().BETTER_AUTH_TRUSTED_ORIGINS],
+        database: drizzleAdapter(db(), { provider: "pg", schema }),
+        advanced: { database: { generateId: "uuid" } },
+        user: {
+            modelName: "users",
+            additionalFields: {
+                // Global platform role surfaced on the session user object.
+                // `input: false` makes it non-writable from any client input
+                // (signup, profile update, or any API), so only server-side code
+                // can ever change it. Per-workspace roles live separately on
+                // workspace_members.role.
+                role: {
+                    type: "string",
+                    required: false,
+                    defaultValue: USER_ROLE.user,
+                    input: false,
+                },
             },
         },
-    },
-    emailAndPassword: { enabled: false },
-    socialProviders: {
-        google: {
-            clientId: env().GOOGLE_CLIENT_ID,
-            clientSecret: env().GOOGLE_CLIENT_SECRET,
-        },
-    },
-    plugins: [
-        magicLink({
-            sendMagicLink: async ({ email, url }) => {
-                await sendMagicLinkEmail({ mailer, email, url });
+        emailAndPassword: { enabled: false },
+        socialProviders: {
+            google: {
+                clientId: env().GOOGLE_CLIENT_ID,
+                clientSecret: env().GOOGLE_CLIENT_SECRET,
             },
-        }),
-        nextCookies(),
-    ],
-});
+        },
+        plugins: [
+            magicLink({
+                sendMagicLink: async ({ email, url }) => {
+                    await sendMagicLinkEmail({ mailer, email, url });
+                },
+            }),
+            nextCookies(),
+        ],
+    });
+}
 
-export type Session = typeof auth.$Infer.Session;
+type AuthInstance = ReturnType<typeof buildAuth>;
+
+let authInstance: AuthInstance | null = null;
+
+export function getAuth(): AuthInstance {
+    return (authInstance ??= buildAuth());
+}
+
+export type Session = AuthInstance["$Infer"]["Session"];
 
 /**
  * Per-request cached session lookup. Wrapping in React's `cache` so multiple
  * server components in the same render share a single `auth.api.getSession`
  * call instead of hitting the auth backend per page + layout.
  */
-export const getRequestSession = cache(async () =>
-    auth.api.getSession({ headers: await headers() }),
-);
+export const getRequestSession = cache(async () => {
+    // Resolve headers first: during a build-time prerender this hits Next's
+    // dynamic bailout before getAuth() touches env, so auth-gated pages render
+    // dynamically instead of erroring on the (runtime-only) env.
+    const requestHeaders = await headers();
+    return getAuth().api.getSession({ headers: requestHeaders });
+});
 
 /**
  * Same as `getRequestSession` but redirects to `/login` when the user is

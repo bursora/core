@@ -5,7 +5,7 @@
  * it. Distinct from the per-workspace `workspace_members.role` (owner/member).
  */
 
-import { auth } from "@/lib/auth";
+import { getAuth } from "@/lib/auth";
 import { schema } from "@/lib/db";
 import { describe, expect, test } from "bun:test";
 import { getTableConfig } from "drizzle-orm/pg-core";
@@ -23,7 +23,7 @@ describe("users.role column", () => {
 
 describe("better-auth user.role field", () => {
     test("is exposed as an additional field defaulting to 'user'", () => {
-        const role = auth.options.user?.additionalFields?.role;
+        const role = getAuth().options.user?.additionalFields?.role;
 
         expect(role).toBeDefined();
         expect(role?.type).toBe("string");
@@ -31,7 +31,7 @@ describe("better-auth user.role field", () => {
     });
 
     test("is not client-writable (input: false) so signup/update/API cannot set it", () => {
-        const role = auth.options.user?.additionalFields?.role;
+        const role = getAuth().options.user?.additionalFields?.role;
 
         expect(role?.input).toBe(false);
     });

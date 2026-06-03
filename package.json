@@ -29,7 +29,6 @@
     },
     "dependencies": {
         "@base-ui/react": "^1.4.1",
-        "@bursora/sdk": "file:../sdk",
         "@clickhouse/client": "^1.19.0",
         "@hookform/resolvers": "^5.2.2",
         "@react-email/components": "^1.0.12",

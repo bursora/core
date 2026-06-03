@@ -58,9 +58,12 @@ describeOrSkip("@bursora/sdk published smoke", () => {
                     "index.mjs",
                 );
                 const sdk = (await import(sdkPath)) as {
-                    wrap: typeof import("@bursora/sdk").wrap;
-                    withTags: typeof import("@bursora/sdk").withTags;
-                    BudgetExceededError: typeof import("@bursora/sdk").BudgetExceededError;
+                    wrap: <T>(client: T, opts: { apiKey: string; endpoint: string }) => T;
+                    withTags: (
+                        tags: Record<string, string>,
+                        fn: () => Promise<void>,
+                    ) => Promise<void>;
+                    BudgetExceededError: new (...args: never[]) => Error;
                 };
 
                 const calls: unknown[] = [];

@@ -11,6 +11,8 @@
  * neutral zero-shaped string rather than rendering "NaN" in the UI.
  */
 
+import { formatInZone, zoneAbbrev } from "@/lib/time/zone";
+
 const USD_MIN_FRACTION = 2;
 const USD_MAX_FRACTION = 2;
 const PRECISE_USD_MAX_FRACTION = 6;
@@ -161,14 +163,16 @@ export function formatSignedPercent(delta: number): string {
     return delta > 0 ? `+${formatted}` : formatted;
 }
 
-export function formatUtcHhMm(d: Date): string {
-    const hh = d.getUTCHours().toString().padStart(2, "0");
-    const mm = d.getUTCMinutes().toString().padStart(2, "0");
-    return `${hh}:${mm}`;
-}
-
-export function formatWindowRange(start: Date, end: Date): string {
-    return `${formatUtcHhMm(start)}-${formatUtcHhMm(end)} UTC`;
+/**
+ * "HH:MM-HH:MM <zone>" for an anomaly window. Defaults to UTC so notification
+ * channels (webhook, email, Slack), whose recipient zone is unknown, render a
+ * stable canonical label; dashboard callers pass the viewer's zone for a local
+ * reading.
+ */
+export function formatWindowRange(start: Date, end: Date, tz: string = "UTC"): string {
+    const hhmm = (d: Date): string =>
+        formatInZone(d, tz, { hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+    return `${hhmm(start)}-${hhmm(end)} ${zoneAbbrev(start, tz)}`;
 }
 
 export interface WindowLine {
@@ -177,8 +181,8 @@ export interface WindowLine {
     readonly windowCostUsd: number;
 }
 
-export function formatWindowLine(window: WindowLine): string {
-    return `${formatUsd(window.windowCostUsd)} spent between ${formatWindowRange(window.windowStart, window.windowEnd)}`;
+export function formatWindowLine(window: WindowLine, tz: string = "UTC"): string {
+    return `${formatUsd(window.windowCostUsd)} spent between ${formatWindowRange(window.windowStart, window.windowEnd, tz)}`;
 }
 
 // Already-percent input; 1 decimal unless the value is whole.
@@ -186,26 +190,26 @@ export function formatAlertPercent(n: number): string {
     return Number.isInteger(n) ? String(n) : n.toFixed(1);
 }
 
-const DATE_FMT = new Intl.DateTimeFormat("en-US", {
+const DATE_OPTS: Intl.DateTimeFormatOptions = {
     year: "numeric",
     month: "short",
     day: "numeric",
-});
+};
 
-const DATE_TIME_FMT = new Intl.DateTimeFormat("en-US", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
+const DATE_TIME_OPTS: Intl.DateTimeFormatOptions = {
+    ...DATE_OPTS,
     hour: "2-digit",
     minute: "2-digit",
-});
+};
 
-export function formatDate(at: Date): string {
-    return DATE_FMT.format(at);
+/** Calendar date in `tz` (default UTC). Pass the viewer's zone in the UI. */
+export function formatDate(at: Date, tz: string = "UTC"): string {
+    return formatInZone(at, tz, DATE_OPTS);
 }
 
-export function formatDateTime(at: Date): string {
-    return DATE_TIME_FMT.format(at);
+/** Date + time in `tz` (default UTC). Pass the viewer's zone in the UI. */
+export function formatDateTime(at: Date, tz: string = "UTC"): string {
+    return formatInZone(at, tz, DATE_TIME_OPTS);
 }
 
 const RTF = new Intl.RelativeTimeFormat("en", { numeric: "auto" });

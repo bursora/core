@@ -1,5 +1,6 @@
 import { StatusTag } from "@/components/ui/workspace/status-tag";
 import type { BudgetStats, RawBudget } from "@/lib/budgeting";
+import { formatRelativeTime } from "@/lib/format";
 import { MODE_META, PERIOD_META, SCOPE_META } from "./labels";
 
 interface BudgetHeaderProps {
@@ -52,7 +53,8 @@ export function BudgetHeader({ budget, stats }: BudgetHeaderProps) {
 // never happened.
 function formatTrippedTitle(firstTrippedAt: Date | null): string {
     if (firstTrippedAt === null) return "Next call would block";
-    return `Blocking since ${firstTrippedAt.toISOString()}`;
+    // Relative time is zone-independent — no raw UTC instant leaks into the UI.
+    return `Blocking since ${formatRelativeTime(firstTrippedAt)}`;
 }
 
 function formatResetIn(periodToIso: string): string | null {

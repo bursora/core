@@ -8,6 +8,7 @@
 
 import type { AnomalyAlertRaisedEvent, BudgetAlertRaisedEvent } from "@/lib/event-bus";
 import { fanOutAlertNotification } from "@/lib/notifications/fan-out-alert";
+import { localizeNotificationBody } from "@/lib/notifications/window-token";
 import { describe, expect, test } from "bun:test";
 import { InMemoryNotificationsRepository } from "./fakes/in-memory-notifications.repository";
 
@@ -63,7 +64,7 @@ describe("fanOutAlertNotification", () => {
         expect(dedupKeys).toEqual([`alert:${ALERT_ID}`, `alert:${ALERT_ID}`]);
     });
 
-    test("anomaly fan-out shape: title, body includes reason + window + $, severity, href to alerts list", async () => {
+    test("anomaly fan-out shape: title, reason + tz-neutral window token, severity, href", async () => {
         const notifications = new InMemoryNotificationsRepository();
         await fanOutAlertNotification({
             event: anomalyEvent,
@@ -76,9 +77,13 @@ describe("fanOutAlertNotification", () => {
         expect(row?.source).toBe("alert");
         expect(row?.title).toBe("Anomaly detected");
         expect(row?.body).toContain("Spend spiked 5.0x baseline.");
-        expect(row?.body).toContain("$1.23");
-        expect(row?.body).toContain("12:00");
-        expect(row?.body).toContain("12:05");
+        // The window is persisted as a tz-neutral token (no baked clock time),
+        // so the in-app read path can render it in the viewer's zone.
+        const utc = localizeNotificationBody(row?.body ?? "", "UTC");
+        expect(utc).toContain("$1.23");
+        expect(utc).toContain("12:00-12:05 UTC");
+        const local = localizeNotificationBody(row?.body ?? "", "Europe/Tirane");
+        expect(local).toContain("14:00-14:05");
         expect(row?.severity).toBe("critical");
         expect(row?.href).toBe(`/workspace/${WORKSPACE}/alerts`);
     });

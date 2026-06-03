@@ -32,7 +32,7 @@ export const TRACKED_PLANS: readonly TrackedPlan[] = [
             includedEventsPerMonth: 5_000_000,
             features: [
                 "Every major provider: OpenAI, Anthropic, Google, and more",
-                "Block calls before they blow your budget",
+                "Per-customer budgets that block overspend before the call",
                 "Live spend by customer, agent, workflow, and model",
                 "Spike alerts to Slack, Discord, and email",
                 "Override pricing for negotiated provider rates",

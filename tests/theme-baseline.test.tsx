@@ -22,6 +22,12 @@ mock.module("next/font/google", () => ({
     Geist_Mono: () => ({ variable: "--font-geist-mono", className: "font-geist-mono" }),
 }));
 
+// The root layout reads the `tz` cookie server-side via `getRequestTimeZone`.
+// No cookie in tests → it falls back to UTC.
+mock.module("next/headers", () => ({
+    cookies: async () => ({ get: () => undefined }),
+}));
+
 const { ThemeProvider } = await import("@/components/ui/shell/theme-provider");
 const { default: RootLayout } = await import("@/app/layout");
 
@@ -76,15 +82,15 @@ describe("ThemeProvider wrapper", () => {
 });
 
 describe("RootLayout", () => {
-    test("renders <html> with suppressHydrationWarning so next-themes can swap the class pre-paint", () => {
-        const tree = RootLayout({ children: null });
+    test("renders <html> with suppressHydrationWarning so next-themes can swap the class pre-paint", async () => {
+        const tree = await RootLayout({ children: null });
         expect(isElement(tree)).toBe(true);
         expect((tree as ReactElement<AnyProps>).type).toBe("html");
         expect((tree as ReactElement<AnyProps>).props.suppressHydrationWarning).toBe(true);
     });
 
-    test("mounts ThemeProvider with attribute=class, defaultTheme=system, enableSystem", () => {
-        const tree = RootLayout({ children: null });
+    test("mounts ThemeProvider with attribute=class, defaultTheme=system, enableSystem", async () => {
+        const tree = await RootLayout({ children: null });
         const themeProvider = findElementByDisplayName(tree, "ThemeProvider");
         expect(themeProvider).not.toBeNull();
         const props = themeProvider!.props;

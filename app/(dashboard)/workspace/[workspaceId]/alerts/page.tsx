@@ -23,6 +23,7 @@ import type { Alert } from "@/lib/detection";
 import { listAlerts } from "@/lib/detection";
 import { listDistinctMeteringValuesBulk } from "@/lib/metering/server";
 import { readParam, readParamList } from "@/lib/search-params";
+import { getRequestTimeZone } from "@/lib/time/request-tz";
 import { AlertRow } from "./_components/alert-row";
 
 interface AlertsPageProps {
@@ -51,11 +52,13 @@ export default async function AlertsPage({ params, searchParams }: AlertsPagePro
     }
 
     const search = await searchParams;
+    const tz = await getRequestTimeZone();
 
     const { from, to } = resolveSpendWindow({
         from: readParam(search.from),
         to: readParam(search.to),
         now: new Date(),
+        tz,
     });
 
     const tenantId = readParamList(search.tenant_id);
@@ -116,7 +119,7 @@ export default async function AlertsPage({ params, searchParams }: AlertsPagePro
                     <ul className="divide-y divide-border/60">
                         {rows.map((alert) => (
                             <li key={alertKey(alert)}>
-                                <AlertRow workspaceId={workspaceId} alert={alert} />
+                                <AlertRow workspaceId={workspaceId} alert={alert} tz={tz} />
                             </li>
                         ))}
                     </ul>

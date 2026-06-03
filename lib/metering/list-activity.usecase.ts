@@ -1,5 +1,6 @@
 import type { AnomalyAlert } from "../detection";
 import type { Severity } from "../severity";
+import { UTC } from "../time/zone";
 
 export type ActivityKind =
     | "event_ingested"
@@ -41,9 +42,11 @@ export interface ListActivityInput {
     readonly workspaceId: string;
     readonly limit?: number;
     readonly now?: Date;
+    readonly tz?: string;
     readonly fetchEventBuckets: (
         workspaceId: string,
         since: Date,
+        tz: string,
     ) => Promise<readonly EventBucket[]>;
     readonly fetchAlerts: (
         workspaceId: string,
@@ -141,10 +144,12 @@ export async function listActivityUseCase(
 ): Promise<readonly ActivityItem[]> {
     const limit = input.limit ?? DEFAULT_ACTIVITY_LIMIT;
     const now = input.now ?? new Date();
+    // Callers without a viewer zone (the API-key v1 feed) fall back to UTC.
+    const tz = input.tz ?? UTC;
     const since = new Date(now.getTime() - ACTIVITY_WINDOW_MS);
 
     const [buckets, alerts, keyEvents, setupErrors] = await Promise.all([
-        input.fetchEventBuckets(input.workspaceId, since),
+        input.fetchEventBuckets(input.workspaceId, since, tz),
         input.fetchAlerts(input.workspaceId, since, limit),
         input.fetchKeyEvents(input.workspaceId, since),
         input.fetchSetupErrors?.(input.workspaceId, since) ?? Promise.resolve([]),
@@ -164,11 +169,13 @@ export interface ListActivityPageInput {
     readonly workspaceId: string;
     readonly limit?: number;
     readonly now?: Date;
+    readonly tz?: string;
     readonly cursor?: string | null;
     readonly filters?: ActivityFilters;
     readonly fetchEventBuckets: (
         workspaceId: string,
         since: Date,
+        tz: string,
     ) => Promise<readonly EventBucket[]>;
     readonly fetchAlerts: (
         workspaceId: string,
@@ -205,6 +212,8 @@ function encodeActivityCursor(at: Date): string {
 export async function listActivityPageUseCase(input: ListActivityPageInput): Promise<ActivityPage> {
     const limit = input.limit ?? DEFAULT_ACTIVITY_LIMIT;
     const now = input.now ?? new Date();
+    // Callers without a viewer zone (the API-key v1 feed) fall back to UTC.
+    const tz = input.tz ?? UTC;
     const filters = input.filters ?? {};
     const since = filters.from ?? new Date(now.getTime() - ACTIVITY_WINDOW_MS);
 
@@ -213,7 +222,7 @@ export async function listActivityPageUseCase(input: ListActivityPageInput): Pro
     const overFetch = limit * 2 + 1;
 
     const [buckets, alerts, keyEvents, setupErrors] = await Promise.all([
-        input.fetchEventBuckets(input.workspaceId, since),
+        input.fetchEventBuckets(input.workspaceId, since, tz),
         input.fetchAlerts(input.workspaceId, since, overFetch),
         input.fetchKeyEvents(input.workspaceId, since),
         input.fetchSetupErrors?.(input.workspaceId, since) ?? Promise.resolve([]),

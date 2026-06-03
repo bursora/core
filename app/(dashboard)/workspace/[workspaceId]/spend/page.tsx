@@ -27,6 +27,8 @@ import { resolveModelProviders } from "@/lib/models-server";
 import { buildWorkspacePath } from "@/lib/routes";
 import { readMeteringFilters, readMeteringStatus, readParam } from "@/lib/search-params";
 import { FACETS, FACET_LABEL, type Facet } from "@/lib/spend-types";
+import { getRequestTimeZone } from "@/lib/time/request-tz";
+import { formatInZone, zoneAbbrev } from "@/lib/time/zone";
 import { AlertTriangle } from "lucide-react";
 import Link from "next/link";
 import { EmptyOnboarding } from "./_components/empty-onboarding";
@@ -65,6 +67,7 @@ export default async function SpendPage({ params, searchParams }: SpendPageProps
     await requireSessionUI();
 
     const now = new Date();
+    const tz = await getRequestTimeZone();
     const facet: Facet =
         search.facet !== undefined && (FACETS as readonly string[]).includes(search.facet)
             ? (search.facet as Facet)
@@ -73,6 +76,7 @@ export default async function SpendPage({ params, searchParams }: SpendPageProps
         from: search.from,
         to: search.to,
         now,
+        tz,
     });
     const scopeId = readParam(search.scope_id);
     const filters = readMeteringFilters(search);
@@ -135,7 +139,7 @@ export default async function SpendPage({ params, searchParams }: SpendPageProps
         top.length === 0 &&
         (await countEventsForWorkspace({ workspaceId })) === 0;
 
-    const windowLabel = formatWindowSubtitle(from, to);
+    const windowLabel = formatWindowSubtitle(from, to, tz);
     const windowLabelLower = windowLabel.toLowerCase();
     const subtitle = `${FACET_LABEL[facet]} · ${windowLabel}`;
 
@@ -171,7 +175,7 @@ export default async function SpendPage({ params, searchParams }: SpendPageProps
     const perCallDelta =
         perCall !== null && priorPerCall !== null ? relativeDelta(perCall, priorPerCall) : null;
 
-    const peak = computePeakDay(series.points);
+    const peak = computePeakDay(series.points, tz);
 
     const untaggedShare = computeUntaggedShare(series.points, series.totalUsd);
 
@@ -264,7 +268,7 @@ export default async function SpendPage({ params, searchParams }: SpendPageProps
                             delta={
                                 peak === null
                                     ? `No spend in ${windowLabelLower}`
-                                    : formatDate(peak.date)
+                                    : formatDate(peak.date, tz)
                             }
                         />
                         <Link
@@ -300,7 +304,11 @@ export default async function SpendPage({ params, searchParams }: SpendPageProps
                                     return (
                                         <FeedItem
                                             key={`${a.raisedAt.toISOString()}-${a.scope.tenantId ?? ""}-${a.scope.agentId ?? ""}-${a.reason}`}
-                                            timestamp={CLOCK_FMT.format(a.raisedAt)}
+                                            timestamp={formatInZone(a.raisedAt, tz, {
+                                                hour: "2-digit",
+                                                minute: "2-digit",
+                                                hourCycle: "h23",
+                                            })}
                                             kind={a.severity === "critical" ? "block" : "warn"}
                                             {...(scopeId !== undefined ? { who: scopeId } : {})}
                                         >
@@ -390,14 +398,14 @@ function computeUntaggedShare(
     return untagged / total;
 }
 
-function formatWindowSubtitle(from: Date, to: Date): string {
-    const fmt = new Intl.DateTimeFormat(undefined, {
+function formatWindowSubtitle(from: Date, to: Date, tz: string): string {
+    const opts: Intl.DateTimeFormatOptions = {
         month: "short",
         day: "numeric",
         hour: "numeric",
         minute: "2-digit",
-    });
-    return `${fmt.format(from)} → ${fmt.format(to)}`;
+    };
+    return `${formatInZone(from, tz, opts)} → ${formatInZone(to, tz, opts)} (${zoneAbbrev(from, tz)})`;
 }
 
 const RECENT_ALERTS_LIMIT = 5;
@@ -423,12 +431,6 @@ function relativeDelta(current: number, prior: number): number | null {
     }
     return (current - prior) / prior;
 }
-
-const CLOCK_FMT = new Intl.DateTimeFormat(undefined, {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-});
 
 // Map `MeteringFilters` keys back to URL param spelling (`tenantId` → `tenant_id`).
 const urlKeyForFilter = (key: string): string => key.replace(/Id$/, "_id");

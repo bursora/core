@@ -20,6 +20,7 @@ import { Button } from "@/components/ui/button";
 import { DashboardSection } from "@/components/ui/workspace/dashboard-section";
 import { StatusTag, type StatusTagTone } from "@/components/ui/workspace/status-tag";
 import { isActiveSubscriptionStatus } from "@/lib/billing-status";
+import { getRequestTimeZone } from "@/lib/time/request-tz";
 import type { ReactNode } from "react";
 import { createCheckoutAction, openPortalAction } from "../billing-actions";
 import { getUserBillingRecord } from "../billing/server";
@@ -52,6 +53,7 @@ export async function BillingSection({ userId, status, children }: BillingSectio
         hasProviderCustomer && isActiveSubscriptionStatus(record?.subscriptionStatus);
     // eslint-disable-next-line react-hooks/purity -- server-rendered once per request; current time is the eligibility cutoff
     const now = Date.now();
+    const tz = await getRequestTimeZone();
     const refundEligibleUntil =
         record?.refundEligibleUntil && record.refundEligibleUntil.getTime() > now
             ? record.refundEligibleUntil
@@ -107,7 +109,9 @@ export async function BillingSection({ userId, status, children }: BillingSectio
                 ) : null}
             </DashboardSection>
             {children}
-            {refundEligibleUntil ? <RefundPanel eligibleUntil={refundEligibleUntil} /> : null}
+            {refundEligibleUntil ? (
+                <RefundPanel eligibleUntil={refundEligibleUntil} tz={tz} />
+            ) : null}
         </div>
     );
 }

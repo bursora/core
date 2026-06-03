@@ -3,6 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { UserAvatar } from "@/components/ui/user-avatar";
 import { requireSessionUI } from "@/lib/auth";
+import { getRequestTimeZone } from "@/lib/time/request-tz";
 import { Check } from "lucide-react";
 import { AccountMetaCard } from "./_components/account-meta-card";
 import { ProfileForm } from "./_components/profile-form";
@@ -10,6 +11,7 @@ import { ProfileForm } from "./_components/profile-form";
 export default async function ProfilePage() {
     const session = await requireSessionUI();
     const user = session.user;
+    const tz = await getRequestTimeZone();
 
     return (
         <AppShell>
@@ -51,6 +53,7 @@ export default async function ProfilePage() {
                 <AccountMetaCard
                     createdAt={user.createdAt}
                     sessionCreatedAt={session.session.createdAt}
+                    tz={tz}
                 />
             </div>
         </AppShell>

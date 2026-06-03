@@ -2,10 +2,10 @@
  * CH-backed contract test for `fetchEventBuckets`, run against an ephemeral
  * database carved out of a live ClickHouse (env `CLICKHOUSE_URL`).
  *
- * Verifies the hourly call-count buckets behind the activity-feed sparkline:
- * hourly grouping stamped at the latest event in each bucket (`max(ts)`), the
- * `status='ok'` filter, the `since` lower bound, and newest-first ordering.
- * Skips when no live server is set.
+ * Verifies the daily call-count buckets behind the activity feed: grouping to
+ * the viewer's local calendar day stamped at the latest event in each bucket
+ * (`max(ts)`), the `status='ok'` filter, the `since` lower bound, and
+ * newest-first ordering. Skips when no live server is set.
  */
 
 import { fetchEventBuckets } from "@/lib/compose/activity";
@@ -40,20 +40,39 @@ beforeEach(async () => {
 
 describe("fetchEventBuckets", () => {
     test.skipIf(!hasClickHouse)(
-        "counts ok events per hour, stamped at the latest event in each bucket",
+        "counts ok events per day, stamped at the latest event in each bucket",
         async () => {
             await insertUsageEvent(handle.ch, { ts: new Date("2026-06-10T11:10:00Z") });
-            await insertUsageEvent(handle.ch, { ts: new Date("2026-06-10T11:50:00Z") });
             await insertUsageEvent(handle.ch, { ts: new Date("2026-06-10T13:05:00Z") });
+            await insertUsageEvent(handle.ch, { ts: new Date("2026-06-11T09:00:00Z") });
 
-            const buckets = await fetchEventBuckets(handle.ch, CONTRACT_WORKSPACE, SINCE);
+            const buckets = await fetchEventBuckets(handle.ch, CONTRACT_WORKSPACE, SINCE, "UTC");
 
-            const at11 = buckets.find((b) => b.at.toISOString() === "2026-06-10T11:50:00.000Z");
-            const at13 = buckets.find((b) => b.at.toISOString() === "2026-06-10T13:05:00.000Z");
-            expect(at11?.count).toBe(2);
-            expect(at13?.count).toBe(1);
+            const day10 = buckets.find((b) => b.at.toISOString() === "2026-06-10T13:05:00.000Z");
+            const day11 = buckets.find((b) => b.at.toISOString() === "2026-06-11T09:00:00.000Z");
+            expect(day10?.count).toBe(2);
+            expect(day11?.count).toBe(1);
         },
     );
+
+    test.skipIf(!hasClickHouse)("groups by the calendar day of the supplied timezone", async () => {
+        // 22:30Z is 00:30 the next day in Berlin (UTC+2 in June); 21:30Z is
+        // still the same Berlin day. Same UTC day, two Berlin days.
+        await insertUsageEvent(handle.ch, { ts: new Date("2026-06-10T21:30:00Z") });
+        await insertUsageEvent(handle.ch, { ts: new Date("2026-06-10T22:30:00Z") });
+
+        const utc = await fetchEventBuckets(handle.ch, CONTRACT_WORKSPACE, SINCE, "UTC");
+        const berlin = await fetchEventBuckets(
+            handle.ch,
+            CONTRACT_WORKSPACE,
+            SINCE,
+            "Europe/Berlin",
+        );
+
+        expect(utc).toHaveLength(1);
+        expect(utc[0]?.count).toBe(2);
+        expect(berlin).toHaveLength(2);
+    });
 
     test.skipIf(!hasClickHouse)("excludes blocked rows", async () => {
         await insertUsageEvent(handle.ch, { ts: new Date("2026-06-10T11:10:00Z"), status: "ok" });
@@ -62,7 +81,7 @@ describe("fetchEventBuckets", () => {
             status: "blocked",
         });
 
-        const buckets = await fetchEventBuckets(handle.ch, CONTRACT_WORKSPACE, SINCE);
+        const buckets = await fetchEventBuckets(handle.ch, CONTRACT_WORKSPACE, SINCE, "UTC");
 
         expect(buckets).toHaveLength(1);
         expect(buckets[0]?.count).toBe(1);
@@ -72,28 +91,28 @@ describe("fetchEventBuckets", () => {
         await insertUsageEvent(handle.ch, { ts: new Date("2026-06-09T23:00:00Z") });
         await insertUsageEvent(handle.ch, { ts: new Date("2026-06-10T01:00:00Z") });
 
-        const buckets = await fetchEventBuckets(handle.ch, CONTRACT_WORKSPACE, SINCE);
+        const buckets = await fetchEventBuckets(handle.ch, CONTRACT_WORKSPACE, SINCE, "UTC");
 
         expect(buckets).toHaveLength(1);
         expect(buckets[0]?.at.toISOString()).toBe("2026-06-10T01:00:00.000Z");
     });
 
-    test.skipIf(!hasClickHouse)("returns buckets newest-first", async () => {
+    test.skipIf(!hasClickHouse)("returns buckets newest-day-first", async () => {
         await insertUsageEvent(handle.ch, { ts: new Date("2026-06-10T10:00:00Z") });
-        await insertUsageEvent(handle.ch, { ts: new Date("2026-06-10T15:00:00Z") });
-        await insertUsageEvent(handle.ch, { ts: new Date("2026-06-10T12:00:00Z") });
+        await insertUsageEvent(handle.ch, { ts: new Date("2026-06-12T15:00:00Z") });
+        await insertUsageEvent(handle.ch, { ts: new Date("2026-06-11T12:00:00Z") });
 
-        const buckets = await fetchEventBuckets(handle.ch, CONTRACT_WORKSPACE, SINCE);
+        const buckets = await fetchEventBuckets(handle.ch, CONTRACT_WORKSPACE, SINCE, "UTC");
 
         expect(buckets.map((b) => b.at.toISOString())).toEqual([
-            "2026-06-10T15:00:00.000Z",
-            "2026-06-10T12:00:00.000Z",
+            "2026-06-12T15:00:00.000Z",
+            "2026-06-11T12:00:00.000Z",
             "2026-06-10T10:00:00.000Z",
         ]);
     });
 
     test.skipIf(!hasClickHouse)("empty workspace returns []", async () => {
-        const buckets = await fetchEventBuckets(handle.ch, CONTRACT_WORKSPACE, SINCE);
+        const buckets = await fetchEventBuckets(handle.ch, CONTRACT_WORKSPACE, SINCE, "UTC");
         expect(buckets).toEqual([]);
     });
 });

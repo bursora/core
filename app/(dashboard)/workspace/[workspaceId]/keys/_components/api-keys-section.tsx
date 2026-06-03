@@ -14,6 +14,7 @@ import {
 import { DashboardSection } from "@/components/ui/workspace/dashboard-section";
 import { formatDateTime } from "@/lib/format";
 import { listApiKeys } from "@/lib/identity/server";
+import { getRequestTimeZone } from "@/lib/time/request-tz";
 import { ApiKeyRow } from "./api-key-row";
 import { IssueApiKeyButton } from "./api-keys-section-controls";
 import { IssuedKeyCard } from "./issued-key-card";
@@ -32,6 +33,7 @@ export async function ApiKeysSection({
     autoIssue,
 }: ApiKeysSectionProps) {
     const keys = await listApiKeys(workspaceId);
+    const tz = await getRequestTimeZone();
 
     return (
         <div className="space-y-4">
@@ -66,7 +68,7 @@ export async function ApiKeysSection({
                                     key={k.id}
                                     id={k.id}
                                     name={k.name}
-                                    createdLabel={formatDateTime(k.createdAt)}
+                                    createdLabel={formatDateTime(k.createdAt, tz)}
                                     workspaceId={workspaceId}
                                     initialRevoked={Boolean(k.revokedAt)}
                                     revealable={k.revealable}

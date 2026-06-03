@@ -20,6 +20,7 @@ import {
     DialogTitle,
     DialogTrigger,
 } from "@/components/ui/dialog";
+import { useTimeZone } from "@/components/ui/hooks/use-time-zone";
 import { UserAvatar } from "@/components/ui/user-avatar";
 import { EmptyStateCard } from "@/components/ui/workspace/empty-state-card";
 import { StatTile } from "@/components/ui/workspace/stat-tile";
@@ -135,6 +136,7 @@ export function MembersList({ members, pending, action, cancelAction }: Props) {
 }
 
 function MemberRow({ member }: { member: Member }) {
+    const tz = useTimeZone();
     const isOwner = member.role === "owner";
 
     return (
@@ -150,7 +152,7 @@ function MemberRow({ member }: { member: Member }) {
                     <div className="min-w-0">
                         <div className="truncate text-sm font-medium">{member.email}</div>
                         <div className="text-xs text-muted-foreground">
-                            Joined {formatDate(member.createdAt)}
+                            Joined {formatDate(member.createdAt, tz)}
                         </div>
                     </div>
                 </div>
@@ -176,6 +178,7 @@ function PendingRow({
     invite: PendingInvite;
     cancelAction: (formData: FormData) => Promise<ActionResult>;
 }) {
+    const tz = useTimeZone();
     const [pending, startTransition] = useTransition();
     // Wall-clock comparison; intentional re-evaluation each render so a Pending
     // invite flips to Expired the moment the deadline passes without needing a
@@ -211,8 +214,8 @@ function PendingRow({
                         <div className="flex items-center gap-1 text-xs text-muted-foreground">
                             <Clock className="size-3" />
                             {expired
-                                ? `Expired ${formatDate(invite.expiresAt)}`
-                                : `Expires ${formatDate(invite.expiresAt)}`}
+                                ? `Expired ${formatDate(invite.expiresAt, tz)}`
+                                : `Expires ${formatDate(invite.expiresAt, tz)}`}
                         </div>
                     </div>
                 </div>

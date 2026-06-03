@@ -142,6 +142,36 @@ describe("GET /api/internal/workspace/.../activity (filtered)", () => {
         expect(Array.isArray(body.items)).toBe(true);
     });
 
+    test("from/to bounds drop items outside the explicit range", async () => {
+        setupActivity();
+        // Seeded items span 2025-05-10 10:00–11:30Z. Bound to 11:00–11:15Z so
+        // only the 11:00 event bucket survives; the alert (11:30) and 10:00
+        // bucket fall outside.
+        const res = await callRoute("?from=2025-05-10T11:00:00.000Z&to=2025-05-10T11:15:00.000Z");
+        expect(res.status).toBe(200);
+        const body = (await res.json()) as { items: { kind: string; count?: number }[] };
+        expect(body.items).toHaveLength(1);
+        expect(body.items[0]?.kind).toBe("event_ingested");
+    });
+
+    test("explicit from/to override range", async () => {
+        setupActivity();
+        // range=24h would start ~now (2026), excluding all 2025 items. Explicit
+        // from/to must win and surface the seeded 2025 rows.
+        const res = await callRoute(
+            "?range=24h&from=2025-05-10T09:00:00.000Z&to=2025-05-10T12:00:00.000Z",
+        );
+        expect(res.status).toBe(200);
+        const body = (await res.json()) as { items: unknown[] };
+        expect(body.items.length).toBeGreaterThan(0);
+    });
+
+    test("rejects non-ISO from with 400", async () => {
+        setupActivity();
+        const res = await callRoute("?from=2025-05-10");
+        expect(res.status).toBe(400);
+    });
+
     test("403 with subscription_required when the cloud workspace is locked", async () => {
         setupActivity();
         setBillingGateDepsForTesting({ isCloud: true, readBilling: async () => null });

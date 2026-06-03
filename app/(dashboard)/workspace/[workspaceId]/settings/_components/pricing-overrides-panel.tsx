@@ -22,6 +22,7 @@ import {
     DialogTrigger,
 } from "@/components/ui/dialog";
 import { FacetedFilter, type FacetedFilterOption } from "@/components/ui/filters/faceted-filter";
+import { useTimeZone } from "@/components/ui/hooks/use-time-zone";
 import { useUrlParamCommit } from "@/components/ui/hooks/use-url-param-commit";
 import { Input } from "@/components/ui/input";
 import {
@@ -480,6 +481,7 @@ function PricingRow({
     status: RowStatus;
     onEdit: () => void;
 }) {
+    const tz = useTimeZone();
     return (
         <TableRow>
             <TableCell>
@@ -509,7 +511,7 @@ function PricingRow({
                     <CalendarClock className="size-3 shrink-0" />
                     <div className="flex flex-col">
                         <span className="tabular-nums">
-                            {formatDateTime(new Date(row.effectiveFrom))}
+                            {formatDateTime(new Date(row.effectiveFrom), tz)}
                         </span>
                         <span
                             className={cn(
@@ -519,7 +521,7 @@ function PricingRow({
                         >
                             {row.effectiveTo === null
                                 ? "indefinite"
-                                : `→ ${formatDateTime(new Date(row.effectiveTo))}`}
+                                : `→ ${formatDateTime(new Date(row.effectiveTo), tz)}`}
                         </span>
                     </div>
                 </div>

@@ -1,7 +1,13 @@
 /** Pure date math for the spend page date range picker. */
 
-import { endOfDayUtc, startOfDayUtc, startOfMonthUtc } from "@/lib/budgeting/period";
 import type { SpendWindow } from "@/lib/metering";
+import {
+    endOfDayInZone,
+    formatInZone,
+    startOfDayInZone,
+    startOfMonthInZone,
+    startOfWeekInZone,
+} from "@/lib/time/zone";
 
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
@@ -28,43 +34,42 @@ export const PRESETS: readonly Preset[] = [
     { id: "last-30-days", label: "Last 30 days" },
 ];
 
-// Preset windows are UTC, the same frame ClickHouse buckets/partitions in, so a
-// quick-pick range lines up with the chart buckets and reads identically on any
-// host timezone. Day/month boundaries come from the shared period helpers;
-// startOfWeekUtc stays local because the picker's Sunday week start differs from
-// period.ts's ISO/Monday budget weeks.
-function startOfWeekUtc(d: Date): Date {
-    return new Date(
-        Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() - d.getUTCDay(), 0, 0, 0, 0),
-    );
-}
-
-export function computePresetWindow(preset: PresetId, now: Date): SpendWindow {
+// Preset windows are day-aligned in the user's timezone, so "Today" is the
+// user's local today and the picked range matches the default the server
+// resolves for the same zone. Boundaries are returned as UTC instants — the
+// query layer stays UTC. The Sunday week start is the picker's own; budget
+// weeks (ISO/Monday) live in period.ts.
+export function computePresetWindow(preset: PresetId, now: Date, tz: string): SpendWindow {
     switch (preset) {
         case "today":
-            return { from: startOfDayUtc(now), to: endOfDayUtc(now) };
+            return { from: startOfDayInZone(now, tz), to: endOfDayInZone(now, tz) };
         case "week-to-date":
-            return { from: startOfWeekUtc(now), to: endOfDayUtc(now) };
+            return { from: startOfWeekInZone(now, tz), to: endOfDayInZone(now, tz) };
         case "month-to-date":
-            return { from: startOfMonthUtc(now), to: endOfDayUtc(now) };
+            return { from: startOfMonthInZone(now, tz), to: endOfDayInZone(now, tz) };
         case "last-7-days":
             return {
-                from: startOfDayUtc(new Date(now.getTime() - 6 * DAY_MS)),
-                to: endOfDayUtc(now),
+                from: startOfDayInZone(new Date(now.getTime() - 6 * DAY_MS), tz),
+                to: endOfDayInZone(now, tz),
             };
         case "last-14-days":
             return {
-                from: startOfDayUtc(new Date(now.getTime() - 13 * DAY_MS)),
-                to: endOfDayUtc(now),
+                from: startOfDayInZone(new Date(now.getTime() - 13 * DAY_MS), tz),
+                to: endOfDayInZone(now, tz),
             };
         case "last-30-days":
             return {
-                from: startOfDayUtc(new Date(now.getTime() - 29 * DAY_MS)),
-                to: endOfDayUtc(now),
+                from: startOfDayInZone(new Date(now.getTime() - 29 * DAY_MS), tz),
+                to: endOfDayInZone(now, tz),
             };
     }
 }
 
+// The interactive editors below (calendar day merge, time inputs) work in the
+// browser's own zone, because react-day-picker and `<input type="time">` are
+// inherently browser-local. That stays consistent with the tz-rendered button
+// label and presets because the `tz` cookie is written FROM the browser zone
+// (see `TimeZoneProvider`), so cookie tz == browser zone for every real user.
 export function applyDayToDateTime(original: Date, newDay: Date): Date {
     return new Date(
         newDay.getFullYear(),
@@ -104,10 +109,7 @@ export function formatTimeInput(d: Date): string {
     return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
 }
 
-export function formatRangeButtonLabel(from: Date, to: Date): string {
-    const fmt = new Intl.DateTimeFormat(undefined, {
-        dateStyle: "short",
-        timeStyle: "short",
-    });
-    return `${fmt.format(from)} - ${fmt.format(to)}`;
+export function formatRangeButtonLabel(from: Date, to: Date, tz: string): string {
+    const opts: Intl.DateTimeFormatOptions = { dateStyle: "short", timeStyle: "short" };
+    return `${formatInZone(from, tz, opts)} - ${formatInZone(to, tz, opts)}`;
 }

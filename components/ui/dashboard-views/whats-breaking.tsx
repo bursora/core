@@ -26,6 +26,9 @@ export interface WhatsBreakingPanelProps {
      *  Defaults to true. The landing-page composition passes false so visitors
      *  aren't sent to auth-gated routes. */
     readonly actionsEnabled?: boolean;
+    /** Viewer's IANA timezone for ETA dates. Defaults to UTC (the landing-page
+     *  composition has no request zone). */
+    readonly tz?: string;
 }
 
 const MODE_TONE: Record<WhatsBreakingRow["mode"], string> = {
@@ -47,6 +50,7 @@ export function WhatsBreakingPanel({
     workspaceId,
     rows,
     actionsEnabled = true,
+    tz = "UTC",
 }: WhatsBreakingPanelProps) {
     return (
         <DashboardSection
@@ -63,6 +67,7 @@ export function WhatsBreakingPanel({
                             workspaceId={workspaceId}
                             row={row}
                             actionsEnabled={actionsEnabled}
+                            tz={tz}
                         />
                     ))}
                 </ul>
@@ -99,9 +104,10 @@ interface BreakingRowProps {
     readonly workspaceId: string;
     readonly row: WhatsBreakingRow;
     readonly actionsEnabled: boolean;
+    readonly tz: string;
 }
 
-function BreakingRow({ workspaceId, row, actionsEnabled }: BreakingRowProps) {
+function BreakingRow({ workspaceId, row, actionsEnabled, tz }: BreakingRowProps) {
     const scope = formatScopeLabel(row.scopeType, row.scopeId, row.period);
     const pct = Math.round(Math.min(row.usage, BUDGET_USAGE_DANGER_THRESHOLD) * 100);
     const overage = row.usage > BUDGET_USAGE_DANGER_THRESHOLD;
@@ -123,7 +129,7 @@ function BreakingRow({ workspaceId, row, actionsEnabled }: BreakingRowProps) {
                         ({row.mode})
                     </span>
                 </div>
-                <EtaPill row={row} />
+                <EtaPill row={row} tz={tz} />
             </div>
             <ShareBar percent={pct} fillClassName={tone} ariaLabel={`${scope}: ${pct}% used`} />
             <div className="flex items-center justify-between gap-3">
@@ -141,17 +147,17 @@ function BreakingRow({ workspaceId, row, actionsEnabled }: BreakingRowProps) {
     );
 }
 
-function EtaPill({ row }: { readonly row: WhatsBreakingRow }) {
-    const text = pillText(row);
+function EtaPill({ row, tz }: { readonly row: WhatsBreakingRow; readonly tz: string }) {
+    const text = pillText(row, tz);
     const tone = pillTone(row);
     return <span className={cn(ETA_PILL_BASE, ETA_PILL_TONE[tone])}>{text}</span>;
 }
 
-function pillText(row: WhatsBreakingRow): string {
+function pillText(row: WhatsBreakingRow, tz: string): string {
     if (row.etaKind === "today") return "today";
-    if (row.etaKind === "safe") return `safe · ${formatDate(row.periodEnd).toLowerCase()}`;
+    if (row.etaKind === "safe") return `safe · ${formatDate(row.periodEnd, tz).toLowerCase()}`;
     const days = row.etaDays ?? 0;
-    return `${formatEtaHint(days)} · ${dateHint(days)}`;
+    return `${formatEtaHint(days)} · ${dateHint(days, tz)}`;
 }
 
 function pillTone(row: WhatsBreakingRow): keyof typeof ETA_PILL_TONE {
@@ -163,9 +169,9 @@ function pillTone(row: WhatsBreakingRow): keyof typeof ETA_PILL_TONE {
     return "safe";
 }
 
-function dateHint(days: number): string {
+function dateHint(days: number, tz: string): string {
     const hitMs = Date.now() + days * 86_400_000;
-    return formatDate(new Date(hitMs)).toLowerCase();
+    return formatDate(new Date(hitMs), tz).toLowerCase();
 }
 
 function formatScopeLabel(type: ScopeType, id: string | null, period: string): string {

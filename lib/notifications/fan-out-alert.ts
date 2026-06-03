@@ -6,10 +6,10 @@
 
 import type { Route } from "next";
 import type { AlertRaisedEvent, BudgetAlertRaisedEvent } from "../event-bus";
-import { formatWindowLine } from "../format";
 import { formatBudgetAttribution } from "../notification/budget-attribution";
 import { buildWorkspacePath } from "../routes";
 import type { NotificationsRepository } from "./notifications.repository";
+import { encodeWindowToken } from "./window-token";
 
 const OUTCOME_SUFFIX: Record<BudgetAlertRaisedEvent["mode"], string | null> = {
     block: "calls blocked",
@@ -57,7 +57,7 @@ function render(
     if (event.kind === "anomaly") {
         return {
             title: "Anomaly detected",
-            body: `${event.reason} ${formatWindowLine(event)}`,
+            body: `${event.reason} ${encodeWindowToken(event)}`,
         };
     }
     const attribution = formatBudgetAttribution(event, deniedSinceTrip);

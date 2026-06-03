@@ -14,7 +14,12 @@ import { Button } from "@/components/ui/button";
 import { StatusTag } from "@/components/ui/workspace/status-tag";
 import type { Alert, AnomalyAlert, BudgetAlert } from "@/lib/detection";
 import { budgetAlertToEvent, buildSpendLink, flattenScope, scopeLabel } from "@/lib/detection";
-import { formatPreciseUsd, formatRelativeTime, formatWindowRange } from "@/lib/format";
+import {
+    formatDateTime,
+    formatPreciseUsd,
+    formatRelativeTime,
+    formatWindowRange,
+} from "@/lib/format";
 import { formatBudgetAttribution } from "@/lib/notification";
 import { buildWorkspacePath } from "@/lib/routes";
 import type { Route } from "next";
@@ -24,21 +29,24 @@ import { SeveritySign } from "./severity-sign";
 interface AlertRowProps {
     workspaceId: string;
     alert: Alert;
+    /** Viewer's IANA timezone, for rendering anomaly window times locally. */
+    tz: string;
 }
 
-export function AlertRow({ workspaceId, alert }: AlertRowProps) {
+export function AlertRow({ workspaceId, alert, tz }: AlertRowProps) {
     if (alert.kind === "budget") {
-        return <BudgetAlertRow workspaceId={workspaceId} alert={alert} />;
+        return <BudgetAlertRow workspaceId={workspaceId} alert={alert} tz={tz} />;
     }
-    return <AnomalyRow workspaceId={workspaceId} alert={alert} />;
+    return <AnomalyRow workspaceId={workspaceId} alert={alert} tz={tz} />;
 }
 
 interface AnomalyRowProps {
     workspaceId: string;
     alert: AnomalyAlert;
+    tz: string;
 }
 
-function AnomalyRow({ workspaceId, alert }: AnomalyRowProps) {
+function AnomalyRow({ workspaceId, alert, tz }: AnomalyRowProps) {
     const scope = flattenScope(alert);
     const href = buildSpendLink(workspaceId, scope, alert.windowStart, alert.windowEnd);
     const iso = alert.raisedAt.toISOString();
@@ -48,7 +56,7 @@ function AnomalyRow({ workspaceId, alert }: AnomalyRowProps) {
     const windowChip =
         alert.windowCostUsd === null
             ? null
-            : `${formatPreciseUsd(alert.windowCostUsd)} in ${formatWindowRange(alert.windowStart, alert.windowEnd)}`;
+            : `${formatPreciseUsd(alert.windowCostUsd)} in ${formatWindowRange(alert.windowStart, alert.windowEnd, tz)}`;
 
     return (
         <div className="flex flex-row items-center gap-3 px-5 py-3">
@@ -72,7 +80,7 @@ function AnomalyRow({ workspaceId, alert }: AnomalyRowProps) {
 
             <time
                 dateTime={iso}
-                title={iso}
+                title={formatDateTime(alert.raisedAt, tz)}
                 className="hidden text-xs text-muted-foreground md:inline"
             >
                 {relative}
@@ -88,9 +96,10 @@ function AnomalyRow({ workspaceId, alert }: AnomalyRowProps) {
 interface BudgetAlertRowProps {
     workspaceId: string;
     alert: BudgetAlert;
+    tz: string;
 }
 
-function BudgetAlertRow({ workspaceId, alert }: BudgetAlertRowProps) {
+function BudgetAlertRow({ workspaceId, alert, tz }: BudgetAlertRowProps) {
     const iso = alert.raisedAt.toISOString();
     const relative = formatRelativeTime(alert.raisedAt);
     const attribution = formatBudgetAttribution(budgetAlertToEvent(alert));
@@ -108,7 +117,7 @@ function BudgetAlertRow({ workspaceId, alert }: BudgetAlertRowProps) {
 
             <time
                 dateTime={iso}
-                title={iso}
+                title={formatDateTime(alert.raisedAt, tz)}
                 className="hidden text-xs text-muted-foreground md:inline"
             >
                 {relative}

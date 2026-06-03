@@ -23,6 +23,7 @@ describe("TrajectoriesToWatchPanel absence contract", () => {
                 workspaceId: WORKSPACE,
                 customer: [],
                 model: [],
+                tz: "UTC",
             }),
         );
 
@@ -48,6 +49,7 @@ describe("TrajectoriesToWatchPanel absence contract", () => {
                 workspaceId: WORKSPACE,
                 customer,
                 model: [],
+                tz: "UTC",
             }),
         );
 
@@ -77,6 +79,7 @@ describe("TrajectoriesToWatchPanel absence contract", () => {
                 workspaceId: WORKSPACE,
                 customer: [],
                 model,
+                tz: "UTC",
             }),
         );
 
@@ -110,6 +113,7 @@ describe("TrajectoriesToWatchPanel absence contract", () => {
                 workspaceId: WORKSPACE,
                 customer,
                 model,
+                tz: "UTC",
             }),
         );
 

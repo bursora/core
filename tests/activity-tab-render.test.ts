@@ -92,29 +92,25 @@ const seedManyBuckets = (count: number) => {
     });
 };
 
-// Two event buckets anchored to noon today (and an hour earlier) so they always
-// land in the same calendar-day group regardless of when the test runs. Distinct
-// counts (3, 1) let the assertions tell the day total apart from each bucket.
-const sameDayBuckets = () => {
+// The data layer returns one event bucket per calendar day. Anchor it to noon
+// today so it always lands in today's group regardless of when the test runs.
+const todayBucket = () => {
     const noon = new Date();
     noon.setHours(12, 0, 0, 0);
-    return [
-        { at: noon, count: 3 },
-        { at: new Date(noon.getTime() - 60 * 60 * 1000), count: 1 },
-    ];
+    return [{ at: noon, count: 4 }];
 };
 
-const seedSameDayBuckets = () => {
+const seedTodayBucket = () => {
     setActivityDepsForTesting({
-        fetchEventBuckets: async () => sameDayBuckets(),
+        fetchEventBuckets: async () => todayBucket(),
         fetchAlerts: async (): Promise<readonly AnomalyAlert[]> => [],
         fetchKeyEvents: async () => [],
     });
 };
 
-const seedAlertPlusSameDayEvents = () => {
+const seedAlertPlusTodayEvents = () => {
     setActivityDepsForTesting({
-        fetchEventBuckets: async () => sameDayBuckets(),
+        fetchEventBuckets: async () => todayBucket(),
         fetchAlerts: async (): Promise<readonly AnomalyAlert[]> => {
             const raisedAt = new Date(Date.now() - 60 * 1000);
             return [
@@ -141,8 +137,6 @@ const renderActivity = async () => {
     const element = await ActivityTab({ workspaceId: WORKSPACE, searchParams: {} });
     return renderToStaticMarkup(element);
 };
-
-const triggerCount = (html: string) => (html.match(/data-slot="accordion-trigger"/g) ?? []).length;
 
 describe("ActivityTab", () => {
     test("renders empty-state copy when no items", async () => {
@@ -193,49 +187,57 @@ describe("ActivityTab", () => {
         expect(html).toContain(`/workspace/${WORKSPACE}/keys`);
     });
 
-    test("folds same-day event buckets into one collapsed summary row", async () => {
-        seedSameDayBuckets();
+    test("renders a day's events as a single plain row, no accordion", async () => {
+        seedTodayBucket();
 
         const html = await renderActivity();
 
-        // One summary trigger for the whole day, showing the day total (3 + 1).
-        expect(triggerCount(html)).toBe(1);
         expect(html).toContain("4 events");
-        // Collapsed by default — the disclosure starts closed.
-        expect(html).toContain('data-state="closed"');
-        // Closed content unmounts, so the per-hour breakdown stays out of the
-        // markup until the row is expanded. (This is what the fold buys.)
-        expect(html).not.toContain("3 events");
-        expect(html).not.toContain("1 event");
-    });
-
-    test("a single same-day event renders as a plain row, not a folded summary", async () => {
-        seedManyBuckets(1);
-
-        const html = await renderActivity();
-
-        // Fewer than two events in a day: no disclosure, just the plain row.
-        expect(triggerCount(html)).toBe(0);
-        expect(html).toContain("1 event");
+        // No expandable disclosure — the day total is the row.
+        expect(html).not.toContain('data-slot="accordion-trigger"');
     });
 
     test('drops the "in past hour" phrase from event rows', async () => {
-        seedSameDayBuckets();
+        seedTodayBucket();
 
         const html = await renderActivity();
 
         expect(html).not.toContain("in past hour");
     });
 
-    test("alerts stay as their own row, unaffected by event grouping", async () => {
-        seedAlertPlusSameDayEvents();
+    test("alerts render as their own row alongside the day's events", async () => {
+        seedAlertPlusTodayEvents();
 
         const html = await renderActivity();
 
-        // Events collapse to a single summary; the alert is not folded in.
-        expect(triggerCount(html)).toBe(1);
+        // The event row and the alert row both show; the alert is its own row.
         expect(html).toContain("4 events");
         expect(html).toContain("tenant spike");
         expect(html).toContain(`/workspace/${WORKSPACE}/alerts`);
+        expect(html).not.toContain('data-slot="accordion-trigger"');
+    });
+
+    test("the `to` bound drops items after the selected end date", async () => {
+        // One bucket inside [from, to], one after `to` (but before now). The
+        // upper bound must exclude the later bucket.
+        setActivityDepsForTesting({
+            fetchEventBuckets: async () => [
+                { at: new Date("2026-05-15T12:00:00Z"), count: 5 },
+                { at: new Date("2026-05-25T12:00:00Z"), count: 9 },
+            ],
+            fetchAlerts: async (): Promise<readonly AnomalyAlert[]> => [],
+            fetchKeyEvents: async () => [],
+        });
+
+        const { ActivityTab } =
+            await import("@/app/(dashboard)/workspace/[workspaceId]/settings/_components/activity-tab");
+        const element = await ActivityTab({
+            workspaceId: WORKSPACE,
+            searchParams: { from: "2026-05-10T00:00:00Z", to: "2026-05-20T00:00:00Z" },
+        });
+        const html = renderToStaticMarkup(element);
+
+        expect(html).toContain("5 events");
+        expect(html).not.toContain("9 events");
     });
 });

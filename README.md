@@ -47,9 +47,9 @@ Product docs live in the sibling `site/docs/` (rendered at bursora.com/docs).
 
 `bursora/lib/ee/` is source-available, not Apache 2.0. Only an allowlist of callers may import `@/lib/ee/*` (enforced by ESLint `no-restricted-imports`): the settings page, the Lemon Squeezy webhook route, the billing-webhook-prune cron route, EE-scoped tests, and code inside `lib/ee/`.
 
-## Self-host
+## Community edition (self-host)
 
-The Apache 2.0 portion (everything outside `lib/ee/`) is the self-host surface. Run `bun run build:oss` for a build without the billing module. See [`docs/get-started/self-host.md`](docs/get-started/self-host.md).
+The Apache 2.0 portion (everything outside `lib/ee/`) is the community edition you self-host. Run `bun run build:oss` for a build without the billing module. Community-supported, no SLA. See [`docs/get-started/self-host.md`](docs/get-started/self-host.md).
 
 ## License
 

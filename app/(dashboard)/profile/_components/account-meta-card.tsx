@@ -4,9 +4,10 @@ import { formatDate, formatRelativeTime } from "@/lib/format";
 interface AccountMetaCardProps {
     readonly createdAt: Date;
     readonly sessionCreatedAt: Date;
+    readonly tz: string;
 }
 
-export function AccountMetaCard({ createdAt, sessionCreatedAt }: AccountMetaCardProps) {
+export function AccountMetaCard({ createdAt, sessionCreatedAt, tz }: AccountMetaCardProps) {
     return (
         <Card>
             <CardHeader>
@@ -14,7 +15,7 @@ export function AccountMetaCard({ createdAt, sessionCreatedAt }: AccountMetaCard
                 <CardDescription>Session metadata for your account.</CardDescription>
             </CardHeader>
             <CardContent className="grid gap-4 sm:grid-cols-2">
-                <Field label="Created" value={formatDate(createdAt)} />
+                <Field label="Created" value={formatDate(createdAt, tz)} />
                 <Field label="Last sign-in" value={formatRelativeTime(sessionCreatedAt)} />
             </CardContent>
         </Card>

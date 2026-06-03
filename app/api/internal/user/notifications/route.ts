@@ -15,6 +15,7 @@ import {
     markNotificationsRead,
     MAX_NOTIFICATIONS_PAGE_LIMIT,
 } from "@/lib/notifications";
+import { getRequestTimeZone } from "@/lib/time/request-tz";
 import { UUID_REGEX } from "@/lib/uuid";
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -47,6 +48,7 @@ export async function GET(request: Request): Promise<NextResponse> {
 
     const page = await listNotificationsPage({
         userId: session.user.id,
+        tz: await getRequestTimeZone(),
         ...(parsed.data.limit !== undefined ? { limit: parsed.data.limit } : {}),
         ...(parsed.data.cursor !== undefined ? { cursor: parsed.data.cursor } : {}),
     });

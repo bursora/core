@@ -12,13 +12,14 @@ import {
 } from "@/components/ui/workspace/filters/date-range-picker-logic";
 import { describe, expect, test } from "bun:test";
 
-describe("computePresetWindow", () => {
-    // Mon 2026-05-11 14:30 PT = 2026-05-11 21:30 UTC. Preset boundaries are UTC;
-    // the LA pin at the top of this file proves they don't shift with host TZ.
+describe("computePresetWindow (tz = UTC)", () => {
+    // Mon 2026-05-11 14:30 PT = 2026-05-11 21:30 UTC. With tz = "UTC" the
+    // boundaries are UTC days; the LA host pin proves the helpers read the
+    // passed zone, not the host clock.
     const now = new Date(2026, 4, 11, 14, 30, 0);
 
     test("today: from = 00:00, to = 23:59:59.999 UTC", () => {
-        const { from, to } = computePresetWindow("today", now);
+        const { from, to } = computePresetWindow("today", now, "UTC");
         expect(from.getUTCFullYear()).toBe(2026);
         expect(from.getUTCMonth()).toBe(4);
         expect(from.getUTCDate()).toBe(11);
@@ -32,7 +33,7 @@ describe("computePresetWindow", () => {
     });
 
     test("week-to-date: from = Sunday-of-this-week 00:00 UTC, to = end-of-today", () => {
-        const { from, to } = computePresetWindow("week-to-date", now);
+        const { from, to } = computePresetWindow("week-to-date", now, "UTC");
         // Sunday before Mon 2026-05-11 UTC is Sun 2026-05-10 00:00 UTC.
         expect(from.getUTCFullYear()).toBe(2026);
         expect(from.getUTCMonth()).toBe(4);
@@ -47,13 +48,13 @@ describe("computePresetWindow", () => {
     test("week-to-date: when `now` is Sunday, from = today 00:00 UTC", () => {
         // 2026-05-10 09:00 PT = 2026-05-10 16:00 UTC, a Sunday in UTC.
         const sunday = new Date(2026, 4, 10, 9, 0, 0);
-        const { from } = computePresetWindow("week-to-date", sunday);
+        const { from } = computePresetWindow("week-to-date", sunday, "UTC");
         expect(from.getUTCDate()).toBe(10);
         expect(from.getUTCHours()).toBe(0);
     });
 
     test("month-to-date: from = first of month 00:00 UTC, to = end-of-today", () => {
-        const { from, to } = computePresetWindow("month-to-date", now);
+        const { from, to } = computePresetWindow("month-to-date", now, "UTC");
         expect(from.getUTCFullYear()).toBe(2026);
         expect(from.getUTCMonth()).toBe(4);
         expect(from.getUTCDate()).toBe(1);
@@ -63,7 +64,7 @@ describe("computePresetWindow", () => {
     });
 
     test("last-7-days: from = 6 days ago 00:00 UTC, to = end-of-today", () => {
-        const { from, to } = computePresetWindow("last-7-days", now);
+        const { from, to } = computePresetWindow("last-7-days", now, "UTC");
         expect(from.getUTCDate()).toBe(5);
         expect(from.getUTCHours()).toBe(0);
         expect(to.getUTCDate()).toBe(11);
@@ -71,14 +72,14 @@ describe("computePresetWindow", () => {
     });
 
     test("last-14-days: from = 13 days ago 00:00 UTC", () => {
-        const { from } = computePresetWindow("last-14-days", now);
+        const { from } = computePresetWindow("last-14-days", now, "UTC");
         expect(from.getUTCMonth()).toBe(3);
         expect(from.getUTCDate()).toBe(28);
         expect(from.getUTCHours()).toBe(0);
     });
 
     test("last-30-days: from = 29 days ago 00:00 UTC", () => {
-        const { from } = computePresetWindow("last-30-days", now);
+        const { from } = computePresetWindow("last-30-days", now, "UTC");
         expect(from.getUTCMonth()).toBe(3);
         expect(from.getUTCDate()).toBe(12);
         expect(from.getUTCHours()).toBe(0);
@@ -93,6 +94,23 @@ describe("computePresetWindow", () => {
             "last-14-days",
             "last-30-days",
         ]);
+    });
+});
+
+describe("computePresetWindow (tz = local zone)", () => {
+    // 2026-05-11 14:30 UTC. In a +02:00 zone, "Today" is the local May 11 day,
+    // whose midnight is May 10 22:00 UTC — two hours earlier than the UTC day.
+    const now = new Date("2026-05-11T14:30:00.000Z");
+
+    test("today: boundaries align to the local day, expressed in UTC", () => {
+        const { from, to } = computePresetWindow("today", now, "Europe/Tirane");
+        expect(from.toISOString()).toBe("2026-05-10T22:00:00.000Z");
+        expect(to.toISOString()).toBe("2026-05-11T21:59:59.999Z");
+    });
+
+    test("month-to-date: first of the local month, expressed in UTC", () => {
+        const { from } = computePresetWindow("month-to-date", now, "Europe/Tirane");
+        expect(from.toISOString()).toBe("2026-04-30T22:00:00.000Z");
     });
 });
 
@@ -157,10 +175,10 @@ describe("formatTimeInput", () => {
 });
 
 describe("formatRangeButtonLabel", () => {
-    test("returns a non-empty 'from - to' string from Intl.DateTimeFormat", () => {
+    test("returns a 'from - to' string rendered in the given zone", () => {
         const from = new Date(2026, 3, 27, 0, 0, 0);
         const to = new Date(2026, 4, 12, 23, 59, 0);
-        const label = formatRangeButtonLabel(from, to);
+        const label = formatRangeButtonLabel(from, to, "UTC");
         // Locale-sensitive output; only assert on shape.
         expect(label).toContain(" - ");
         expect(label.length).toBeGreaterThan(0);

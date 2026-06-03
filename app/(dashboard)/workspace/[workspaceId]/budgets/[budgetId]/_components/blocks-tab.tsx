@@ -5,6 +5,7 @@ import type {
     LoadMoreBlocksResult,
 } from "@/app/(dashboard)/workspace/[workspaceId]/budgets/[budgetId]/actions";
 import { Button } from "@/components/ui/button";
+import { useTimeZone } from "@/components/ui/hooks/use-time-zone";
 import {
     Table,
     TableBody,
@@ -34,6 +35,7 @@ export function BlocksTab({
     initialNextCursor,
     loadMore,
 }: BlocksTabProps) {
+    const tz = useTimeZone();
     const [items, setItems] = useState<readonly BlockedEventRow[]>(initialItems);
     const [cursor, setCursor] = useState<string | null>(initialNextCursor);
     const [isPending, startTransition] = useTransition();
@@ -78,8 +80,11 @@ export function BlocksTab({
                     {items.map((row, idx) => (
                         <TableRow key={`${row.ts}-${idx}`}>
                             <TableCell className="px-5 py-2 font-mono text-xs tabular-nums">
-                                <time dateTime={row.ts} title={row.ts}>
-                                    {formatDateTime(new Date(row.ts))}
+                                <time
+                                    dateTime={row.ts}
+                                    title={formatDateTime(new Date(row.ts), tz)}
+                                >
+                                    {formatDateTime(new Date(row.ts), tz)}
                                 </time>
                             </TableCell>
                             <TagCell value={row.tenantId} />

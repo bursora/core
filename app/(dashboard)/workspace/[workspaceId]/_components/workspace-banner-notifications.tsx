@@ -22,6 +22,7 @@ import {
 } from "@/lib/notifications";
 import { DASHBOARD_WINDOW_MS } from "@/lib/setup-errors/category";
 import { parseSetupErrorDedupKey, summarizeSetupErrorsSince } from "@/lib/setup-errors/server";
+import { getRequestTimeZone } from "@/lib/time/request-tz";
 import { Activity, ShieldBan } from "lucide-react";
 import type { Route } from "next";
 import type { ReactNode } from "react";
@@ -45,6 +46,7 @@ export async function WorkspaceBannerNotifications({
         userId,
         workspaceId,
         display: "banner",
+        tz: await getRequestTimeZone(),
     });
     if (items.length === 0) return null;
 

@@ -2,21 +2,21 @@
  * resolveSpendWindow — parses optional `from`/`to` URL strings into a half-open
  * `{from, to}` window with sane defaults and bounds.
  *
- * Defaults: today as a full UTC day; `from` = today 00:00 UTC,
- * `to` = today 23:59:59.999 UTC. Matches the "Today" preset in the date
- * range picker (`components/workspace/filters/date-range-picker-logic.ts`)
- * so the URL/UI is identical whether the user clicked "Today" or got the
- * default. Day boundaries are UTC, the same frame ClickHouse buckets and
- * partitions in, so windows and chart buckets never disagree, and the
- * numbers don't shift with the host's timezone.
+ * Defaults: today as a full day in the user's timezone; `from` = today 00:00
+ * local, `to` = today 23:59:59.999 local, both expressed as UTC instants.
+ * Matches the "Today" preset in the date range picker
+ * (`components/workspace/filters/date-range-picker-logic.ts`) so the URL/UI is
+ * identical whether the user clicked "Today" or got the default. The window is
+ * a pair of UTC instants — storage and the ClickHouse query stay UTC; only the
+ * day boundary is chosen in the user's zone.
  *
  * Validation:
  *   - Strings must be ISO-parseable to a valid Date.
  *   - `from < to` is required; otherwise fall back to defaults.
- *   - Span is clamped to MAX_SPAN_DAYS to bound DB load.
+ *   - Span is clamped to MAX_SPAN_MS (365 days) to bound DB load.
  */
 
-import { endOfDayUtc, startOfDayUtc } from "@/lib/budgeting/period";
+import { endOfDayInZone, startOfDayInZone } from "@/lib/time/zone";
 
 const MAX_SPAN_MS = 365 * 24 * 60 * 60 * 1000;
 
@@ -24,6 +24,8 @@ export interface ResolveSpendWindowInput {
     readonly from?: string | undefined;
     readonly to?: string | undefined;
     readonly now: Date;
+    /** User's IANA timezone; day boundaries of the default window are read in it. */
+    readonly tz: string;
 }
 
 export interface ResolvedWindow {
@@ -40,19 +42,19 @@ function parseIso(value: string | undefined): Date | null {
     return Number.isNaN(d.getTime()) ? null : d;
 }
 
-function defaultWindow(now: Date): ResolvedWindow {
-    return { from: startOfDayUtc(now), to: endOfDayUtc(now) };
+function defaultWindow(now: Date, tz: string): ResolvedWindow {
+    return { from: startOfDayInZone(now, tz), to: endOfDayInZone(now, tz) };
 }
 
 export function resolveSpendWindow(input: ResolveSpendWindowInput): ResolvedWindow {
     const parsedFrom = parseIso(input.from);
     const parsedTo = parseIso(input.to);
 
-    const to = parsedTo ?? endOfDayUtc(input.now);
-    const from = parsedFrom ?? startOfDayUtc(to);
+    const to = parsedTo ?? endOfDayInZone(input.now, input.tz);
+    const from = parsedFrom ?? startOfDayInZone(to, input.tz);
 
     if (from.getTime() >= to.getTime()) {
-        return defaultWindow(input.now);
+        return defaultWindow(input.now, input.tz);
     }
 
     const span = to.getTime() - from.getTime();

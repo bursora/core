@@ -5,6 +5,8 @@
 // `priorFrom`/`priorTo` are the slice of equal length immediately before
 // `from`, so pace/burn tiles compare like-for-like against the prior period.
 
+import { formatInZone } from "@/lib/time/zone";
+
 const MINUTE_MS = 60 * 1000;
 const DAY_MS = 24 * 60 * MINUTE_MS;
 
@@ -28,24 +30,28 @@ const ROLLING_LABELS: readonly { readonly spanMs: number; readonly label: string
 
 const LABEL_TOLERANCE_MS = 2 * MINUTE_MS;
 
-const RANGE_FMT = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" });
+const RANGE_OPTS: Intl.DateTimeFormatOptions = { month: "short", day: "numeric" };
 
-export function windowLabel(from: Date, to: Date): string {
+export function windowLabel(from: Date, to: Date, tz: string = "UTC"): string {
     const span = to.getTime() - from.getTime();
     for (const r of ROLLING_LABELS) {
         if (Math.abs(span - r.spanMs) <= LABEL_TOLERANCE_MS) return r.label;
     }
-    return `${RANGE_FMT.format(from)} – ${RANGE_FMT.format(to)}`;
+    return `${formatInZone(from, tz, RANGE_OPTS)} – ${formatInZone(to, tz, RANGE_OPTS)}`;
 }
 
-export function dashboardWindowFromRange(from: Date, to: Date): DashboardWindow {
+export function dashboardWindowFromRange(
+    from: Date,
+    to: Date,
+    tz: string = "UTC",
+): DashboardWindow {
     const span = to.getTime() - from.getTime();
     return {
         from,
         to,
         priorFrom: new Date(from.getTime() - span),
         priorTo: from,
-        label: windowLabel(from, to),
+        label: windowLabel(from, to, tz),
     };
 }
 

@@ -13,6 +13,7 @@ import { getWhatsBreaking } from "@/lib/compose/whats-breaking";
 import { dashboardWindowFromRange, type DashboardWindow } from "@/lib/dashboard-window";
 import { buildWorkspacePath } from "@/lib/routes";
 import { FACETS, type Facet } from "@/lib/spend-types";
+import { getRequestTimeZone } from "@/lib/time/request-tz";
 import { Suspense } from "react";
 import { BurnRateTile } from "./_components/burn-rate-tile";
 import { CapacityRow } from "./_components/capacity-row";
@@ -49,8 +50,9 @@ export default async function DashboardPage({ params, searchParams }: DashboardP
 
     const { from: rawFrom, to: rawTo, facet: rawFacet } = await searchParams;
     const now = new Date();
-    const { from, to } = resolveSpendWindow({ from: rawFrom, to: rawTo, now });
-    const dashboardWindow = dashboardWindowFromRange(from, to);
+    const tz = await getRequestTimeZone();
+    const { from, to } = resolveSpendWindow({ from: rawFrom, to: rawTo, now, tz });
+    const dashboardWindow = dashboardWindowFromRange(from, to, tz);
     const facet: Facet =
         rawFacet !== undefined && (FACETS as readonly string[]).includes(rawFacet)
             ? (rawFacet as Facet)
@@ -135,8 +137,8 @@ export default async function DashboardPage({ params, searchParams }: DashboardP
 }
 
 async function WhatsBreakingSection({ workspaceId }: { readonly workspaceId: string }) {
-    const breaking = await getWhatsBreaking(workspaceId);
-    return <WhatsBreakingPanel workspaceId={workspaceId} rows={breaking.rows} />;
+    const [breaking, tz] = await Promise.all([getWhatsBreaking(workspaceId), getRequestTimeZone()]);
+    return <WhatsBreakingPanel workspaceId={workspaceId} rows={breaking.rows} tz={tz} />;
 }
 
 async function SpendCompositionSection({
@@ -167,11 +169,19 @@ async function TrajectoriesToWatchSection({
     readonly workspaceId: string;
     readonly dashboardWindow: DashboardWindow;
 }) {
-    const [customer, model] = await Promise.all([
+    const [customer, model, tz] = await Promise.all([
         getCustomerTrajectories({ workspaceId, window: dashboardWindow }),
         getModelTrajectories({ workspaceId, window: dashboardWindow }),
+        getRequestTimeZone(),
     ]);
-    return <TrajectoriesToWatchPanel workspaceId={workspaceId} customer={customer} model={model} />;
+    return (
+        <TrajectoriesToWatchPanel
+            workspaceId={workspaceId}
+            customer={customer}
+            model={model}
+            tz={tz}
+        />
+    );
 }
 
 function PanelSkeleton({

@@ -13,6 +13,7 @@ interface TrajectoriesToWatchPanelProps {
     readonly workspaceId: string;
     readonly customer: readonly CustomerTrajectory[];
     readonly model: readonly ModelTrajectory[];
+    readonly tz: string;
 }
 
 const MAX_ITEMS = 5;
@@ -26,6 +27,7 @@ export function TrajectoriesToWatchPanel({
     workspaceId,
     customer,
     model,
+    tz,
 }: TrajectoriesToWatchPanelProps) {
     if (customer.length === 0 && model.length === 0) return null;
 
@@ -41,7 +43,12 @@ export function TrajectoriesToWatchPanel({
         >
             <ul className="flex flex-col divide-y divide-border/60">
                 {customerSlots.map((c) => (
-                    <CustomerRow key={`tenant-${c.tenantId}`} workspaceId={workspaceId} row={c} />
+                    <CustomerRow
+                        key={`tenant-${c.tenantId}`}
+                        workspaceId={workspaceId}
+                        row={c}
+                        tz={tz}
+                    />
                 ))}
                 {modelSlots.map((m) => (
                     <ModelRow key={`model-${m.model}`} workspaceId={workspaceId} row={m} />
@@ -54,12 +61,14 @@ export function TrajectoriesToWatchPanel({
 function CustomerRow({
     workspaceId,
     row,
+    tz,
 }: {
     readonly workspaceId: string;
     readonly row: CustomerTrajectory;
+    readonly tz: string;
 }) {
     const ratio = RATIO_FMT.format(row.ratio);
-    const eta = formatDate(row.etaDate).toLowerCase();
+    const eta = formatDate(row.etaDate, tz).toLowerCase();
     return (
         <li className="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0">
             <div className="min-w-0 flex-1">

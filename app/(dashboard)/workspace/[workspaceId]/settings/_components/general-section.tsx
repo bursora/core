@@ -9,6 +9,7 @@ import { env } from "@/lib/env";
 import { formatDate } from "@/lib/format";
 import { getWorkspace } from "@/lib/identity/server";
 import { resolveSpikeSettings } from "@/lib/spike-protection/server";
+import { getRequestTimeZone } from "@/lib/time/request-tz";
 import { notFound } from "next/navigation";
 import { DeleteWorkspaceDialog } from "./delete-workspace-dialog";
 import { GeneralSettingsForm } from "./general-settings-form";
@@ -21,6 +22,7 @@ interface GeneralSectionProps {
 export async function GeneralSection({ workspaceId, isOwner }: GeneralSectionProps) {
     const workspace = await getWorkspace(workspaceId);
     if (!workspace) notFound();
+    const tz = await getRequestTimeZone();
 
     const spike = env().IS_CLOUD
         ? await resolveSpikeSettings(workspaceId).then((s) => ({
@@ -50,7 +52,7 @@ export async function GeneralSection({ workspaceId, isOwner }: GeneralSectionPro
                         <CopyButton value={workspace.id} label="Copy ID" />
                     </FieldRow>
                     <FieldRow label="Created">
-                        <span className="text-sm">{formatDate(workspace.createdAt)}</span>
+                        <span className="text-sm">{formatDate(workspace.createdAt, tz)}</span>
                     </FieldRow>
                 </div>
             </DashboardSection>

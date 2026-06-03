@@ -1,5 +1,7 @@
+import { TimeZoneProvider } from "@/components/ui/hooks/use-time-zone";
 import { ThemeProvider } from "@/components/ui/shell/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
+import { getRequestTimeZone } from "@/lib/time/request-tz";
 import { cn } from "@/lib/utils";
 import type { Metadata } from "next";
 import { Geist_Mono, Space_Grotesk } from "next/font/google";
@@ -24,7 +26,8 @@ export const metadata: Metadata = {
     },
 };
 
-export default function RootLayout({ children }: { children: ReactNode }) {
+export default async function RootLayout({ children }: { children: ReactNode }) {
+    const tz = await getRequestTimeZone();
     return (
         <html
             lang="en"
@@ -32,10 +35,12 @@ export default function RootLayout({ children }: { children: ReactNode }) {
             suppressHydrationWarning
         >
             <body>
-                <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
-                    {children}
-                    <Toaster richColors />
-                </ThemeProvider>
+                <TimeZoneProvider tz={tz}>
+                    <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+                        {children}
+                        <Toaster richColors />
+                    </ThemeProvider>
+                </TimeZoneProvider>
             </body>
         </html>
     );

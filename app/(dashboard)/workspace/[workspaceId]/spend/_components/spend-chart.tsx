@@ -15,9 +15,11 @@ import {
 } from "@/app/(dashboard)/workspace/[workspaceId]/spend/_lib/build-rows";
 import { Card } from "@/components/ui/card";
 import { useReducedMotion } from "@/components/ui/hooks/use-reduced-motion";
+import { useTimeZone } from "@/components/ui/hooks/use-time-zone";
 import { SwatchDot } from "@/components/ui/swatch-dot";
 import { formatCount, formatUsd } from "@/lib/format";
 import type { FacetedSeries } from "@/lib/metering";
+import { formatInZone } from "@/lib/time/zone";
 import { useMemo } from "react";
 import {
     Area,
@@ -53,15 +55,12 @@ function tagColor(tag: string, i: number): string {
     return PALETTE[i % PALETTE.length] ?? "var(--primary)";
 }
 
-const tickFormatter = (t: number): string =>
-    new Date(t).toLocaleString(undefined, {
-        month: "short",
-        day: "numeric",
-        hour: "numeric",
-    });
+const TICK_OPTS: Intl.DateTimeFormatOptions = { month: "short", day: "numeric", hour: "numeric" };
 
 export function SpendChart({ series, metric = "cost" }: SpendChartProps) {
     const reduced = useReducedMotion();
+    const tz = useTimeZone();
+    const tickFormatter = (t: number): string => formatInZone(new Date(t), tz, TICK_OPTS);
 
     const { rows, tags, hasOther } = useMemo(
         () => buildRows(series.points, { metric }),
@@ -122,7 +121,7 @@ export function SpendChart({ series, metric = "cost" }: SpendChartProps) {
                         scale="sqrt"
                         domain={[0, "dataMax"]}
                     />
-                    <Tooltip content={<SpendTooltip metric={metric} />} />
+                    <Tooltip content={<SpendTooltip metric={metric} tz={tz} />} />
                     <Legend wrapperStyle={{ fontSize: 12, color: "var(--muted-foreground)" }} />
                     {tags.map((tag, i) => {
                         const color = tagColor(tag, i);
@@ -164,9 +163,10 @@ interface SpendTooltipProps {
     readonly label?: number | string;
     readonly payload?: readonly TooltipPayloadItem[];
     readonly metric?: ChartMetric;
+    readonly tz?: string;
 }
 
-function SpendTooltip({ active, label, payload, metric = "cost" }: SpendTooltipProps) {
+function SpendTooltip({ active, label, payload, metric = "cost", tz = "UTC" }: SpendTooltipProps) {
     if (!active || payload === undefined || payload.length === 0) return null;
 
     const sorted = [...payload].sort((a, b) => {
@@ -175,7 +175,10 @@ function SpendTooltip({ active, label, payload, metric = "cost" }: SpendTooltipP
         return bv - av;
     });
     const calls = sorted[0]?.payload?.__calls ?? 0;
-    const heading = typeof label === "number" ? tickFormatter(label) : String(label ?? "");
+    const heading =
+        typeof label === "number"
+            ? formatInZone(new Date(label), tz, TICK_OPTS)
+            : String(label ?? "");
     const formatValue = (v: number): string => (metric === "cost" ? formatUsd(v) : formatCount(v));
 
     return (

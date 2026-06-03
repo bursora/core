@@ -5,6 +5,7 @@ import * as React from "react";
 import type { DateRange } from "react-day-picker";
 import { Button } from "../../button";
 import { Calendar } from "../../calendar";
+import { useTimeZone } from "../../hooks/use-time-zone";
 import { Input } from "../../input";
 import { Popover, PopoverContent, PopoverTrigger } from "../../popover";
 import {
@@ -24,6 +25,7 @@ interface DateRangePickerProps {
 }
 
 export function DateRangePicker({ from, to, onApply }: DateRangePickerProps) {
+    const tz = useTimeZone();
     const [open, setOpen] = React.useState(false);
     const [draftFrom, setDraftFrom] = React.useState<Date>(from);
     const [draftTo, setDraftTo] = React.useState<Date>(to);
@@ -40,7 +42,7 @@ export function DateRangePicker({ from, to, onApply }: DateRangePickerProps) {
     };
 
     const handlePreset = (preset: PresetId) => {
-        const window = computePresetWindow(preset, new Date());
+        const window = computePresetWindow(preset, new Date(), tz);
         setDraftFrom(window.from);
         setDraftTo(window.to);
         setActivePreset(preset);
@@ -79,7 +81,7 @@ export function DateRangePicker({ from, to, onApply }: DateRangePickerProps) {
                     aria-label="Date range"
                 >
                     <CalendarIcon className="size-3.5" />
-                    <span>{formatRangeButtonLabel(from, to)}</span>
+                    <span>{formatRangeButtonLabel(from, to, tz)}</span>
                 </Button>
             </PopoverTrigger>
             <PopoverContent

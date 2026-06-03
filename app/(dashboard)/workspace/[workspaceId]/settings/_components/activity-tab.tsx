@@ -1,9 +1,3 @@
-import {
-    Accordion,
-    AccordionContent,
-    AccordionItem,
-    AccordionTrigger,
-} from "@/components/ui/accordion";
 import { DashboardSection } from "@/components/ui/workspace/dashboard-section";
 import { DateRangeFilter } from "@/components/ui/workspace/filters/date-range-filter";
 import { StatusTag } from "@/components/ui/workspace/status-tag";
@@ -18,6 +12,8 @@ import {
 } from "@/lib/metering";
 import { buildWorkspacePath } from "@/lib/routes";
 import { SEVERITY_BG, SEVERITY_TEXT, type Severity } from "@/lib/severity";
+import { getRequestTimeZone } from "@/lib/time/request-tz";
+import { formatInZone, startOfDayInZone } from "@/lib/time/zone";
 import { cn } from "@/lib/utils";
 import {
     Activity,
@@ -87,12 +83,14 @@ export async function ActivityTab({
 
     const filters: ActivityFilterValues = {
         from,
+        to,
         ...(parsed.kind !== undefined ? { kind: parsed.kind } : {}),
         ...(parsed.severity !== undefined ? { severity: parsed.severity } : {}),
     };
 
-    const page = await listActivityPage({ workspaceId, now, filters, limit: shown });
-    const groups = groupByDay(page.items, now);
+    const tz = await getRequestTimeZone();
+    const page = await listActivityPage({ workspaceId, now, filters, limit: shown, tz });
+    const groups = groupByDay(page.items, now, tz);
 
     return (
         <DashboardSection
@@ -133,17 +131,18 @@ interface DayGroup {
     readonly items: readonly ActivityItem[];
 }
 
-function groupByDay(items: readonly ActivityItem[], now: Date): readonly DayGroup[] {
-    const dayMs = 24 * 60 * 60 * 1000;
-    const startOfToday = new Date(now);
-    startOfToday.setHours(0, 0, 0, 0);
-    const todayMs = startOfToday.getTime();
+function groupByDay(items: readonly ActivityItem[], now: Date, tz: string): readonly DayGroup[] {
+    // Group by the user's local calendar day. Keys are the local day's start as
+    // a UTC instant, so they're DST-safe and sort chronologically as strings.
+    const todayKey = startOfDayInZone(now, tz).toISOString();
+    const yesterdayKey = startOfDayInZone(
+        new Date(new Date(todayKey).getTime() - 1),
+        tz,
+    ).toISOString();
 
     const bucket = new Map<string, ActivityItem[]>();
     for (const item of items) {
-        const d = new Date(item.at);
-        d.setHours(0, 0, 0, 0);
-        const key = d.toISOString();
+        const key = startOfDayInZone(new Date(item.at), tz).toISOString();
         const list = bucket.get(key);
         if (list) list.push(item);
         else bucket.set(key, [item]);
@@ -152,13 +151,11 @@ function groupByDay(items: readonly ActivityItem[], now: Date): readonly DayGrou
     return [...bucket.entries()]
         .sort((a, b) => (a[0] < b[0] ? 1 : -1))
         .map(([key, list]) => {
-            const day = new Date(key);
-            const diff = todayMs - day.getTime();
             let label: string;
-            if (diff === 0) label = "Today";
-            else if (diff === dayMs) label = "Yesterday";
+            if (key === todayKey) label = "Today";
+            else if (key === yesterdayKey) label = "Yesterday";
             else
-                label = day.toLocaleDateString(undefined, {
+                label = formatInZone(new Date(key), tz, {
                     weekday: "short",
                     day: "numeric",
                     month: "short",
@@ -185,8 +182,9 @@ interface DayItemsProps {
 }
 
 /**
- * Within a day, fold the per-hour event buckets into a single expandable
- * "N events" summary. Alerts and key changes always render as their own rows.
+ * Events collapse to one "N events" row per day (the data layer buckets them by
+ * calendar day). Alerts and key changes render as their own rows below, so
+ * anything that happened mid-day still shows separately.
  */
 function DayItems({ items, workspaceId }: DayItemsProps): React.JSX.Element {
     const events = items.filter((i) => i.kind === "event_ingested");
@@ -194,19 +192,13 @@ function DayItems({ items, workspaceId }: DayItemsProps): React.JSX.Element {
 
     return (
         <ul className="divide-y divide-border/40">
-            {events.length >= 2 ? (
-                <li>
-                    <DayEventSummary events={events} workspaceId={workspaceId} />
-                </li>
-            ) : (
-                events.map((item, idx) => (
-                    <ActivityRow
-                        key={`${item.at.toISOString()}-e${idx}`}
-                        item={item}
-                        workspaceId={workspaceId}
-                    />
-                ))
-            )}
+            {events.map((item, idx) => (
+                <ActivityRow
+                    key={`${item.at.toISOString()}-e${idx}`}
+                    item={item}
+                    workspaceId={workspaceId}
+                />
+            ))}
             {others.map((item, idx) => (
                 <ActivityRow
                     key={`${item.at.toISOString()}-o${idx}`}
@@ -215,41 +207,6 @@ function DayItems({ items, workspaceId }: DayItemsProps): React.JSX.Element {
                 />
             ))}
         </ul>
-    );
-}
-
-interface DayEventSummaryProps {
-    readonly events: readonly ActivityItem[];
-    readonly workspaceId: string;
-}
-
-function DayEventSummary({ events, workspaceId }: DayEventSummaryProps): React.JSX.Element {
-    const total = events.reduce((sum, e) => sum + (e.count ?? 0), 0);
-
-    return (
-        <Accordion type="single" collapsible>
-            <AccordionItem value="events" className="border-b-0">
-                <AccordionTrigger className="items-center gap-3 px-5 py-2.5 font-normal hover:bg-muted/40 hover:no-underline focus-visible:bg-muted/50 focus-visible:ring-0">
-                    <span className="grid size-7 shrink-0 place-items-center rounded-md border bg-card text-muted-foreground">
-                        <TrendingUp aria-hidden="true" className="size-3.5" />
-                    </span>
-                    <span className="min-w-0 flex-1 truncate text-left text-sm">
-                        <span className="font-medium text-foreground">{total} events</span>
-                    </span>
-                </AccordionTrigger>
-                <AccordionContent className="p-0">
-                    <ul className="divide-y divide-border/40 border-t border-border/40">
-                        {events.map((item, idx) => (
-                            <ActivityRow
-                                key={`${item.at.toISOString()}-${idx}`}
-                                item={item}
-                                workspaceId={workspaceId}
-                            />
-                        ))}
-                    </ul>
-                </AccordionContent>
-            </AccordionItem>
-        </Accordion>
     );
 }
 

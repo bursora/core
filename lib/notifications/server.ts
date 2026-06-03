@@ -4,6 +4,7 @@ import { ACTIVE_SUBSCRIPTION_STATUSES } from "@/lib/billing-status";
 import { db } from "@/lib/db";
 import { env } from "@/lib/env";
 import { drizzleAlertChannelRepository } from "../notification/drizzle-alert-channel.repository";
+import { UTC } from "../time/zone";
 import type { ChannelHealthRow } from "./channel-health";
 import { channelHealthFromSources } from "./channel-health-query";
 import { drizzleNotificationDeliveriesRepository } from "./notification-deliveries.repository";
@@ -14,6 +15,7 @@ import {
     type NotificationsRepository,
 } from "./notifications.repository";
 import type { NotificationDisplay, NotificationItem, NotificationSource } from "./types";
+import { localizeNotificationBody } from "./window-token";
 
 const ANOMALY_RULE_KIND = "anomaly";
 const BUDGET_RULE_KIND = "budget";
@@ -34,10 +36,13 @@ export interface ListNotificationsInput {
     readonly workspaceId?: string;
     readonly sources?: readonly NotificationSource[];
     readonly display?: NotificationDisplay;
+    /** Viewer zone for localizing time tokens in bodies. Defaults to UTC. */
+    readonly tz?: string;
 }
 
 function toNotificationItem(
     row: Awaited<ReturnType<NotificationsRepository["listForUser"]>>[number],
+    tz: string,
 ): NotificationItem {
     return {
         id: row.id,
@@ -46,7 +51,7 @@ function toNotificationItem(
         dedupKey: row.dedupKey,
         severity: row.severity,
         title: row.title,
-        body: row.body,
+        body: localizeNotificationBody(row.body, tz),
         createdAt: row.createdAt.toISOString(),
         href: row.href,
         read: row.readAt !== null,
@@ -63,7 +68,7 @@ export async function listNotifications(
         ...(input.sources !== undefined ? { sources: input.sources } : {}),
         ...(input.display !== undefined ? { display: input.display } : {}),
     });
-    return rows.map(toNotificationItem);
+    return rows.map((row) => toNotificationItem(row, input.tz ?? UTC));
 }
 
 export const DEFAULT_NOTIFICATIONS_PAGE_LIMIT = 50;
@@ -73,6 +78,8 @@ export interface ListNotificationsPageInput {
     readonly userId: string;
     readonly limit?: number;
     readonly cursor?: string | null;
+    /** Viewer zone for localizing time tokens in bodies. Defaults to UTC. */
+    readonly tz?: string;
 }
 
 export interface NotificationsPage {
@@ -111,7 +118,7 @@ export async function listNotificationsPage(
         hasMore && last !== undefined
             ? encodeNotificationsCursor({ createdAtMs: last.createdAt.getTime(), id: last.id })
             : null;
-    return { items: page.map(toNotificationItem), nextCursor };
+    return { items: page.map((row) => toNotificationItem(row, input.tz ?? UTC)), nextCursor };
 }
 
 export async function markNotificationsRead(input: {

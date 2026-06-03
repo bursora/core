@@ -31,7 +31,14 @@ export function ProviderTabList({ snippets }: ProviderTabListProps) {
         sync();
         const observer = new ResizeObserver(sync);
         observer.observe(el);
-        return () => observer.disconnect();
+        // ResizeObserver only fires on clientWidth changes; a web-font swap grows
+        // scrollWidth without resizing the list, so re-sync once fonts settle.
+        document.fonts?.ready.then(sync);
+        window.addEventListener("resize", sync);
+        return () => {
+            observer.disconnect();
+            window.removeEventListener("resize", sync);
+        };
     }, [sync]);
 
     const scroll = (direction: 1 | -1) => {

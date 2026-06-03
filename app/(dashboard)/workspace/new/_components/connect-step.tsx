@@ -11,12 +11,11 @@ import { CodeBlock } from "@/components/ui/code-block";
 import { CopyButton } from "@/components/ui/copy-button";
 import { FirstEventPanel } from "@/components/ui/first-event-poll";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
+import { ProviderTabList } from "@/components/ui/workspace/provider-tablist";
 import { env } from "@/lib/env";
 import { SNIPPET_TEMPLATES, type ProviderSnippet } from "@/lib/onboarding/snippets";
 import { buildWorkspacePath } from "@/lib/routes";
 import Link from "next/link";
-
-import { ProviderTabList } from "./provider-tablist";
 
 interface ConnectStepProps {
     readonly workspaceId: string;

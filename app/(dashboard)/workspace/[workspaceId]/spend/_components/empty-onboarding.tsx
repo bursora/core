@@ -12,12 +12,12 @@ import { renderSnippet } from "@/app/(dashboard)/workspace/[workspaceId]/spend/_
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { CodeBlock } from "@/components/ui/code-block";
 import { CopyButton } from "@/components/ui/copy-button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { DashboardSection } from "@/components/ui/workspace/dashboard-section";
+import { ProviderTabList } from "@/components/ui/workspace/provider-tablist";
 import { env } from "@/lib/env";
 import { listApiKeys } from "@/lib/identity/server";
 import { SNIPPET_TEMPLATES, type ProviderSnippet } from "@/lib/onboarding/snippets";
-import { ProviderIcon } from "@/lib/providers";
 import { buildWorkspacePath, KEYS_FROM_SPEND_EMPTY } from "@/lib/routes";
 import { KeyRound } from "lucide-react";
 import Link from "next/link";
@@ -75,14 +75,7 @@ export async function EmptyOnboarding({ workspaceId }: EmptyOnboardingProps) {
                 sublabel="install the sdk and send your first request"
             >
                 <Tabs defaultValue={first.id}>
-                    <TabsList className="flex-wrap justify-start group-data-[orientation=horizontal]/tabs:h-auto">
-                        {snippets.map((s) => (
-                            <TabsTrigger key={s.id} value={s.id} className="flex-none">
-                                <ProviderIcon id={s.id} className="size-4" />
-                                {s.label}
-                            </TabsTrigger>
-                        ))}
-                    </TabsList>
+                    <ProviderTabList snippets={snippets} />
                     {snippets.map((s) => (
                         <TabsContent key={s.id} value={s.id}>
                             <div className="relative overflow-hidden rounded-[8px] border border-border">

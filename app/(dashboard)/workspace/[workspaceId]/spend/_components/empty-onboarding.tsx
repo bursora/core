@@ -10,8 +10,7 @@
 
 import { renderSnippet } from "@/app/(dashboard)/workspace/[workspaceId]/spend/_lib/quickstart-template";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { CodeBlock } from "@/components/ui/code-block";
-import { CopyButton } from "@/components/ui/copy-button";
+import { SnippetCodeBlock } from "@/components/ui/snippet-code-block";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { DashboardSection } from "@/components/ui/workspace/dashboard-section";
 import { ProviderTabList } from "@/components/ui/workspace/provider-tablist";
@@ -78,12 +77,7 @@ export async function EmptyOnboarding({ workspaceId }: EmptyOnboardingProps) {
                     <ProviderTabList snippets={snippets} />
                     {snippets.map((s) => (
                         <TabsContent key={s.id} value={s.id}>
-                            <div className="relative overflow-hidden rounded-[8px] border border-border">
-                                <div className="absolute right-2 top-2 z-10">
-                                    <CopyButton value={s.code} />
-                                </div>
-                                <CodeBlock code={s.code} className="[&_pre]:pr-24" />
-                            </div>
+                            <SnippetCodeBlock code={s.code} />
                         </TabsContent>
                     ))}
                 </Tabs>

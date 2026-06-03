@@ -59,11 +59,6 @@ export function startOfDayUtc(d: Date): Date {
     return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
 }
 
-/** End of the UTC day containing `d` (23:59:59.999 UTC). */
-export function endOfDayUtc(d: Date): Date {
-    return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 23, 59, 59, 999));
-}
-
 /** Start of the UTC month containing `d` (1st, 00:00:00.000 UTC). */
 export function startOfMonthUtc(d: Date): Date {
     return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1));

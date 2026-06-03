@@ -25,6 +25,7 @@ import { setEventBundleDepsForTesting } from "@/lib/event-bundle/server";
 import type { ApiKey } from "@/lib/identity";
 import { setMeteringDepsForTesting } from "@/lib/metering/server";
 import { setSetupErrorsDepsForTesting } from "@/lib/setup-errors/server";
+import { resetBaselineCache } from "@/lib/spike-protection/baseline-cache";
 import { InMemorySpikeStateStore } from "@/lib/spike-protection/in-memory.adapter";
 import { setSpikeProtectionDepsForTesting } from "@/lib/spike-protection/server";
 import { InMemoryNotificationsRepository } from "@/tests/notifications/fakes/in-memory-notifications.repository";
@@ -186,7 +187,33 @@ const teardown = () => {
     resetEventBundleColdWriteTracker();
     setSetupErrorsDepsForTesting(null);
     setSpikeProtectionDepsForTesting(null);
+    resetBaselineCache();
 };
+
+const MINUTES_IN_7_DAYS = 7 * 24 * 60;
+
+// Re-enable spike protection on top of the disabled stub from setupHarness, with
+// a flat per-minute baseline. Threshold = baseline * defaultMultiplier (5).
+const enableSpike = (baselinePerMin: number) =>
+    setSpikeProtectionDepsForTesting({
+        enabled: true,
+        isCloud: false,
+        state: new InMemorySpikeStateStore(),
+        baseline: {
+            async fetch7DayMinuteSeries() {
+                return new Array<number>(MINUTES_IN_7_DAYS).fill(baselinePerMin);
+            },
+        },
+        settings: {
+            async findByWorkspaceId() {
+                return null;
+            },
+            async upsert() {},
+        },
+        defaultMultiplier: 5,
+        cooldownMs: 30 * 60 * 1000,
+        now: () => new Date("2025-05-10T12:00:00.000Z"),
+    });
 
 const makeRequest = (body: string, headers: Record<string, string> = {}): Request =>
     new Request("http://localhost/api/v1/events", {
@@ -512,6 +539,37 @@ describe("POST /api/v1/events", () => {
             month: MONTH,
         });
         expect(counted).toBe(1);
+    });
+
+    test("errored events do not count toward the spike burst guard", async () => {
+        const harness = setupHarness();
+        enableSpike(10); // baseline 10/min, multiplier 5 → threshold 50/min
+        // 60 errored calls in one minute would exceed 50 if counted, but they
+        // carry no billable cost and the baseline (status='ok') excludes them,
+        // so the cap must not fire — e.g. a provider outage shouldn't trip it.
+        const events = Array.from({ length: 60 }, (_, i) =>
+            validEvent({ requestId: `err-${i}`, errored: true }),
+        );
+
+        const res = await POST(
+            makeRequest(JSON.stringify({ events }), { "x-bursora-key": PLAINTEXT }),
+        );
+
+        expect(res.status).toBe(202);
+        expect(harness.events.rows.length).toBe(60);
+    });
+
+    test("successful events above the threshold still trip the spike guard", async () => {
+        setupHarness();
+        enableSpike(10); // threshold 50/min
+        const events = Array.from({ length: 60 }, (_, i) => validEvent({ requestId: `ok-${i}` }));
+
+        const res = await POST(
+            makeRequest(JSON.stringify({ events }), { "x-bursora-key": PLAINTEXT }),
+        );
+
+        expect(res.status).toBe(429);
+        expect(res.headers.get("X-Bursora-Cap-Hit")).toBe("spike");
     });
 
     test("unknown model → structured server log with sanitized provider+model only", async () => {

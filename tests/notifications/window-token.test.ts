@@ -14,10 +14,18 @@ describe("window-token", () => {
     test("encodes epoch ms + cost, no baked clock time", () => {
         const token = encodeWindowToken(window);
         expect(token).toBe(
-            `[[win:${window.windowStart.getTime()}:${window.windowEnd.getTime()}:1.23]]`,
+            `[[win:${window.windowStart.getTime()}:${window.windowEnd.getTime()}:1.23000000]]`,
         );
         expect(token).not.toContain("12:00");
         expect(token).not.toContain("UTC");
+    });
+
+    test("sub-microcent cost stays decodable (no exponential notation)", () => {
+        const tiny = { ...window, windowCostUsd: 0.00000001 };
+        const token = encodeWindowToken(tiny);
+        expect(token).not.toContain("e-");
+        // Round-trips through the decoder rather than rendering the raw token.
+        expect(localizeNotificationBody(token)).not.toContain("[[win:");
     });
 
     test("localizes a token to the given zone; UTC by default", () => {

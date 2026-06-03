@@ -76,9 +76,16 @@ export async function POST(request: Request): Promise<NextResponse> {
         return NextResponse.json({ error: parsed.reason }, { status: 400 });
     }
 
+    // Count only non-errored events toward the burst guard. The spike baseline
+    // is built from `status = 'ok'` rows, so counting errored calls here would
+    // measure the live minute against a baseline that excludes them — a provider
+    // outage (a burst of errored calls, zero billable cost) could trip the cap
+    // against traffic it never anchored on.
+    const meteredCount = parsed.value.events.reduce((n, e) => (e.errored ? n : n + 1), 0);
+
     const decision = await applySpikeProtection({
         workspaceId: authz.apiKey.workspaceId,
-        eventCount: parsed.value.events.length,
+        eventCount: meteredCount,
     });
     if (!decision.allowed) return capResponse(decision);
 

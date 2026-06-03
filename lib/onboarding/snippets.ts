@@ -30,13 +30,31 @@ export interface ProviderSnippet {
 
 const ROOT = path.join(process.cwd(), "..");
 
+/** Add the `// [!code highlight]` marker to the `@bursora/sdk` import and the wrap
+ *  statement (from `= wrap(` to its closing line) so the rendered snippet
+ *  emphasizes the lines a user adds to integrate Bursora. */
+function markBursoraLines(code: string): string {
+    let inWrap = false;
+    return code
+        .split("\n")
+        .map((line) => {
+            if (/=\s*wrap(?:LanguageModel)?\(/.test(line)) inWrap = true;
+            const mark = inWrap || line.includes("@bursora/sdk");
+            if (inWrap && /^[)}]/.test(line)) inWrap = false;
+            return mark ? `${line} // [!code highlight]` : line;
+        })
+        .join("\n");
+}
+
 /** A distinct-shape snippet read from its runnable example file. File basename
  *  equals the region id (e.g. `openai-quickstart.ts` ↔ `openai-quickstart`). */
 function extracted(id: string, label: string, region: string): ProviderSnippet {
     return {
         id,
         label,
-        code: extractRegion(path.join(ROOT, "sdk", "examples", `${region}.ts`), region),
+        code: markBursoraLines(
+            extractRegion(path.join(ROOT, "sdk", "examples", `${region}.ts`), region),
+        ),
     };
 }
 
@@ -148,7 +166,7 @@ function compatSnippet(v: CompatVendor): ProviderSnippet {
         .replaceAll("{{env}}", v.env)
         .replaceAll("{{baseURL}}", v.baseURL)
         .replaceAll("{{model}}", v.model);
-    return { id: v.id, label, code };
+    return { id: v.id, label, code: markBursoraLines(code) };
 }
 
 export const SNIPPET_TEMPLATES: ReadonlyArray<ProviderSnippet> = [

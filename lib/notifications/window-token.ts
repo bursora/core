@@ -17,7 +17,12 @@ const WINDOW_TOKEN_RE = /\[\[win:(\d+):(\d+):([\d.]+)\]\]/g;
 
 /** Encodes a spike window as a tz-neutral token for an in-app notification body. */
 export function encodeWindowToken(window: WindowLine): string {
-    return `[[win:${window.windowStart.getTime()}:${window.windowEnd.getTime()}:${window.windowCostUsd}]]`;
+    // Fixed notation, not the default `${number}`: a sub-microcent cost would
+    // stringify to exponential ("1e-8"), which the decode regex can't match,
+    // leaving the raw token in the rendered body. The column is numeric(14,8),
+    // so 8 dp is lossless.
+    const cost = window.windowCostUsd.toFixed(8);
+    return `[[win:${window.windowStart.getTime()}:${window.windowEnd.getTime()}:${cost}]]`;
 }
 
 /** Renders any window tokens in `body` as a localized window line in `tz`. */

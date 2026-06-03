@@ -40,7 +40,12 @@ services:
     postgres:
         image: postgres:16-alpine
         restart: unless-stopped
-        env_file: .env
+        # Scope the datastore to only the POSTGRES_* vars it needs, not the
+        # app's full secret set. Defaults match .env.example.
+        environment:
+            POSTGRES_USER: ${POSTGRES_USER:-bursora}
+            POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-bursora}
+            POSTGRES_DB: ${POSTGRES_DB:-bursora}
         volumes:
             - postgres_data:/var/lib/postgresql/data
         healthcheck:
@@ -66,8 +71,12 @@ services:
             nofile:
                 soft: 262144
                 hard: 262144
-        ports:
-            - "${CLICKHOUSE_PORT:-8123}:8123"
+        # No host port. ClickHouse is the single source of truth for every
+        # tenant's usage events and this image runs the default user with no
+        # password. The app reaches it over the internal compose network
+        # (CLICKHOUSE_URL=http://clickhouse-server:8123) and migrations run via
+        # `docker compose run`, so 8123 never needs publishing. Binding it to the
+        # host would expose unauthenticated read/write to all workspaces' spend.
         volumes:
             - clickhouse_data:/var/lib/clickhouse
         healthcheck:

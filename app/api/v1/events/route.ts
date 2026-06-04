@@ -4,7 +4,7 @@
  * Headers: X-Bursora-Key, Content-Type: application/json
  * Body:    { "events": [ { provider, model, region?, promptTokens,
  *            completionTokens, cacheTokens?, cacheWriteTokens?,
- *            cacheWrite1hTokens?, ts, tenantId?, agentId?, workflowId?,
+ *            cacheWrite1hTokens?, batch?, ts, tenantId?, agentId?, workflowId?,
  *            latencyMs?, requestId? }, ... ] }
  * Resp:    202 accepted (body lists any `unpriced` provider/model pairs whose
  *          events were skipped for lack of a pricing row; the priced rows in
@@ -44,6 +44,7 @@ const eventSchema = z.object({
     cacheTokens: z.number().int().nonnegative().default(0),
     cacheWriteTokens: z.number().int().nonnegative().default(0),
     cacheWrite1hTokens: z.number().int().nonnegative().default(0),
+    batch: z.boolean().default(false),
     ts: z.iso.datetime(),
     tenantId: z.string().max(128).nullable().optional(),
     agentId: z.string().max(128).nullable().optional(),
@@ -103,6 +104,7 @@ export async function POST(request: Request): Promise<NextResponse> {
             cacheTokens: e.cacheTokens,
             cacheWriteTokens: e.cacheWriteTokens,
             cacheWrite1hTokens: e.cacheWrite1hTokens,
+            batch: e.batch,
             ts: new Date(e.ts),
             tenantId: e.tenantId ?? null,
             agentId: e.agentId ?? null,

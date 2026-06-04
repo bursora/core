@@ -33,6 +33,14 @@ export interface UsageEventInput {
      * Absent on older SDKs → 0, which prices every write at 1.25x.
      */
     readonly cacheWrite1hTokens?: number;
+    /**
+     * True for asynchronous batch-API calls (OpenAI `batches`, Anthropic Message
+     * Batches), which bill 50% off the synchronous rate. Threaded into the
+     * pricing calc; absent → full price. Batch calls aren't pre-gated (usage
+     * lands at results-fetch, not submit), so these always arrive as completed
+     * spend, never `blocked`.
+     */
+    readonly batch?: boolean;
     readonly ts: Date;
     readonly tenantId: string | null;
     readonly agentId: string | null;

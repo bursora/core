@@ -19,6 +19,13 @@ export interface UsageEventInput {
     readonly promptTokens: number;
     readonly completionTokens: number;
     readonly cacheTokens: number;
+    /**
+     * Subset of `cacheTokens` that are cache writes (Anthropic
+     * `cache_creation_input_tokens`). Writes bill above base input, reads below
+     * it, so the cost calc prices the two apart. Absent on older SDKs → 0, which
+     * reproduces the prior all-at-read-rate behavior.
+     */
+    readonly cacheWriteTokens?: number;
     readonly ts: Date;
     readonly tenantId: string | null;
     readonly agentId: string | null;

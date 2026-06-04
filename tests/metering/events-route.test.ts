@@ -240,6 +240,28 @@ describe("POST /api/v1/events", () => {
         expect(harness.events.rows[0]?.workspaceId).toBe(WORKSPACE);
     });
 
+    test("cacheWriteTokens bills at input * 1.25, distinct from the read rate", async () => {
+        const harness = setupHarness();
+        // gpt-4o row: input 0.0025/1M, cachePer1mUsd null. 1000 cache tokens, all
+        // writes → reads cost 0, writes cost 1000 * (0.0025 * 1.25) / 1M.
+        // = 1000 * 0.003125 / 1M = 3.125e-6 → numeric(14,8) half-up = 0.00000313.
+        const body = JSON.stringify(
+            validEventBody({
+                promptTokens: 0,
+                completionTokens: 0,
+                cacheTokens: 1000,
+                cacheWriteTokens: 1000,
+            }),
+        );
+
+        const res = await POST(makeRequest(body, { "x-bursora-key": PLAINTEXT }));
+
+        expect(res.status).toBe(202);
+        expect(harness.events.rows.length).toBe(1);
+        // Pre-split, all 1000 cache tokens fell to the (null) read rate → cost 0.
+        expect(harness.events.rows[0]?.costUsd).toBe("0.00000313");
+    });
+
     test("replayed event with same requestId → 202 idempotent, only one row persists", async () => {
         const harness = setupHarness();
         const body = JSON.stringify(validEventBody({ requestId: "chatcmpl-abc123" }));

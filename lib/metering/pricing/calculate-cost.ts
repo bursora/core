@@ -17,8 +17,10 @@
  *     unpriced models instead of silently billing zero. The priced events in
  *     the same batch still persist. Previously this returned Money("0"); see
  *     issue #915.
- *   - Cache pricing absent on the row (cachePer1mUsd === null) → cache side
- *     contributes zero, even when cacheTokens > 0.
+ *   - Cache reads price at `cachePer1mUsd`; cache writes (`cacheWriteTokens`,
+ *     a subset of `cacheTokens`) price at the base input rate times
+ *     CACHE_WRITE_MULTIPLIER. When `cachePer1mUsd === null` the read side
+ *     contributes zero, but writes still bill off the input rate.
  *   - Negative or non-finite token counts are clamped to zero. The validator
  *     at the API boundary should already reject those, but the domain stays
  *     defensive.
@@ -36,7 +38,15 @@ import type { PricingRow } from "./pricing-row";
 export interface Usage {
     readonly promptTokens: number;
     readonly completionTokens: number;
+    /** Total cache tokens (writes + reads). */
     readonly cacheTokens?: number;
+    /**
+     * Subset of `cacheTokens` that are cache WRITES. Writes are priced at the
+     * base input rate times {@link CACHE_WRITE_MULTIPLIER}; the remaining cache
+     * tokens (reads) are priced at `cachePer1mUsd`. Absent → 0, so every cache
+     * token falls to the read rate (the pre-split behavior).
+     */
+    readonly cacheWriteTokens?: number;
 }
 
 /**
@@ -76,22 +86,45 @@ CostBig.RM = Big.roundHalfUp;
 const PER_1M = new CostBig(1_000_000);
 const ZERO_RATE = new CostBig(0);
 
+/**
+ * Cache-write tokens bill at the base input rate times this factor. Anthropic
+ * is the only provider that reports cache writes (OpenAI/Google caches are
+ * read-only), and its 5-minute cache-write rate is a fixed 1.25x base input
+ * across every Claude model — confirmed by the litellm feed ratio
+ * (cache_creation_input_token_cost / input_cost_per_token === 1.25). Deriving
+ * the write rate from the input rate (rather than syncing a separate column)
+ * keeps it correct under workspace input-rate overrides for free.
+ *
+ * 1-hour cache writes bill at 2x, but the usage event carries only the merged
+ * `cache_creation_input_tokens` count, so those are priced at 1.25x here too.
+ */
+const CACHE_WRITE_MULTIPLIER = new CostBig("1.25");
+
 export function calculateCost(usage: Usage, row: PricingRow | null): Money {
     if (row === null) throw new UnknownPricingError();
 
+    const cacheWriteTokens = clampNonNegative(usage.cacheWriteTokens ?? 0);
+    const cacheTotalTokens = clampNonNegative(usage.cacheTokens ?? 0);
+    // Writes are a subset of the total; the remainder is cache reads. Clamp so
+    // malformed input (writes > total) never yields a negative read count.
+    const cacheReadTokens = Math.max(0, cacheTotalTokens - cacheWriteTokens);
+
     const prompt = new CostBig(clampNonNegative(usage.promptTokens));
     const completion = new CostBig(clampNonNegative(usage.completionTokens));
-    const cache = new CostBig(clampNonNegative(usage.cacheTokens ?? 0));
+    const cacheRead = new CostBig(cacheReadTokens);
+    const cacheWrite = new CostBig(cacheWriteTokens);
 
     const inputRate = parseRate(row.inputPer1mUsd);
     const outputRate = parseRate(row.outputPer1mUsd);
-    const cacheRate = row.cachePer1mUsd === null ? ZERO_RATE : parseRate(row.cachePer1mUsd);
+    const cacheReadRate = row.cachePer1mUsd === null ? ZERO_RATE : parseRate(row.cachePer1mUsd);
+    const cacheWriteRate = inputRate.times(CACHE_WRITE_MULTIPLIER);
 
     const cost = prompt
         .times(inputRate)
         .div(PER_1M)
         .plus(completion.times(outputRate).div(PER_1M))
-        .plus(cache.times(cacheRate).div(PER_1M));
+        .plus(cacheRead.times(cacheReadRate).div(PER_1M))
+        .plus(cacheWrite.times(cacheWriteRate).div(PER_1M));
 
     return moneyFromBig(cost);
 }

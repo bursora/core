@@ -7,7 +7,7 @@
  * (by provider/model/region/ts).
  *
  * Inputs:
- *   - Usage = { promptTokens, completionTokens, cacheTokens? }
+ *   - Usage = { promptTokens, completionTokens, cacheTokens?, cacheWriteTokens? }
  *   - PricingRow (non-null; a null row throws `UnknownPricingError`)
  *
  * Output:
@@ -20,7 +20,10 @@
  *     model) pair so unknown models surface to the customer instead of
  *     silently billing 0; priced events in the same batch still persist.
  *   - When token counts are zero on a side, that side contributes zero.
- *   - When cacheTokens is set but cachePer1mUsd is null, cache contributes zero.
+ *   - Cache reads price at cachePer1mUsd; cache writes (cacheWriteTokens, a
+ *     subset of cacheTokens) price at the input rate times 1.25. When
+ *     cachePer1mUsd is null the read side contributes zero, but writes still
+ *     bill off the input rate.
  */
 
 import { calculateCost, UnknownPricingError } from "@/lib/metering/pricing/calculate-cost";
@@ -48,6 +51,7 @@ interface Case {
         readonly promptTokens: number;
         readonly completionTokens: number;
         readonly cacheTokens?: number;
+        readonly cacheWriteTokens?: number;
     };
     readonly row: PricingRow;
     readonly expected: string;
@@ -102,11 +106,44 @@ const cases: readonly Case[] = [
         expected: "0.00500000",
     },
     {
-        name: "cache tokens with null cachePer1mUsd → cache side contributes 0",
-        // 100 prompt @ 2.5/1M = 0.00025; 100 cache @ null = 0
+        name: "cache tokens with null cachePer1mUsd → cache READ side contributes 0",
+        // 100 prompt @ 2.5/1M = 0.00025; 100 cache reads @ null = 0
         usage: { promptTokens: 100, completionTokens: 0, cacheTokens: 100 },
         row: baseRow({ cachePer1mUsd: null }),
         expected: "0.00025000",
+    },
+    {
+        name: "cache write/read split: writes bill at input * 1.25, reads at cache rate",
+        // cacheTokens 1000 = 400 writes + 600 reads.
+        // reads:  600 * 1.25 / 1M           = 0.00075
+        // writes: 400 * (2.5 * 1.25=3.125)/1M = 0.00125
+        // total = 0.00200000
+        usage: { promptTokens: 0, completionTokens: 0, cacheTokens: 1000, cacheWriteTokens: 400 },
+        row: baseRow(),
+        expected: "0.00200000",
+    },
+    {
+        name: "cache writes bill off input rate even when cachePer1mUsd is null",
+        // 1000 writes * (2.5 * 1.25=3.125) / 1M = 0.003125 → 0.00312500
+        usage: { promptTokens: 0, completionTokens: 0, cacheTokens: 1000, cacheWriteTokens: 1000 },
+        row: baseRow({ cachePer1mUsd: null }),
+        expected: "0.00312500",
+    },
+    {
+        name: "anthropic 5-min cache write priced at 1.25x (regression for the 12x undercount)",
+        // claude-ish rates: input 3, cache read 0.3. cacheTokens 2000 = 1000 writes + 1000 reads.
+        // reads:  1000 * 0.3 / 1M            = 0.0003
+        // writes: 1000 * (3 * 1.25=3.75) / 1M = 0.00375
+        // total = 0.00405000  (the old single-rate path billed 2000 * 0.3 = 0.0006)
+        usage: { promptTokens: 0, completionTokens: 0, cacheTokens: 2000, cacheWriteTokens: 1000 },
+        row: baseRow({
+            provider: "anthropic",
+            model: "claude-sonnet-4",
+            inputPer1mUsd: "3",
+            outputPer1mUsd: "15",
+            cachePer1mUsd: "0.3",
+        }),
+        expected: "0.00405000",
     },
     {
         name: "undefined cacheTokens treated as 0",

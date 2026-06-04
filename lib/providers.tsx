@@ -32,6 +32,11 @@ export const PROVIDER_IDS = [
     "together",
     "fireworks",
     "perplexity",
+    "cerebras",
+    "deepinfra",
+    "sambanova",
+    "nebius",
+    "novita",
     "openrouter",
     "vercel",
 ] as const;
@@ -49,6 +54,11 @@ const PROVIDER_LABELS: Readonly<Record<string, string>> = {
     together: "Together AI",
     fireworks: "Fireworks AI",
     perplexity: "Perplexity",
+    cerebras: "Cerebras",
+    deepinfra: "DeepInfra",
+    sambanova: "SambaNova",
+    nebius: "Nebius",
+    novita: "Novita",
     openrouter: "OpenRouter",
     vercel: "Vercel AI Gateway",
     // The Vercel AI SDK is an integration path, not a billed vendor — its events

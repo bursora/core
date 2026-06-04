@@ -202,6 +202,36 @@ const VENDOR_CASES = [
         eventModel: "llama-3.1-8b-instruct",
     },
     {
+        feedKey: "cerebras/llama-3.3-70b",
+        litellmProvider: "cerebras",
+        provider: "cerebras",
+        eventModel: "llama-3.3-70b",
+    },
+    {
+        feedKey: "deepinfra/NousResearch/Hermes-3-Llama-3.1-70B",
+        litellmProvider: "deepinfra",
+        provider: "deepinfra",
+        eventModel: "NousResearch/Hermes-3-Llama-3.1-70B",
+    },
+    {
+        feedKey: "sambanova/DeepSeek-R1",
+        litellmProvider: "sambanova",
+        provider: "sambanova",
+        eventModel: "DeepSeek-R1",
+    },
+    {
+        feedKey: "nebius/deepseek-ai/DeepSeek-R1",
+        litellmProvider: "nebius",
+        provider: "nebius",
+        eventModel: "deepseek-ai/DeepSeek-R1",
+    },
+    {
+        feedKey: "novita/deepseek/deepseek-v3.2",
+        litellmProvider: "novita",
+        provider: "novita",
+        eventModel: "deepseek/deepseek-v3.2",
+    },
+    {
         feedKey: "openrouter/anthropic/claude-3.5-sonnet",
         litellmProvider: "openrouter",
         provider: "openrouter",

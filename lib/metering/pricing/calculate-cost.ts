@@ -23,6 +23,10 @@
  *     (`cacheWrite1hTokens`, a subset of `cacheWriteTokens`) which prices at
  *     CACHE_WRITE_1H_MULTIPLIER (2x). When `cachePer1mUsd === null` the read
  *     side contributes zero, but writes still bill off the input rate.
+ *   - Batch calls (`batch === true`) bill at BATCH_MULTIPLIER (0.5x) the total.
+ *     OpenAI `batches` and Anthropic Message Batches both discount every token
+ *     type 50% off the synchronous rate, so the multiplier rides the final sum
+ *     and composes with the cache-write split for free.
  *   - Negative or non-finite token counts are clamped to zero. The validator
  *     at the API boundary should already reject those, but the domain stays
  *     defensive.
@@ -56,6 +60,12 @@ export interface Usage {
      * Absent → 0, so every write falls to the 1.25x rate (the pre-split behavior).
      */
     readonly cacheWrite1hTokens?: number;
+    /**
+     * True for asynchronous batch-API calls (OpenAI `batches`, Anthropic Message
+     * Batches), which bill 50% off the synchronous rate. The whole cost is
+     * scaled by {@link BATCH_MULTIPLIER}. Absent → full price (the default).
+     */
+    readonly batch?: boolean;
 }
 
 /**
@@ -114,6 +124,14 @@ const CACHE_WRITE_MULTIPLIER = new CostBig("1.25");
  */
 const CACHE_WRITE_1H_MULTIPLIER = new CostBig("2");
 
+/**
+ * Batch-API calls bill 50% off the synchronous rate. Both OpenAI `batches` and
+ * Anthropic Message Batches apply the same flat discount across every token
+ * type (input, output, cache read, cache write), so a single multiplier on the
+ * summed cost is exact.
+ */
+const BATCH_MULTIPLIER = new CostBig("0.5");
+
 export function calculateCost(usage: Usage, row: PricingRow | null): Money {
     if (row === null) throw new UnknownPricingError();
 
@@ -151,7 +169,7 @@ export function calculateCost(usage: Usage, row: PricingRow | null): Money {
         .plus(cacheWrite5m.times(cacheWrite5mRate).div(PER_1M))
         .plus(cacheWrite1h.times(cacheWrite1hRate).div(PER_1M));
 
-    return moneyFromBig(cost);
+    return moneyFromBig(usage.batch === true ? cost.times(BATCH_MULTIPLIER) : cost);
 }
 
 function clampNonNegative(n: number): number {

@@ -53,6 +53,7 @@ interface Case {
         readonly cacheTokens?: number;
         readonly cacheWriteTokens?: number;
         readonly cacheWrite1hTokens?: number;
+        readonly batch?: boolean;
     };
     readonly row: PricingRow;
     readonly expected: string;
@@ -200,6 +201,55 @@ const cases: readonly Case[] = [
     {
         name: "undefined cacheTokens treated as 0",
         usage: { promptTokens: 1000, completionTokens: 0 },
+        row: baseRow(),
+        expected: "0.00250000",
+    },
+    {
+        name: "batch call bills 50% off: 1000 prompt @ $2.5/1M * 0.5 = 0.00125000",
+        usage: { promptTokens: 1000, completionTokens: 0, batch: true },
+        row: baseRow(),
+        expected: "0.00125000",
+    },
+    {
+        name: "batch discount composes with the cache write/read split (0.002 → 0.001)",
+        // Same tokens as the cache write/read split case (full price 0.00200000),
+        // halved for batch: 400 writes @ input*1.25 + 600 reads @ cache rate.
+        usage: {
+            promptTokens: 0,
+            completionTokens: 0,
+            cacheTokens: 1000,
+            cacheWriteTokens: 400,
+            batch: true,
+        },
+        row: baseRow(),
+        expected: "0.00100000",
+    },
+    {
+        name: "batch discount composes with the 1-hour cache write split (0.00915 → 0.004575)",
+        // Same tokens/row as the "anthropic 1-hour cache write priced at 2x" case
+        // (full price 0.00915000): reads 0.0003 + 5m writes 0.00525 + 1h writes
+        // 0.0036, then * 0.5 for batch = 0.00457500. Confirms the 1h split sums
+        // first and the batch multiplier rides the whole total.
+        usage: {
+            promptTokens: 0,
+            completionTokens: 0,
+            cacheTokens: 3000,
+            cacheWriteTokens: 2000,
+            cacheWrite1hTokens: 600,
+            batch: true,
+        },
+        row: baseRow({
+            provider: "anthropic",
+            model: "claude-sonnet-4",
+            inputPer1mUsd: "3",
+            outputPer1mUsd: "15",
+            cachePer1mUsd: "0.3",
+        }),
+        expected: "0.00457500",
+    },
+    {
+        name: "batch: false prices at full rate (parity with omitting the flag)",
+        usage: { promptTokens: 1000, completionTokens: 0, batch: false },
         row: baseRow(),
         expected: "0.00250000",
     },

@@ -8,6 +8,12 @@
  * Cache-read cost maps to cachePer1mUsd; absent → null. Cache-write cost is
  * ignored (not in schema).
  *
+ * Legacy TTS models (tts-1, tts-1-hd) bill per input character, not per token,
+ * and the feed exposes only `input_cost_per_character`. They surface as a
+ * per-1M-character input rate (output/cache unused) so speech events price and
+ * persist instead of dropping as unpriced — the SDK records 0 characters for
+ * these today, so the rate yields $0 but matches the published price.
+ *
  * Only the vendors in LITELLM_TO_SLUG are surfaced. Both keys are reconciled to
  * what the SDK emits so events match a price: the `litellm_provider` value maps
  * to the canonical provider slug, and the model key drops LiteLLM's
@@ -65,6 +71,8 @@ interface LiteLLMEntry {
     readonly input_cost_per_token?: number;
     readonly output_cost_per_token?: number;
     readonly cache_read_input_token_cost?: number;
+    readonly input_cost_per_character?: number;
+    readonly mode?: string;
 }
 
 export type LiteLLMFeed = Readonly<Record<string, LiteLLMEntry>>;
@@ -100,9 +108,31 @@ export function parseFeed(feed: LiteLLMFeed): ScrapedRate[] {
         const provider = LITELLM_TO_SLUG[litellmProvider];
         if (provider === undefined) continue;
 
+        let inputPer1mUsd: string;
+        let outputPer1mUsd: string;
+        let cachePer1mUsd: string | null;
+
         const input = parsePerToken(entry.input_cost_per_token);
         const output = parsePerToken(entry.output_cost_per_token);
-        if (input === null || output === null) continue;
+        const perChar = parsePerToken(entry.input_cost_per_character);
+
+        if (input !== null && output !== null) {
+            const cache = parsePerToken(entry.cache_read_input_token_cost);
+            inputPer1mUsd = perTokenToPer1m(input);
+            outputPer1mUsd = perTokenToPer1m(output);
+            cachePer1mUsd = cache === null ? null : perTokenToPer1m(cache);
+        } else if (perChar !== null && entry.mode === "audio_speech") {
+            // Legacy TTS: per-character input rate, no output/cache side.
+            // NOTE: inputPer1mUsd is the per-token column, but for these
+            // per-character TTS models it holds a per-1M-CHARACTER rate, not
+            // per-1M-token. Harmless today (TTS records 0 characters → $0), but
+            // the stored unit does not match the column's usual meaning.
+            inputPer1mUsd = perTokenToPer1m(perChar);
+            outputPer1mUsd = "0";
+            cachePer1mUsd = null;
+        } else {
+            continue;
+        }
 
         const stripped = stripVendorPrefix(litellmProvider, key);
         const model = provider === "bedrock" ? normalizeBedrockModel(stripped) : stripped;
@@ -111,15 +141,13 @@ export function parseFeed(feed: LiteLLMFeed): ScrapedRate[] {
         if (seen.has(dedupeKey)) continue;
         seen.add(dedupeKey);
 
-        const cache = parsePerToken(entry.cache_read_input_token_cost);
-
         rates.push({
             provider,
             model,
             region: "global",
-            inputPer1mUsd: perTokenToPer1m(input),
-            outputPer1mUsd: perTokenToPer1m(output),
-            cachePer1mUsd: cache === null ? null : perTokenToPer1m(cache),
+            inputPer1mUsd,
+            outputPer1mUsd,
+            cachePer1mUsd,
         });
     }
     return rates;
@@ -171,11 +199,11 @@ function parsePerToken(raw: number | undefined): number | null {
     return raw;
 }
 
-// Per-token → per-1M. The pricing column is numeric(12, 6); we round to 6
-// fractional digits to match what Postgres will persist anyway and to absorb
-// IEEE-754 drift. parseFloat + toString drops trailing zeros without regex
-// juggling. All AI per-1M values sit inside [1e-3, 1e6], where Number.toString
-// never emits sci notation.
-function perTokenToPer1m(perToken: number): string {
-    return Number.parseFloat((perToken * 1_000_000).toFixed(6)).toString();
+// Per-unit → per-1M (a unit is a token, or a character for legacy TTS). The
+// pricing column is numeric(12, 6); we round to 6 fractional digits to match
+// what Postgres will persist anyway and to absorb IEEE-754 drift. parseFloat +
+// toString drops trailing zeros without regex juggling. All AI per-1M values sit
+// inside [1e-3, 1e6], where Number.toString never emits sci notation.
+function perTokenToPer1m(perUnit: number): string {
+    return Number.parseFloat((perUnit * 1_000_000).toFixed(6)).toString();
 }

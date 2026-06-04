@@ -114,6 +114,10 @@ export function parseFeed(feed: LiteLLMFeed): ScrapedRate[] {
             cachePer1mUsd = cache === null ? null : perTokenToPer1m(cache);
         } else if (perChar !== null && entry.mode === "audio_speech") {
             // Legacy TTS: per-character input rate, no output/cache side.
+            // NOTE: inputPer1mUsd is the per-token column, but for these
+            // per-character TTS models it holds a per-1M-CHARACTER rate, not
+            // per-1M-token. Harmless today (TTS records 0 characters → $0), but
+            // the stored unit does not match the column's usual meaning.
             inputPer1mUsd = perTokenToPer1m(perChar);
             outputPer1mUsd = "0";
             cachePer1mUsd = null;

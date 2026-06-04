@@ -64,6 +64,22 @@ const FIXTURE: LiteLLMFeed = {
     "incomplete-model": {
         litellm_provider: "openai",
     },
+    "tts-1": {
+        litellm_provider: "openai",
+        input_cost_per_character: 0.000015,
+        mode: "audio_speech",
+    },
+    "tts-1-hd": {
+        litellm_provider: "openai",
+        input_cost_per_character: 0.00003,
+        mode: "audio_speech",
+    },
+    "gpt-4o-mini-tts": {
+        litellm_provider: "openai",
+        input_cost_per_token: 0.0000025,
+        output_cost_per_token: 0.00001,
+        mode: "audio_speech",
+    },
 };
 
 describe("litellmPricingSource", () => {
@@ -138,6 +154,52 @@ describe("parseFeed", () => {
         const row = parseFeed(FIXTURE).find((r) => r.model === "incomplete-model");
 
         expect(row).toBeUndefined();
+    });
+
+    test("surfaces per-character TTS models with a per-1M-character input rate", () => {
+        const rates = parseFeed(FIXTURE);
+
+        expect(rates.find((r) => r.model === "tts-1")).toEqual({
+            provider: "openai",
+            model: "tts-1",
+            region: "global",
+            inputPer1mUsd: "15",
+            outputPer1mUsd: "0",
+            cachePer1mUsd: null,
+        });
+        expect(rates.find((r) => r.model === "tts-1-hd")).toEqual({
+            provider: "openai",
+            model: "tts-1-hd",
+            region: "global",
+            inputPer1mUsd: "30",
+            outputPer1mUsd: "0",
+            cachePer1mUsd: null,
+        });
+    });
+
+    test("keeps per-token TTS models (gpt-4o-mini-tts) on the per-token path", () => {
+        const row = parseFeed(FIXTURE).find((r) => r.model === "gpt-4o-mini-tts");
+
+        expect(row).toEqual({
+            provider: "openai",
+            model: "gpt-4o-mini-tts",
+            region: "global",
+            inputPer1mUsd: "2.5",
+            outputPer1mUsd: "10",
+            cachePer1mUsd: null,
+        });
+    });
+
+    test("ignores input_cost_per_character outside audio_speech mode", () => {
+        const rows = parseFeed({
+            "weird-per-char": {
+                litellm_provider: "openai",
+                input_cost_per_character: 0.000015,
+                mode: "chat",
+            },
+        });
+
+        expect(rows).toHaveLength(0);
     });
 
     test("converts anthropic per-token costs correctly", () => {

@@ -73,13 +73,13 @@ describe("litellmPricingSource", () => {
 });
 
 describe("parseFeed", () => {
-    test("only emits openai, anthropic, and deepseek rows", () => {
+    test("emits only allowlisted providers (drops unmapped vertex_ai)", () => {
         const rates = parseFeed(FIXTURE);
         const providers = new Set(rates.map((r) => r.provider));
 
-        expect(providers).toEqual(new Set(["openai", "anthropic", "deepseek"]));
+        expect(providers).toEqual(new Set(["openai", "anthropic", "deepseek", "bedrock"]));
         expect(rates.find((r) => r.model === "gemini-2.0-flash")).toBeUndefined();
-        expect(rates.find((r) => r.model === "claude-bedrock")).toBeUndefined();
+        expect(rates.find((r) => r.model === "claude-bedrock")?.provider).toBe("bedrock");
     });
 
     test("emits deepseek rows with cache-hit price as cachePer1mUsd", () => {
@@ -331,6 +331,83 @@ describe("parseFeed new-vendor model normalization", () => {
         }).filter((r) => r.model === "gemini-flash-latest");
 
         expect(rows).toHaveLength(1);
+    });
+});
+
+describe("parseFeed bedrock key normalization", () => {
+    // The SDK's wrapBedrock emits provider=bedrock, model=<family>.<id> with the
+    // us./eu./apac. inference-profile prefix stripped. Synced rows must match
+    // that, and the noise variants LiteLLM also keys under bedrock must not leak.
+    const BEDROCK_FEED: LiteLLMFeed = {
+        "anthropic.claude-3-5-sonnet-20241022-v2:0": {
+            litellm_provider: "bedrock",
+            input_cost_per_token: 0.000003,
+            output_cost_per_token: 0.000015,
+            cache_read_input_token_cost: 0.0000003,
+        },
+        // Inference-profile variant of the same model — collapses onto the bare id.
+        "us.anthropic.claude-3-5-sonnet-20241022-v2:0": {
+            litellm_provider: "bedrock",
+            input_cost_per_token: 0.000003,
+            output_cost_per_token: 0.000015,
+        },
+        "meta.llama3-1-405b-instruct-v1:0": {
+            litellm_provider: "bedrock",
+            input_cost_per_token: 0.00000532,
+            output_cost_per_token: 0.000016,
+        },
+        // AWS-region commitment variant — never sent by a real event.
+        "bedrock/ap-northeast-1/anthropic.claude-instant-v1": {
+            litellm_provider: "bedrock",
+            input_cost_per_token: 0.0000008,
+            output_cost_per_token: 0.0000024,
+        },
+        // Image-transform pseudo-model — never sent by a real event.
+        "1024-x-1024/50-steps/bedrock/amazon.nova-canvas-v1:0": {
+            litellm_provider: "bedrock",
+            input_cost_per_token: 0.00000004,
+            output_cost_per_token: 0.00000004,
+        },
+    };
+
+    test("strips the us./eu./apac. inference-profile prefix to the bare model id", () => {
+        const models = parseFeed(BEDROCK_FEED)
+            .filter((r) => r.provider === "bedrock")
+            .map((r) => r.model);
+
+        expect(models).toContain("anthropic.claude-3-5-sonnet-20241022-v2:0");
+        expect(models).toContain("meta.llama3-1-405b-instruct-v1:0");
+    });
+
+    test("dedupes the profile variant onto the bare id", () => {
+        const rows = parseFeed(BEDROCK_FEED).filter(
+            (r) => r.model === "anthropic.claude-3-5-sonnet-20241022-v2:0",
+        );
+
+        expect(rows).toHaveLength(1);
+    });
+
+    test("drops AWS-region and image-transform variants that carry a slash", () => {
+        const models = parseFeed(BEDROCK_FEED).map((r) => r.model);
+
+        expect(models.some((m) => m.includes("/"))).toBe(false);
+        expect(models).not.toContain("ap-northeast-1/anthropic.claude-instant-v1");
+    });
+
+    test("a bedrock event resolves the synced price after normalization", () => {
+        const candidates = asGlobalRows(parseFeed(BEDROCK_FEED));
+
+        const row = findPricingRow({
+            candidates,
+            provider: "bedrock",
+            model: "anthropic.claude-3-5-sonnet-20241022-v2:0",
+            region: "global",
+            ts: new Date("2026-02-01T00:00:00Z"),
+            workspaceId: "ws-1",
+        });
+
+        expect(row).not.toBeNull();
+        expect(Number.parseFloat(row?.inputPer1mUsd ?? "0")).toBeGreaterThan(0);
     });
 });
 

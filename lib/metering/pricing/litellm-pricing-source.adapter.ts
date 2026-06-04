@@ -36,6 +36,9 @@ const USER_AGENT = "bursora-pricing-sync";
 //   fireworks_ai      → fireworks
 //   vercel_ai_gateway → vercel    (zero-markup routing; key vercel_ai_gateway/<vendor>/<model>
 //                                  strips to <vendor>/<model>, the id the gateway API takes)
+//   bedrock           → bedrock   (the SDK's wrapBedrock emits provider=bedrock,
+//                                  model=<family>.<id>; keys are reconciled by
+//                                  normalizeBedrockModel below)
 const LITELLM_TO_SLUG: Readonly<Record<string, string>> = {
     openai: "openai",
     anthropic: "anthropic",
@@ -54,6 +57,7 @@ const LITELLM_TO_SLUG: Readonly<Record<string, string>> = {
     novita: "novita",
     openrouter: "openrouter",
     vercel_ai_gateway: "vercel",
+    bedrock: "bedrock",
 };
 
 interface LiteLLMEntry {
@@ -100,7 +104,9 @@ export function parseFeed(feed: LiteLLMFeed): ScrapedRate[] {
         const output = parsePerToken(entry.output_cost_per_token);
         if (input === null || output === null) continue;
 
-        const model = stripVendorPrefix(litellmProvider, key);
+        const stripped = stripVendorPrefix(litellmProvider, key);
+        const model = provider === "bedrock" ? normalizeBedrockModel(stripped) : stripped;
+        if (model === null) continue;
         const dedupeKey = `${provider} ${model}`;
         if (seen.has(dedupeKey)) continue;
         seen.add(dedupeKey);
@@ -139,6 +145,21 @@ export function parseFeed(feed: LiteLLMFeed): ScrapedRate[] {
 function stripVendorPrefix(litellmProvider: string, key: string): string {
     const prefix = `${litellmProvider}/`;
     return key.startsWith(prefix) ? key.slice(prefix.length) : key;
+}
+
+// LiteLLM keys Bedrock models in many shapes for the same `<family>.<id>` model:
+// a bare id (`anthropic.claude-3-5-sonnet-20241022-v2:0`), a cross-region
+// inference-profile prefix (`us.`/`eu.`/`apac.`), and AWS-region or
+// commitment-tier variants under the stripped `bedrock/` segment
+// (`ap-northeast-1/...`, `*/1-month-commitment/...`) plus image-transform
+// pseudo-models (`1024-x-1024/...`). The SDK's wrapBedrock emits the bare id
+// with the inference-profile prefix stripped, so we reduce to that here: drop
+// the profile prefix (mirrors the SDK), then drop anything still carrying a `/`
+// — those region/commitment/transform variants no real event ever sends. Profile
+// variants collapse onto the bare id and dedupe via the caller's `seen` set.
+function normalizeBedrockModel(model: string): string | null {
+    const bare = model.replace(/^(?:us|eu|apac)\./, "");
+    return bare.includes("/") ? null : bare;
 }
 
 // Returns null when the cost field is absent or invalid. The caller treats

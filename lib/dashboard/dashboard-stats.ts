@@ -10,14 +10,10 @@ import { budgetingDeps, listBudgets } from "@/lib/budgeting/server";
 import { clickhouseClient, type ClickHouse } from "@/lib/clickhouse/client";
 import { safeCount } from "@/lib/clickhouse/decode";
 import { deltaWindows, type DashboardWindow } from "@/lib/dashboard-window";
-import { listAlerts } from "@/lib/detection";
 import { buildClickHouseMeteringWhere } from "@/lib/metering/clickhouse-usage-events-filters";
 import type { MeteringFilters } from "@/lib/metering/metering-read.repository";
 import { clickHouseSpendRepository } from "@/lib/spend";
 import { withRequestMemo } from "./per-request-cache";
-
-/** Subset of MeteringFilters that maps onto alert scope tags. */
-export type AlertScopeFilters = Pick<MeteringFilters, "tenantId" | "agentId">;
 
 /** One UTC day's spend and call count, from the grouped series read. */
 export interface UsageDayPoint {
@@ -388,22 +384,6 @@ async function getCallsSeriesImpl(input: {
 }
 
 export const getCallsSeries = withRequestMemo(getCallsSeriesImpl);
-
-export async function countAlertsInWindow(
-    workspaceId: string,
-    from: Date,
-    to: Date,
-    scope?: AlertScopeFilters,
-): Promise<number> {
-    const rows = await listAlerts({
-        workspaceId,
-        from,
-        to,
-        ...(scope?.tenantId !== undefined ? { tenantId: scope.tenantId } : {}),
-        ...(scope?.agentId !== undefined ? { agentId: scope.agentId } : {}),
-    });
-    return rows.length;
-}
 
 export async function countActiveBudgets(workspaceId: string): Promise<number> {
     const rows = await getBudgetList(workspaceId);

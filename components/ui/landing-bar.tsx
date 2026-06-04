@@ -14,22 +14,3 @@ export function LandingFillBar({ pct, className }: FillBarProps) {
         />
     );
 }
-
-interface ToggleThumbProps {
-    left: number;
-    width: number;
-    className?: string;
-}
-
-export function LandingToggleThumb({ left, width, className }: ToggleThumbProps) {
-    return (
-        <span
-            aria-hidden="true"
-            className={cn(
-                "absolute bottom-1 top-1 rounded-full bg-accent transition-[left,width] duration-200",
-                className,
-            )}
-            style={{ left, width }}
-        />
-    );
-}

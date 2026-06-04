@@ -33,11 +33,9 @@ export {
     type RunAnomalyDetectionSummary,
 } from "./run-anomaly-detection.usecase";
 export {
-    detectionDeps,
     listAlerts,
     runAnomalyCron,
     setAlertsDepsForTesting,
-    setDetectionDepsForTesting,
     type AlertsDeps,
     type DetectionDeps,
     type ListAlertsArgs,

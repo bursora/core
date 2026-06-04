@@ -68,8 +68,3 @@ export function drizzleSpikeSettingsRepository(db: Db): SpikeSettingsRepository 
         },
     };
 }
-
-/** Clear the cache. Test-only. */
-export function resetSpikeSettingsCache(): void {
-    cache.clear();
-}

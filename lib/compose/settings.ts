@@ -49,10 +49,6 @@ export async function createPricingOverrideForWorkspace(args: CreatePricingOverr
     return createPricingOverride({ ...args, pricing: pricing() });
 }
 
-export async function listPricingOverridesForWorkspace(workspaceId: string) {
-    return pricing().listOverridesByWorkspace(workspaceId);
-}
-
 export async function listEffectivePricingForWorkspace(
     workspaceId: string,
 ): Promise<readonly EffectivePricingEntry[]> {

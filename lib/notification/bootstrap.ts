@@ -84,12 +84,3 @@ export function ensureNotificationBootstrap(): void {
         });
     });
 }
-
-/**
- * Test-only escape hatch: lets a test reset the bootstrap flag so it can
- * re-register handlers under a fresh fake bus.
- */
-export function resetNotificationBootstrapForTesting(): void {
-    bootstrapped = false;
-    dispatcher = null;
-}

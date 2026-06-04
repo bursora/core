@@ -3,8 +3,8 @@
  *
  * Wires concrete adapters for the cron entry (`runAnomalyCron`) and the
  * read-side feed (`listAlerts`). Consumers in `app/` import the bound
- * functions via `./detection`; tests override the wiring via
- * `setDetectionDepsForTesting` / `setAlertsDepsForTesting`.
+ * functions via `./detection`; tests override the read-side wiring via
+ * `setAlertsDepsForTesting`.
  */
 
 import { clickhouseClient } from "@/lib/clickhouse/client";
@@ -34,19 +34,13 @@ export interface AlertsDeps {
     readonly alerts: AlertRepository;
 }
 
-let detectionOverride: DetectionDeps | null = null;
 let alertsOverride: AlertsDeps | null = null;
-
-export function setDetectionDepsForTesting(deps: DetectionDeps | null): void {
-    detectionOverride = deps;
-}
 
 export function setAlertsDepsForTesting(deps: AlertsDeps | null): void {
     alertsOverride = deps;
 }
 
-export function detectionDeps(): DetectionDeps {
-    if (detectionOverride !== null) return detectionOverride;
+function detectionDeps(): DetectionDeps {
     ensureNotificationBootstrap();
     return {
         source: clickHouseSpendSeriesSource(clickhouseClient()),

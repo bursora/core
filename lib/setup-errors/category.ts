@@ -16,7 +16,3 @@ export const SETUP_ERROR_CATEGORIES = [
 ] as const;
 
 export type SetupErrorCategory = (typeof SETUP_ERROR_CATEGORIES)[number];
-
-export function isDashboardCategory(value: string): value is DashboardSetupErrorCategory {
-    return (DASHBOARD_SETUP_ERROR_CATEGORIES as readonly string[]).includes(value);
-}

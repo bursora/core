@@ -19,8 +19,10 @@
  *     issue #915.
  *   - Cache reads price at `cachePer1mUsd`; cache writes (`cacheWriteTokens`,
  *     a subset of `cacheTokens`) price at the base input rate times
- *     CACHE_WRITE_MULTIPLIER. When `cachePer1mUsd === null` the read side
- *     contributes zero, but writes still bill off the input rate.
+ *     CACHE_WRITE_MULTIPLIER (1.25x), except the 1-hour-TTL slice
+ *     (`cacheWrite1hTokens`, a subset of `cacheWriteTokens`) which prices at
+ *     CACHE_WRITE_1H_MULTIPLIER (2x). When `cachePer1mUsd === null` the read
+ *     side contributes zero, but writes still bill off the input rate.
  *   - Negative or non-finite token counts are clamped to zero. The validator
  *     at the API boundary should already reject those, but the domain stays
  *     defensive.
@@ -47,6 +49,13 @@ export interface Usage {
      * token falls to the read rate (the pre-split behavior).
      */
     readonly cacheWriteTokens?: number;
+    /**
+     * Subset of `cacheWriteTokens` written with a 1-hour TTL. These price at the
+     * base input rate times {@link CACHE_WRITE_1H_MULTIPLIER} (2x); the remaining
+     * writes (5-minute TTL) stay at {@link CACHE_WRITE_MULTIPLIER} (1.25x).
+     * Absent → 0, so every write falls to the 1.25x rate (the pre-split behavior).
+     */
+    readonly cacheWrite1hTokens?: number;
 }
 
 /**
@@ -94,11 +103,16 @@ const ZERO_RATE = new CostBig(0);
  * (cache_creation_input_token_cost / input_cost_per_token === 1.25). Deriving
  * the write rate from the input rate (rather than syncing a separate column)
  * keeps it correct under workspace input-rate overrides for free.
- *
- * 1-hour cache writes bill at 2x, but the usage event carries only the merged
- * `cache_creation_input_tokens` count, so those are priced at 1.25x here too.
  */
 const CACHE_WRITE_MULTIPLIER = new CostBig("1.25");
+
+/**
+ * 1-hour cache writes bill at 2x base input (versus 1.25x for the 5-minute
+ * default). The SDK reports the 1-hour slice on its own (`cacheWrite1hTokens`,
+ * a subset of `cacheWriteTokens`) from Anthropic's
+ * `cache_creation.ephemeral_1h_input_tokens`, so the two TTLs price apart here.
+ */
+const CACHE_WRITE_1H_MULTIPLIER = new CostBig("2");
 
 export function calculateCost(usage: Usage, row: PricingRow | null): Money {
     if (row === null) throw new UnknownPricingError();
@@ -108,23 +122,34 @@ export function calculateCost(usage: Usage, row: PricingRow | null): Money {
     // Writes are a subset of the total; the remainder is cache reads. Clamp so
     // malformed input (writes > total) never yields a negative read count.
     const cacheReadTokens = Math.max(0, cacheTotalTokens - cacheWriteTokens);
+    // 1-hour writes are a subset of all writes; the remainder are 5-minute
+    // writes. Clamp so malformed input (1h > total writes) never yields a
+    // negative 5-minute count.
+    const cacheWrite1hTokens = Math.min(
+        clampNonNegative(usage.cacheWrite1hTokens ?? 0),
+        cacheWriteTokens,
+    );
+    const cacheWrite5mTokens = cacheWriteTokens - cacheWrite1hTokens;
 
     const prompt = new CostBig(clampNonNegative(usage.promptTokens));
     const completion = new CostBig(clampNonNegative(usage.completionTokens));
     const cacheRead = new CostBig(cacheReadTokens);
-    const cacheWrite = new CostBig(cacheWriteTokens);
+    const cacheWrite5m = new CostBig(cacheWrite5mTokens);
+    const cacheWrite1h = new CostBig(cacheWrite1hTokens);
 
     const inputRate = parseRate(row.inputPer1mUsd);
     const outputRate = parseRate(row.outputPer1mUsd);
     const cacheReadRate = row.cachePer1mUsd === null ? ZERO_RATE : parseRate(row.cachePer1mUsd);
-    const cacheWriteRate = inputRate.times(CACHE_WRITE_MULTIPLIER);
+    const cacheWrite5mRate = inputRate.times(CACHE_WRITE_MULTIPLIER);
+    const cacheWrite1hRate = inputRate.times(CACHE_WRITE_1H_MULTIPLIER);
 
     const cost = prompt
         .times(inputRate)
         .div(PER_1M)
         .plus(completion.times(outputRate).div(PER_1M))
         .plus(cacheRead.times(cacheReadRate).div(PER_1M))
-        .plus(cacheWrite.times(cacheWriteRate).div(PER_1M));
+        .plus(cacheWrite5m.times(cacheWrite5mRate).div(PER_1M))
+        .plus(cacheWrite1h.times(cacheWrite1hRate).div(PER_1M));
 
     return moneyFromBig(cost);
 }

@@ -26,6 +26,13 @@ export interface UsageEventInput {
      * reproduces the prior all-at-read-rate behavior.
      */
     readonly cacheWriteTokens?: number;
+    /**
+     * Subset of `cacheWriteTokens` written with a 1-hour TTL (Anthropic
+     * `cache_creation.ephemeral_1h_input_tokens`). These bill at 2x base input
+     * versus 1.25x for 5-minute writes, so the cost calc prices them apart.
+     * Absent on older SDKs → 0, which prices every write at 1.25x.
+     */
+    readonly cacheWrite1hTokens?: number;
     readonly ts: Date;
     readonly tenantId: string | null;
     readonly agentId: string | null;

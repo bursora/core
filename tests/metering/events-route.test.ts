@@ -262,6 +262,27 @@ describe("POST /api/v1/events", () => {
         expect(harness.events.rows[0]?.costUsd).toBe("0.00000313");
     });
 
+    test("cacheWrite1hTokens bills at input * 2, above the 1.25x five-minute rate", async () => {
+        const harness = setupHarness();
+        // gpt-4o row: input 0.0025/1M. 1000 writes, all 1-hour TTL → 2x.
+        // 1000 * (0.0025 * 2) / 1M = 5e-6 → numeric(14,8) = 0.00000500.
+        const body = JSON.stringify(
+            validEventBody({
+                promptTokens: 0,
+                completionTokens: 0,
+                cacheTokens: 1000,
+                cacheWriteTokens: 1000,
+                cacheWrite1hTokens: 1000,
+            }),
+        );
+
+        const res = await POST(makeRequest(body, { "x-bursora-key": PLAINTEXT }));
+
+        expect(res.status).toBe(202);
+        expect(harness.events.rows.length).toBe(1);
+        expect(harness.events.rows[0]?.costUsd).toBe("0.00000500");
+    });
+
     test("replayed event with same requestId → 202 idempotent, only one row persists", async () => {
         const harness = setupHarness();
         const body = JSON.stringify(validEventBody({ requestId: "chatcmpl-abc123" }));

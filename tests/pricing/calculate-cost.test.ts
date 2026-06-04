@@ -52,6 +52,7 @@ interface Case {
         readonly completionTokens: number;
         readonly cacheTokens?: number;
         readonly cacheWriteTokens?: number;
+        readonly cacheWrite1hTokens?: number;
     };
     readonly row: PricingRow;
     readonly expected: string;
@@ -144,6 +145,57 @@ const cases: readonly Case[] = [
             cachePer1mUsd: "0.3",
         }),
         expected: "0.00405000",
+    },
+    {
+        name: "anthropic 1-hour cache write priced at 2x, 5-minute remainder at 1.25x",
+        // claude-ish rates: input 3, cache read 0.3. cacheTokens 3000 = 2000 writes
+        // (600 of them 1-hour TTL) + 1000 reads.
+        // reads:       1000 * 0.3 / 1M           = 0.0003
+        // 5m writes:   1400 * (3 * 1.25=3.75) / 1M = 0.00525
+        // 1h writes:    600 * (3 * 2=6) / 1M      = 0.0036
+        // total = 0.00915000
+        usage: {
+            promptTokens: 0,
+            completionTokens: 0,
+            cacheTokens: 3000,
+            cacheWriteTokens: 2000,
+            cacheWrite1hTokens: 600,
+        },
+        row: baseRow({
+            provider: "anthropic",
+            model: "claude-sonnet-4",
+            inputPer1mUsd: "3",
+            outputPer1mUsd: "15",
+            cachePer1mUsd: "0.3",
+        }),
+        expected: "0.00915000",
+    },
+    {
+        name: "all writes 1-hour TTL bill entirely at 2x",
+        // 1000 writes, all 1-hour. 1000 * (2.5 * 2=5) / 1M = 0.005
+        usage: {
+            promptTokens: 0,
+            completionTokens: 0,
+            cacheTokens: 1000,
+            cacheWriteTokens: 1000,
+            cacheWrite1hTokens: 1000,
+        },
+        row: baseRow(),
+        expected: "0.00500000",
+    },
+    {
+        name: "malformed cacheWrite1hTokens > cacheWriteTokens clamps to all-1h",
+        // 400 writes, 1h reported as 999 (malformed). Clamp 1h to 400; 0 left at 1.25x.
+        // 400 * (2.5 * 2=5) / 1M = 0.002
+        usage: {
+            promptTokens: 0,
+            completionTokens: 0,
+            cacheTokens: 400,
+            cacheWriteTokens: 400,
+            cacheWrite1hTokens: 999,
+        },
+        row: baseRow(),
+        expected: "0.00200000",
     },
     {
         name: "undefined cacheTokens treated as 0",

@@ -24,7 +24,7 @@ import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { nextCookies } from "better-auth/next-js";
 import { emailOTP } from "better-auth/plugins";
 import { headers } from "next/headers";
-import { redirect } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { cache } from "react";
 
 /**
@@ -141,5 +141,16 @@ export const getRequestSession = cache(async () => {
 export const requireSessionUI = cache(async () => {
     const session = await getRequestSession();
     if (!session) redirect("/login");
+    return session;
+});
+
+/**
+ * Same as `requireSessionUI` but 404s when the user isn't a platform admin.
+ * Gates operator-only surfaces (system status); `notFound` over a redirect
+ * keeps the route invisible to non-admins.
+ */
+export const requireAdminUI = cache(async () => {
+    const session = await requireSessionUI();
+    if (session.user.role !== USER_ROLE.admin) notFound();
     return session;
 });

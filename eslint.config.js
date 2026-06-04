@@ -14,6 +14,7 @@ const eeAllowedFiles = [
     "lib/ee/**/*.{ts,tsx}",
     "lib/billing-gate/**/*.{ts,tsx}",
     "lib/cron/scheduler.ts",
+    "lib/system-health/collect.ts",
     "lib/onboarding/plan-entry.ts",
     "app/(dashboard)/billing/**/*.{ts,tsx}",
     "app/api/webhooks/lemonsqueezy/route.ts",

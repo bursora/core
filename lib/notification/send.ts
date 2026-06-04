@@ -83,6 +83,11 @@ export class SmtpMailer implements Mailer {
             ...(message.html ? { html: message.html } : {}),
         });
     }
+
+    /** Probe SMTP connectivity and auth without sending. Throws when unreachable. */
+    async verify(): Promise<void> {
+        await this.transporter.verify();
+    }
 }
 
 export class InMemoryMailer implements Mailer {

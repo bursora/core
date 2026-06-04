@@ -27,6 +27,7 @@ import {
 } from "@/components/ui/sidebar";
 import { requireSessionUI } from "@/lib/auth";
 import { env } from "@/lib/env";
+import { USER_ROLE } from "@/lib/identity/user-role";
 import { listWorkspacesForUser } from "@/lib/identity/workspaces-for-user";
 import { cookies } from "next/headers";
 import { Suspense, type ReactNode } from "react";
@@ -96,6 +97,7 @@ export async function AppShell({ children, urlWorkspaceId }: AppShellProps) {
                             email={session.user.email}
                             image={session.user.image}
                             showBilling={env().IS_CLOUD}
+                            isAdmin={session.user.role === USER_ROLE.admin}
                         />
                     </div>
                 </header>

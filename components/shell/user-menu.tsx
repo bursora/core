@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { UserAvatar } from "@/components/ui/user-avatar";
 import { authClient } from "@/lib/auth-client";
-import { CreditCard, LogOut, UserCircle } from "lucide-react";
+import { Activity, CreditCard, LogOut, UserCircle } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -22,9 +22,11 @@ interface UserMenuProps {
     image?: string | null | undefined;
     /** Cloud only: surfaces the account billing entry (hidden on self-host). */
     showBilling?: boolean;
+    /** Platform admins get the operator-only system status entry. */
+    isAdmin?: boolean;
 }
 
-export function UserMenu({ userId, name, email, image, showBilling }: UserMenuProps) {
+export function UserMenu({ userId, name, email, image, showBilling, isAdmin }: UserMenuProps) {
     const router = useRouter();
     const [signingOut, setSigningOut] = useState(false);
 
@@ -64,6 +66,13 @@ export function UserMenu({ userId, name, email, image, showBilling }: UserMenuPr
                         <UserCircle className="mr-2 h-4 w-4" /> Profile
                     </Link>
                 </DropdownMenuItem>
+                {isAdmin ? (
+                    <DropdownMenuItem asChild>
+                        <Link href="/system/status">
+                            <Activity className="mr-2 h-4 w-4" /> System status
+                        </Link>
+                    </DropdownMenuItem>
+                ) : null}
                 {showBilling ? (
                     <DropdownMenuItem asChild>
                         <Link href="/billing">

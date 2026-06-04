@@ -95,6 +95,7 @@ export async function ingestEventsUseCase(input: IngestEventsInput): Promise<Ing
                         completionTokens: event.completionTokens,
                         cacheTokens: event.cacheTokens,
                         cacheWriteTokens: event.cacheWriteTokens ?? 0,
+                        cacheWrite1hTokens: event.cacheWrite1hTokens ?? 0,
                     },
                     provider: event.provider,
                     model: event.model,

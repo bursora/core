@@ -52,6 +52,7 @@ FORBIDDEN=(
     'createCheckoutSession'
     'getBillingPortalUrlUseCase'
     'handleWebhookUseCase'
+    'cancelSubscriptionOnAccountDeletionUseCase'
     'mapLemonSqueezyEvent'
     'requestRefundUseCase'
     'LemonSqueezyApiAdapter'

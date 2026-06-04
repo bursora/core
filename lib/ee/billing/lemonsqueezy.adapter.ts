@@ -196,6 +196,27 @@ export class LemonSqueezyApiAdapter implements PaymentProviderAdapter {
         const errorText = await response.text().catch(() => "");
         throw new Error(`lemonsqueezy.verifyCredentials failed: ${response.status} ${errorText}`);
     }
+
+    async cancelSubscription(subscriptionId: string): Promise<void> {
+        // `DELETE /v1/subscriptions/{id}` flags the subscription cancelled on
+        // LS — it stops auto-renewing (and lapses at period end). That ends the
+        // billing relationship, which is all account deletion needs.
+        const response = await this.fetcher(
+            `${LS_API_BASE}/v1/subscriptions/${encodeURIComponent(subscriptionId)}`,
+            {
+                method: "DELETE",
+                headers: {
+                    Authorization: `Bearer ${this.apiKey}`,
+                    Accept: JSON_API_CONTENT_TYPE,
+                },
+            },
+        );
+        // 404 → already gone upstream (cancelled, expired, or never existed).
+        // Cancellation is idempotent, so a missing subscription is success.
+        if (response.ok || response.status === 404) return;
+        const errorText = await response.text().catch(() => "");
+        throw new Error(`lemonsqueezy.cancelSubscription failed: ${response.status} ${errorText}`);
+    }
 }
 
 interface LemonSqueezyWebhookPayload {

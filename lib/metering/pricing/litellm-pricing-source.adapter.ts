@@ -47,6 +47,11 @@ const LITELLM_TO_SLUG: Readonly<Record<string, string>> = {
     together_ai: "together",
     fireworks_ai: "fireworks",
     perplexity: "perplexity",
+    cerebras: "cerebras",
+    deepinfra: "deepinfra",
+    sambanova: "sambanova",
+    nebius: "nebius",
+    novita: "novita",
     openrouter: "openrouter",
     vercel_ai_gateway: "vercel",
 };

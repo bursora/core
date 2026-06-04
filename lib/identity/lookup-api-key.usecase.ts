@@ -16,6 +16,8 @@ export async function lookupApiKeyUseCase(input: LookupApiKeyInput): Promise<Api
     const row = await input.keys.findByHash(keyHash);
     if (!row) return null;
     if (row.revokedAt !== null) return null;
+    // Suspended while the owning account sits in its deletion grace window.
+    if (row.suspendedAt !== null) return null;
     if (row.workspaceId !== parsed.workspaceId) return null;
 
     return {

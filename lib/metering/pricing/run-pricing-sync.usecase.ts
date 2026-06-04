@@ -1,15 +1,14 @@
 /**
  * Composition entry point for the daily pricing sync cron.
  *
- * The cron route handler in `app/api/cron/pricing-sync/route.ts` only sees
- * use cases per the ESLint boundary rules — it is forbidden from reaching
- * into infrastructure directly. This file wires concrete adapters (drizzle
- * repo + provider sources + heartbeat state) and exposes a single async
- * entry point that returns the run summary.
+ * The in-process scheduler (`lib/cron/scheduler.ts`) calls this on its daily
+ * tick. This file wires concrete adapters (drizzle repo + provider sources +
+ * heartbeat state) and exposes a single async entry point that returns the
+ * run summary.
  *
  * Network failure on any provider aborts the run with
- * `PricingSyncPartialFailure`; the route surfaces that as 500 so the
- * scheduler retries / pages. On a fully successful run, the heartbeat row
+ * `PricingSyncPartialFailure`; the scheduler logs it to Sentry and the next
+ * scheduled tick retries. On a fully successful run, the heartbeat row
  * (`pricing_sync_state`) is updated so any future freshness check / dashboard
  * tile can read the last-good timestamp.
  */

@@ -1,11 +1,14 @@
 import type { MemberRole } from "./member";
 import type { MemberRepository } from "./member.repository";
+import type { UserStatus } from "./user-status";
 
 export interface MemberListItem {
     readonly workspaceId: string;
     readonly userId: string;
     readonly email: string;
+    readonly image: string | null;
     readonly role: MemberRole;
+    readonly status: UserStatus;
     readonly createdAt: Date;
 }
 
@@ -26,7 +29,9 @@ export async function listMembersUseCase(
         workspaceId: row.workspaceId,
         userId: row.userId,
         email: row.email,
+        image: row.image,
         role: row.role,
+        status: row.status,
         createdAt: row.createdAt,
     }));
 }

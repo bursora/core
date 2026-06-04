@@ -13,7 +13,7 @@ import {
     InMemoryMailer,
     renderWebhookPayload,
     sendInviteEmail,
-    sendMagicLinkEmail,
+    sendOtpEmail,
     type Mailer,
 } from "@/lib/notification";
 import { describe, expect, test } from "bun:test";
@@ -37,18 +37,18 @@ describe("@/lib/notification public API", () => {
         expect(captured[0]?.text).toBe("body");
     });
 
-    test("sendMagicLinkEmail dispatches the sign-in link", async () => {
+    test("sendOtpEmail dispatches the sign-in code", async () => {
         const mailer = new InMemoryMailer();
-        await sendMagicLinkEmail({
+        await sendOtpEmail({
             mailer,
             email: "bob@example.com",
-            url: "https://app.example.com/magic/abc",
+            otp: "123456",
         });
         expect(mailer.messages.length).toBe(1);
         const msg = mailer.messages[0];
         expect(msg?.to).toBe("bob@example.com");
-        expect(msg?.subject).toBe("Sign in to Bursora");
-        expect(msg?.text).toContain("https://app.example.com/magic/abc");
+        expect(msg?.subject).toBe("Your Bursora sign-in code");
+        expect(msg?.text).toContain("123456");
     });
 
     test("sendInviteEmail dispatches the workspace invite", async () => {
@@ -57,14 +57,14 @@ describe("@/lib/notification public API", () => {
             mailer,
             email: "carol@example.com",
             acceptUrl: "https://app.example.com/invites/xyz",
-            expiresAt: new Date("2025-12-31T00:00:00Z"),
+            expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
         });
         expect(mailer.messages.length).toBe(1);
         const msg = mailer.messages[0];
         expect(msg?.to).toBe("carol@example.com");
         expect(msg?.subject).toBe("You're invited to a Bursora workspace");
         expect(msg?.text).toContain("https://app.example.com/invites/xyz");
-        expect(msg?.text).toContain("2025-12-31");
+        expect(msg?.text).toContain("This link expires tomorrow");
     });
 
     test("renderWebhookPayload formats slack and discord alert bodies", () => {

@@ -4,17 +4,22 @@
  */
 
 import { db } from "@/lib/db";
+import { meteringDeps } from "@/lib/metering/server";
+import * as Sentry from "@sentry/nextjs";
 import { notFound } from "next/navigation";
 import { cache } from "react";
 import "server-only";
 import { env } from "../env";
-import { defaultSmtpMailer } from "../notification";
+import { defaultSmtpMailer, sendAccountDeletionEmail } from "../notification";
 import { acceptInviteUseCase } from "./accept-invite.usecase";
 import { parseEncryptionKey } from "./api-key.cipher";
+import { changeMemberRoleUseCase } from "./change-member-role.usecase";
 import { createWorkspaceUseCase } from "./create-workspace.usecase";
+import { deleteAccountUseCase } from "./delete-account.usecase";
 import { DrizzleApiKeyAuditLogRepository } from "./drizzle-api-key-audit-log.repository";
 import { DrizzleApiKeyRepository } from "./drizzle-api-key.repository";
 import { DrizzleInviteRepository, DrizzleMemberRepository } from "./drizzle-member.repository";
+import { DrizzleUserRepository } from "./drizzle-user.repository";
 import { DrizzleWorkspaceRepository } from "./drizzle-workspace.repository";
 import { inviteMemberUseCase } from "./invite-member.usecase";
 import { isAdminOwnedWorkspaceUseCase } from "./is-admin-owned-workspace.usecase";
@@ -23,14 +28,18 @@ import { listApiKeysUseCase } from "./list-api-keys.usecase";
 import { listMembersUseCase } from "./list-members.usecase";
 import { lookupApiKeyUseCase } from "./lookup-api-key.usecase";
 import type { MemberRole } from "./member";
+import { reactivateAccountUseCase } from "./reactivate-account.usecase";
+import { removeMemberUseCase } from "./remove-member.usecase";
 import { renameApiKeyUseCase } from "./rename-api-key.usecase";
 import { renameWorkspaceUseCase } from "./rename-workspace.usecase";
+import { requestAccountDeletionUseCase } from "./request-account-deletion.usecase";
 import { revealApiKeyUseCase, type RevealApiKeyResult } from "./reveal-api-key.usecase";
 import { revokeApiKeyUseCase } from "./revoke-api-key.usecase";
 import { setWorkspaceEnvironmentUseCase } from "./set-workspace-environment.usecase";
 
 const workspaces = () => new DrizzleWorkspaceRepository(db());
 const members = () => new DrizzleMemberRepository(db());
+const users = () => new DrizzleUserRepository(db());
 const invites = () => new DrizzleInviteRepository(db());
 const apiKeys = () => new DrizzleApiKeyRepository(db());
 const apiKeyAudit = () => new DrizzleApiKeyAuditLogRepository(db());
@@ -112,6 +121,108 @@ export async function listPendingInvites(workspaceId: string) {
 
 export async function cancelPendingInvite(input: { workspaceId: string; email: string }) {
     return invites().deletePending(input);
+}
+
+export async function removeWorkspaceMember(input: { workspaceId: string; userId: string }) {
+    return removeMemberUseCase({
+        workspaceId: input.workspaceId,
+        userId: input.userId,
+        members: members(),
+    });
+}
+
+export async function changeWorkspaceMemberRole(input: {
+    workspaceId: string;
+    userId: string;
+    role: MemberRole;
+}) {
+    return changeMemberRoleUseCase({
+        workspaceId: input.workspaceId,
+        userId: input.userId,
+        role: input.role,
+        members: members(),
+    });
+}
+
+/**
+ * Schedules a soft account deletion (start of the 24h grace window): flags the
+ * account, suspends its keys, signs the user out, and emails a goodbye with a
+ * sign-back-in link. Throws `AccountDeletionBlockedError` when a sole-owned
+ * workspace still has other members — the caller must transfer ownership first.
+ */
+export async function requestAccountDeletion(input: { userId: string; email: string }) {
+    return requestAccountDeletionUseCase({
+        userId: input.userId,
+        now: new Date(),
+        users: users(),
+        members: members(),
+        workspaces: workspaces(),
+        keys: apiKeys(),
+        onScheduled: async () => {
+            // The account is already scheduled, suspended, and signed out by
+            // now, so a flaky mailer must not surface as a failed deletion.
+            try {
+                await sendAccountDeletionEmail({
+                    mailer: mailer(),
+                    email: input.email,
+                    signInUrl: `${env().BETTER_AUTH_URL}/login`,
+                });
+            } catch (err: unknown) {
+                Sentry.captureException(err, {
+                    tags: { area: "account-deletion", step: "goodbye-email" },
+                    extra: { userId: input.userId },
+                });
+            }
+        },
+    });
+}
+
+/**
+ * Reverts a pending account deletion when the user signs back in during the
+ * grace window. No-op for active accounts. Wired into the better-auth sign-in
+ * hook (see lib/auth.ts).
+ */
+export async function reactivateAccount(input: { userId: string }): Promise<boolean> {
+    return reactivateAccountUseCase({
+        userId: input.userId,
+        users: users(),
+        members: members(),
+        keys: apiKeys(),
+    });
+}
+
+/**
+ * Hard-purges every account whose grace window has elapsed. Run by the
+ * account-purge cron. Per-account failures are logged and skipped so one bad
+ * record can't stall the batch. Erases the deleted workspaces' ClickHouse
+ * usage events as part of each purge.
+ */
+export async function runAccountPurgeCron(now: Date): Promise<{ purged: number; failed: number }> {
+    const due = await users().listDueForPurge(now);
+    let purged = 0;
+    let failed = 0;
+    for (const userId of due) {
+        try {
+            await deleteAccountUseCase({
+                userId,
+                users: users(),
+                members: members(),
+                workspaces: workspaces(),
+                onWorkspacesDeleted: (workspaceIds) =>
+                    meteringDeps().eventsRepo.eraseByWorkspaces(workspaceIds),
+            });
+            purged += 1;
+        } catch (err: unknown) {
+            // Skip this account so one bad record can't stall the batch, but
+            // report it — a stuck purge is a GDPR-retention problem we must see.
+            Sentry.captureException(err, {
+                tags: { area: "account-deletion", step: "purge" },
+                extra: { userId },
+            });
+            failed += 1;
+        }
+    }
+    return { purged, failed };
 }
 
 export async function acceptInvite(input: { token: string; userId: string }) {

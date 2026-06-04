@@ -18,11 +18,20 @@ export {
     type ApiKeySeal,
     type IssuedApiKey,
 } from "./api-key";
+export { changeMemberRoleUseCase, type ChangeMemberRoleInput } from "./change-member-role.usecase";
 export {
     createWorkspaceUseCase,
     type CreateWorkspaceInput,
     type CreateWorkspaceResult,
 } from "./create-workspace.usecase";
+export {
+    AccountDeletionBlockedError,
+    deleteAccountUseCase,
+    planAccountDeletion,
+    type AccountDeletionPlan,
+    type BlockedWorkspace,
+    type DeleteAccountInput,
+} from "./delete-account.usecase";
 export { InviteCapExceededError, MAX_PENDING_INVITES_PER_WORKSPACE } from "./invite-cap";
 export { inviteMemberUseCase, type InviteMemberInput } from "./invite-member.usecase";
 export {
@@ -37,8 +46,19 @@ export {
 } from "./list-api-keys.usecase";
 export { listMembersUseCase } from "./list-members.usecase";
 export { lookupApiKeyUseCase } from "./lookup-api-key.usecase";
+export {
+    reactivateAccountUseCase,
+    type ReactivateAccountInput,
+} from "./reactivate-account.usecase";
+export { removeMemberUseCase, type RemoveMemberInput } from "./remove-member.usecase";
 export { renameApiKeyUseCase, type RenameApiKeyInput } from "./rename-api-key.usecase";
 export { renameWorkspaceUseCase, type RenameWorkspaceInput } from "./rename-workspace.usecase";
+export {
+    ACCOUNT_DELETION_GRACE_MS,
+    requestAccountDeletionUseCase,
+    type RequestAccountDeletionInput,
+    type RequestAccountDeletionResult,
+} from "./request-account-deletion.usecase";
 export {
     revealApiKeyUseCase,
     type RevealApiKeyInput,
@@ -49,6 +69,8 @@ export {
     setWorkspaceEnvironmentUseCase,
     type SetWorkspaceEnvironmentInput,
 } from "./set-workspace-environment.usecase";
+export { USER_STATUS, type UserStatus } from "./user-status";
+export type { UserRepository } from "./user.repository";
 
 export type {
     ApiKeyAuditAction,

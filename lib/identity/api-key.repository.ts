@@ -34,4 +34,17 @@ export interface ApiKeyRepository {
     revoke(id: string, workspaceId: string, revokedAt: Date): Promise<boolean>;
 
     rename(id: string, workspaceId: string, name: string): Promise<boolean>;
+
+    /**
+     * Reversibly suspends every live (non-revoked, non-suspended) key in the
+     * given workspaces. Used when an account enters its deletion grace window.
+     * No-op on an empty list.
+     */
+    suspendByWorkspaces(workspaceIds: readonly string[], suspendedAt: Date): Promise<void>;
+
+    /**
+     * Clears suspension on every key in the given workspaces (reactivation).
+     * Leaves `revokedAt` untouched. No-op on an empty list.
+     */
+    unsuspendByWorkspaces(workspaceIds: readonly string[]): Promise<void>;
 }

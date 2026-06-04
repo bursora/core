@@ -57,6 +57,14 @@ export class ClickHouseUsageEventRepository implements UsageEventRepository {
         });
         return rows.length;
     }
+
+    async eraseByWorkspaces(workspaceIds: readonly string[]): Promise<void> {
+        if (workspaceIds.length === 0) return;
+        await this.ch.query({
+            query: `ALTER TABLE ${TABLE} DELETE WHERE workspace_id IN ({ids:Array(UUID)})`,
+            query_params: { ids: [...workspaceIds] },
+        });
+    }
 }
 
 function toClickHouseRow(row: UsageEventRow): ClickHouseUsageEventRow {

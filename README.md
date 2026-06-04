@@ -45,7 +45,7 @@ Product docs live in the sibling `site/docs/` (rendered at bursora.com/docs).
 
 ## Boundaries
 
-`bursora/lib/ee/` is source-available, not Apache 2.0. Only an allowlist of callers may import `@/lib/ee/*` (enforced by ESLint `no-restricted-imports`): the settings page, the Lemon Squeezy webhook route, the billing-webhook-prune cron route, EE-scoped tests, and code inside `lib/ee/`.
+`bursora/lib/ee/` is source-available, not Apache 2.0. Only an allowlist of callers may import `@/lib/ee/*` (enforced by ESLint `no-restricted-imports`): the settings page, the Lemon Squeezy webhook route, the cron scheduler (for the billing-webhook-prune job), EE-scoped tests, and code inside `lib/ee/`.
 
 ## Community edition (self-host)
 

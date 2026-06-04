@@ -5,7 +5,9 @@ import {
     type MemberRepository,
     type MemberRole,
     USER_ROLE,
+    USER_STATUS,
     type UserRole,
+    type UserStatus,
     type WorkspaceMember,
 } from "@/lib/identity";
 
@@ -14,10 +16,16 @@ const key = (workspaceId: string, userId: string) => `${workspaceId}:${userId}`;
 export class InMemoryMemberRepository implements MemberRepository {
     private readonly rows = new Map<string, WorkspaceMember>();
     private readonly userRoles = new Map<string, UserRole>();
+    private readonly userStatuses = new Map<string, UserStatus>();
 
     /** Test-only: set a user's platform role so `findOwnerUserRole` can resolve it. */
     setUserRole(userId: string, role: UserRole): void {
         this.userRoles.set(userId, role);
+    }
+
+    /** Test-only: set a user's account status so `listByWorkspace` surfaces it. */
+    setUserStatus(userId: string, status: UserStatus): void {
+        this.userStatuses.set(userId, status);
     }
 
     async addMember(input: {
@@ -39,6 +47,27 @@ export class InMemoryMemberRepository implements MemberRepository {
         return this.rows.get(key(workspaceId, userId)) ?? null;
     }
 
+    async removeMember(workspaceId: string, userId: string): Promise<void> {
+        this.rows.delete(key(workspaceId, userId));
+    }
+
+    async updateRole(workspaceId: string, userId: string, role: MemberRole): Promise<void> {
+        const existing = this.rows.get(key(workspaceId, userId));
+        if (existing) this.rows.set(key(workspaceId, userId), { ...existing, role });
+    }
+
+    async countOwners(workspaceId: string): Promise<number> {
+        return Array.from(this.rows.values()).filter(
+            (m) => m.workspaceId === workspaceId && m.role === "owner",
+        ).length;
+    }
+
+    async listWorkspaceIdsForUser(userId: string): Promise<readonly string[]> {
+        return Array.from(this.rows.values())
+            .filter((m) => m.userId === userId)
+            .map((m) => m.workspaceId);
+    }
+
     async listByWorkspace(workspaceId: string): Promise<readonly MemberListRow[]> {
         return Array.from(this.rows.values())
             .filter((m) => m.workspaceId === workspaceId)
@@ -46,7 +75,9 @@ export class InMemoryMemberRepository implements MemberRepository {
                 workspaceId: m.workspaceId,
                 userId: m.userId,
                 email: `${m.userId}@example.test`,
+                image: null,
                 role: m.role,
+                status: this.userStatuses.get(m.userId) ?? USER_STATUS.active,
                 createdAt: m.createdAt,
             }));
     }

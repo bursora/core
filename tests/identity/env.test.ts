@@ -9,7 +9,6 @@ const BASE = {
     BETTER_AUTH_URL: "http://localhost:3000",
     SMTP_HOST: "localhost",
     SMTP_PORT: "1025",
-    CRON_SECRET: "cron-secret",
     NEXT_PUBLIC_APP_URL: "http://localhost:3000",
     GOOGLE_CLIENT_ID: "google-client-id",
     GOOGLE_CLIENT_SECRET: "google-client-secret",
@@ -292,7 +291,6 @@ describe("env() cache reset", () => {
         "BETTER_AUTH_URL",
         "SMTP_HOST",
         "SMTP_PORT",
-        "CRON_SECRET",
         "NEXT_PUBLIC_APP_URL",
         "LEMONSQUEEZY_API_KEY",
         "LEMONSQUEEZY_WEBHOOK_SECRET",
@@ -324,7 +322,6 @@ describe("env() cache reset", () => {
         process.env.BETTER_AUTH_URL = "http://localhost:3000";
         process.env.SMTP_HOST = "localhost";
         process.env.SMTP_PORT = "1025";
-        process.env.CRON_SECRET = "cron-secret";
         process.env.NEXT_PUBLIC_APP_URL = "http://localhost:3000";
         process.env.REDIS_URL = "redis://localhost:6379";
         process.env.CLICKHOUSE_URL = "http://localhost:8123";

@@ -11,12 +11,20 @@ import {
     FormLabel,
     FormMessage,
 } from "@/components/ui/form";
+import { useInflight } from "@/components/ui/hooks/use-inflight";
 import { Input } from "@/components/ui/input";
+import {
+    InputOTP,
+    InputOTPGroup,
+    InputOTPSeparator,
+    InputOTPSlot,
+} from "@/components/ui/input-otp";
 import { Separator } from "@/components/ui/separator";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { authClient } from "@/lib/auth-client";
 import { emailSchema } from "@/lib/email";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { REGEXP_ONLY_DIGITS } from "input-otp";
 import { Loader2, Mail } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
@@ -26,32 +34,56 @@ import { z } from "zod";
 
 const LOGIN_CALLBACK_URL = "/workspace";
 
-const loginSchema = z.object({
+const emailFormSchema = z.object({
     email: emailSchema,
 });
 
-type LoginValues = z.infer<typeof loginSchema>;
+const codeFormSchema = z.object({
+    code: z.string().regex(/^\d{6}$/, "Enter the 6-digit code"),
+});
+
+type EmailValues = z.infer<typeof emailFormSchema>;
+type CodeValues = z.infer<typeof codeFormSchema>;
 
 export function LoginForm() {
     const [sentTo, setSentTo] = useState<string | null>(null);
     const [googlePending, setGooglePending] = useState(false);
-    const form = useForm<LoginValues>({
-        resolver: zodResolver(loginSchema),
+    const emailForm = useForm<EmailValues>({
+        resolver: zodResolver(emailFormSchema),
         defaultValues: { email: "" },
     });
+    const codeForm = useForm<CodeValues>({
+        resolver: zodResolver(codeFormSchema),
+        defaultValues: { code: "" },
+    });
 
-    const onSubmit = async (values: LoginValues) => {
-        const result = await authClient.signIn.magicLink({
+    const onRequestCode = async (values: EmailValues) => {
+        const result = await authClient.emailOtp.sendVerificationOtp({
             email: values.email,
-            callbackURL: LOGIN_CALLBACK_URL,
+            type: "sign-in",
         });
         if (result.error) {
-            const message = result.error.message ?? "Failed to send magic link";
-            form.setError("email", { message });
+            const message = result.error.message ?? "Failed to send code";
+            emailForm.setError("email", { message });
             toast.error(message);
             return;
         }
         setSentTo(values.email);
+    };
+
+    const onVerifyCode = async (values: CodeValues) => {
+        if (!sentTo) return;
+        const result = await authClient.signIn.emailOtp({
+            email: sentTo,
+            otp: values.code,
+        });
+        if (result.error) {
+            const message = result.error.message ?? "Invalid or expired code";
+            codeForm.setError("code", { message });
+            toast.error(message);
+            return;
+        }
+        window.location.assign(LOGIN_CALLBACK_URL);
     };
 
     const onGoogle = async () => {
@@ -66,6 +98,12 @@ export function LoginForm() {
         }
     };
 
+    // Guard each submit so a second trigger is dropped while the first request
+    // is in flight — e.g. OTP paste-to-autosubmit racing an Enter keypress.
+    const requestCode = useInflight(onRequestCode);
+    const verifyCode = useInflight(onVerifyCode);
+    const signInWithGoogle = useInflight(onGoogle);
+
     if (sentTo) {
         return (
             <AuthShell
@@ -74,8 +112,8 @@ export function LoginForm() {
                         <Mail className="size-6" aria-hidden />
                     </div>
                 }
-                title="Check your inbox"
-                description={`We sent a sign-in link to ${sentTo}.`}
+                title="Enter your code"
+                description={`We sent a 6-digit code to ${sentTo}.`}
                 footer={
                     <Button
                         type="button"
@@ -83,16 +121,62 @@ export function LoginForm() {
                         className="h-auto p-0"
                         onClick={() => {
                             setSentTo(null);
-                            form.reset();
+                            codeForm.reset();
+                            emailForm.reset();
                         }}
                     >
                         Use a different email
                     </Button>
                 }
             >
-                <p className="text-center text-sm text-muted-foreground">
-                    The link expires shortly. You can close this tab.
-                </p>
+                <Form {...codeForm}>
+                    <form
+                        onSubmit={codeForm.handleSubmit(verifyCode)}
+                        className="flex flex-col gap-4"
+                        noValidate
+                    >
+                        <FormField
+                            control={codeForm.control}
+                            name="code"
+                            render={({ field }) => (
+                                <FormItem className="flex flex-col items-center">
+                                    <FormLabel className="sr-only">Sign-in code</FormLabel>
+                                    <FormControl>
+                                        <InputOTP
+                                            maxLength={6}
+                                            autoFocus
+                                            inputMode="numeric"
+                                            pattern={REGEXP_ONLY_DIGITS}
+                                            value={field.value}
+                                            onChange={field.onChange}
+                                            onComplete={codeForm.handleSubmit(verifyCode)}
+                                        >
+                                            <InputOTPGroup>
+                                                <InputOTPSlot index={0} />
+                                                <InputOTPSlot index={1} />
+                                                <InputOTPSlot index={2} />
+                                            </InputOTPGroup>
+                                            <InputOTPSeparator />
+                                            <InputOTPGroup>
+                                                <InputOTPSlot index={3} />
+                                                <InputOTPSlot index={4} />
+                                                <InputOTPSlot index={5} />
+                                            </InputOTPGroup>
+                                        </InputOTP>
+                                    </FormControl>
+                                    <FormMessage />
+                                </FormItem>
+                            )}
+                        />
+                        <SubmitButton
+                            pending={codeForm.formState.isSubmitting}
+                            pendingLabel="Verifying…"
+                            className="w-full"
+                        >
+                            Sign in
+                        </SubmitButton>
+                    </form>
+                </Form>
             </AuthShell>
         );
     }
@@ -100,7 +184,7 @@ export function LoginForm() {
     return (
         <AuthShell
             title="Sign in to Bursora"
-            description="We'll email you a magic link — no password needed."
+            description="We'll email you a sign-in code — no password needed."
             footer={
                 <span>
                     New here?{" "}
@@ -115,7 +199,7 @@ export function LoginForm() {
                     type="button"
                     variant="outline"
                     className="w-full"
-                    onClick={onGoogle}
+                    onClick={signInWithGoogle}
                     disabled={googlePending}
                 >
                     {googlePending ? (
@@ -130,14 +214,14 @@ export function LoginForm() {
                     <span>or</span>
                     <Separator className="flex-1" />
                 </div>
-                <Form {...form}>
+                <Form {...emailForm}>
                     <form
-                        onSubmit={form.handleSubmit(onSubmit)}
+                        onSubmit={emailForm.handleSubmit(requestCode)}
                         className="flex flex-col gap-4"
                         noValidate
                     >
                         <FormField
-                            control={form.control}
+                            control={emailForm.control}
                             name="email"
                             render={({ field }) => (
                                 <FormItem>
@@ -156,11 +240,11 @@ export function LoginForm() {
                             )}
                         />
                         <SubmitButton
-                            pending={form.formState.isSubmitting}
-                            pendingLabel="Sending link…"
+                            pending={emailForm.formState.isSubmitting}
+                            pendingLabel="Sending code…"
                             className="w-full"
                         >
-                            Send magic link
+                            Send code
                         </SubmitButton>
                     </form>
                 </Form>

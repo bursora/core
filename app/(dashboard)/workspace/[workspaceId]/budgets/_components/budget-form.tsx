@@ -8,6 +8,7 @@ import {
     FormLabel,
     FormMessage,
 } from "@/components/ui/form";
+import { useInflight } from "@/components/ui/hooks/use-inflight";
 import { MoneyInput } from "@/components/ui/money-input";
 import { RadioGroup, RadioGroupCard } from "@/components/ui/radio-group";
 import { RichSelect, type RichSelectItem } from "@/components/ui/rich-select";
@@ -135,7 +136,7 @@ export function BudgetForm({
     const scopeType = useWatch({ control: form.control, name: "scopeType" });
     const isWorkspaceScope = scopeType === "workspace";
 
-    const handleSubmit = form.handleSubmit(async (values) => {
+    const submit = useInflight(async (values: BudgetFormValues) => {
         const normalized: BudgetFormValues = {
             ...values,
             scopeId: isWorkspaceScope ? "" : values.scopeId.trim(),
@@ -157,6 +158,7 @@ export function BudgetForm({
         }
         onSubmitted?.();
     });
+    const handleSubmit = form.handleSubmit(submit);
 
     return (
         <Form {...form}>

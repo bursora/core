@@ -27,6 +27,7 @@ export async function OnboardingShell({ children }: { readonly children: ReactNo
                         userId={session.user.id}
                         name={session.user.name}
                         email={session.user.email}
+                        image={session.user.image}
                         showBilling={env().IS_CLOUD}
                     />
                 </div>

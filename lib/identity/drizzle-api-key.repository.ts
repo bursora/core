@@ -2,7 +2,7 @@ import "server-only";
 
 import type { Db } from "@/lib/db";
 import { requireInsertedRow, schema } from "@/lib/db";
-import { and, desc, eq, isNull } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull } from "drizzle-orm";
 import type { ApiKey, ApiKeySeal } from "./api-key";
 import type { ApiKeyRepository } from "./api-key.repository";
 
@@ -89,6 +89,28 @@ export class DrizzleApiKeyRepository implements ApiKeyRepository {
             .returning({ id: schema.apiKeys.id });
         return result.length > 0;
     }
+
+    async suspendByWorkspaces(workspaceIds: readonly string[], suspendedAt: Date): Promise<void> {
+        if (workspaceIds.length === 0) return;
+        await this.db
+            .update(schema.apiKeys)
+            .set({ suspendedAt })
+            .where(
+                and(
+                    inArray(schema.apiKeys.workspaceId, [...workspaceIds]),
+                    isNull(schema.apiKeys.revokedAt),
+                    isNull(schema.apiKeys.suspendedAt),
+                ),
+            );
+    }
+
+    async unsuspendByWorkspaces(workspaceIds: readonly string[]): Promise<void> {
+        if (workspaceIds.length === 0) return;
+        await this.db
+            .update(schema.apiKeys)
+            .set({ suspendedAt: null })
+            .where(inArray(schema.apiKeys.workspaceId, [...workspaceIds]));
+    }
 }
 
 type Row = typeof schema.apiKeys.$inferSelect;
@@ -112,5 +134,6 @@ function toApiKey(row: Row): ApiKey {
         scopes: row.scopes,
         createdAt: row.createdAt,
         revokedAt: row.revokedAt,
+        suspendedAt: row.suspendedAt,
     };
 }

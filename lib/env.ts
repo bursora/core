@@ -33,7 +33,6 @@ const ALWAYS_REQUIRED = [
     "BETTER_AUTH_URL",
     "SMTP_HOST",
     "SMTP_PORT",
-    "CRON_SECRET",
     "NEXT_PUBLIC_APP_URL",
     "GOOGLE_CLIENT_ID",
     "GOOGLE_CLIENT_SECRET",
@@ -67,7 +66,6 @@ export interface Env {
     readonly SMTP_USER: string;
     /** Empty when SMTP relay is unauthenticated. */
     readonly SMTP_PASS: string;
-    readonly CRON_SECRET: string;
     readonly NEXT_PUBLIC_APP_URL: string;
     readonly GOOGLE_CLIENT_ID: string;
     readonly GOOGLE_CLIENT_SECRET: string;
@@ -227,7 +225,6 @@ export function loadEnv(source: Record<string, string | undefined>): Env {
         SMTP_PORT: port,
         SMTP_USER: smtpUser,
         SMTP_PASS: smtpPass,
-        CRON_SECRET: getAlways("CRON_SECRET"),
         NEXT_PUBLIC_APP_URL: getAlways("NEXT_PUBLIC_APP_URL"),
         GOOGLE_CLIENT_ID: getAlways("GOOGLE_CLIENT_ID"),
         GOOGLE_CLIENT_SECRET: getAlways("GOOGLE_CLIENT_SECRET"),

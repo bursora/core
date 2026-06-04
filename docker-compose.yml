@@ -2,7 +2,7 @@
 # core/ and sdk/) so the build context resolves the sibling SDK package:
 #
 #   cp core/.env.example core/.env
-#   # edit core/.env: set BURSORA_API_KEY_PEPPER, BETTER_AUTH_SECRET, CRON_SECRET
+#   # edit core/.env: set BURSORA_API_KEY_PEPPER, BETTER_AUTH_SECRET
 #   docker compose -f core/docker-compose.yml up -d
 #   docker compose -f core/docker-compose.yml run --rm bursora bun run db:migrate
 #

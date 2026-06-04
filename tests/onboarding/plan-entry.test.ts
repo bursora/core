@@ -15,7 +15,6 @@ const BASE = {
     BETTER_AUTH_URL: "http://localhost:3000",
     SMTP_HOST: "localhost",
     SMTP_PORT: "1025",
-    CRON_SECRET: "cron-secret",
     NEXT_PUBLIC_APP_URL: "http://localhost:3000",
     GOOGLE_CLIENT_ID: "google-client-id",
     GOOGLE_CLIENT_SECRET: "google-client-secret",

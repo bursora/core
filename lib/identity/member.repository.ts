@@ -1,11 +1,15 @@
 import type { Invite, MemberRole, WorkspaceMember } from "./member";
 import type { UserRole } from "./user-role";
+import type { UserStatus } from "./user-status";
 
 export interface MemberListRow {
     readonly workspaceId: string;
     readonly userId: string;
     readonly email: string;
+    readonly image: string | null;
     readonly role: MemberRole;
+    /** Account lifecycle — `pending_deletion` members are suspended and purge soon. */
+    readonly status: UserStatus;
     readonly createdAt: Date;
 }
 
@@ -17,6 +21,21 @@ export interface MemberRepository {
     }): Promise<WorkspaceMember>;
 
     findMembership(workspaceId: string, userId: string): Promise<WorkspaceMember | null>;
+
+    /** Deletes the membership row for (workspaceId, userId). No-op if absent. */
+    removeMember(workspaceId: string, userId: string): Promise<void>;
+
+    /** Sets the workspace role for (workspaceId, userId). */
+    updateRole(workspaceId: string, userId: string, role: MemberRole): Promise<void>;
+
+    /**
+     * Counts members whose workspace role is `owner`. Drives the last-owner
+     * invariant on member removal and role demotion.
+     */
+    countOwners(workspaceId: string): Promise<number>;
+
+    /** Workspace ids the user is a member of. Drives account-deletion planning. */
+    listWorkspaceIdsForUser(userId: string): Promise<readonly string[]>;
 
     listByWorkspace(workspaceId: string): Promise<readonly MemberListRow[]>;
 

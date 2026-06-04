@@ -3,7 +3,7 @@
  *
  * Every Bursora email renders through `EmailLayout`. It provides the
  * preview text, brand header, body container, CTA button, and footer.
- * Individual email components (`MagicLinkEmail`, `InviteEmail`, …) only
+ * Individual email components (`OtpCodeEmail`, `InviteEmail`, …) only
  * declare their copy and the CTA target — never their own chrome.
  */
 

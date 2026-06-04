@@ -15,6 +15,7 @@
 
 import "server-only";
 
+import { env } from "@/lib/env";
 import * as Sentry from "@sentry/nextjs";
 import { Cron } from "croner";
 
@@ -26,7 +27,29 @@ interface ScheduledJob {
 
 async function buildJobs(): Promise<readonly ScheduledJob[]> {
     const { runPricingSync } = await import("@/lib/metering/pricing/run-pricing-sync.usecase");
-    return [{ name: "pricing-sync", pattern: "0 4 * * *", run: runPricingSync }];
+    const { runAnomalyCron } = await import("@/lib/detection");
+    const { runAccountPurgeCron } = await import("@/lib/identity/server");
+    const jobs: ScheduledJob[] = [
+        { name: "pricing-sync", pattern: "0 4 * * *", run: runPricingSync },
+        // Spend anomaly detection across all workspaces, every 5 minutes.
+        { name: "anomaly", pattern: "*/5 * * * *", run: runAnomalyCron },
+        // Hourly hard-purge of accounts past their 24h deletion grace window.
+        { name: "account-purge", pattern: "0 * * * *", run: runAccountPurgeCron },
+    ];
+
+    // EE, cloud-only: prune old billing webhook events daily. Dynamic import +
+    // OSS_BUILD guard keep it out of the OSS bundle (same pattern as the EE
+    // route/page call-sites); the IS_CLOUD check skips it on self-host.
+    if (process.env.OSS_BUILD !== "true" && env().IS_CLOUD) {
+        const { runBillingWebhookPrune } = await import("@/lib/ee/billing/server");
+        jobs.push({
+            name: "billing-webhook-prune",
+            pattern: "0 3 * * *",
+            run: runBillingWebhookPrune,
+        });
+    }
+
+    return jobs;
 }
 
 let started = false;

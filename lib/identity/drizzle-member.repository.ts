@@ -6,6 +6,7 @@ import { and, asc, count, desc, eq, gt, isNull } from "drizzle-orm";
 import type { Invite, MemberRole, WorkspaceMember } from "./member";
 import type { InviteRepository, MemberListRow, MemberRepository } from "./member.repository";
 import { USER_ROLE, type UserRole } from "./user-role";
+import { USER_STATUS, type UserStatus } from "./user-status";
 
 export class DrizzleMemberRepository implements MemberRepository {
     constructor(private readonly db: Db) {}
@@ -40,13 +41,59 @@ export class DrizzleMemberRepository implements MemberRepository {
         return row ? toMember(row) : null;
     }
 
+    async removeMember(workspaceId: string, userId: string): Promise<void> {
+        await this.db
+            .delete(schema.workspaceMembers)
+            .where(
+                and(
+                    eq(schema.workspaceMembers.workspaceId, workspaceId),
+                    eq(schema.workspaceMembers.userId, userId),
+                ),
+            );
+    }
+
+    async updateRole(workspaceId: string, userId: string, role: MemberRole): Promise<void> {
+        await this.db
+            .update(schema.workspaceMembers)
+            .set({ role })
+            .where(
+                and(
+                    eq(schema.workspaceMembers.workspaceId, workspaceId),
+                    eq(schema.workspaceMembers.userId, userId),
+                ),
+            );
+    }
+
+    async countOwners(workspaceId: string): Promise<number> {
+        const [row] = await this.db
+            .select({ count: count() })
+            .from(schema.workspaceMembers)
+            .where(
+                and(
+                    eq(schema.workspaceMembers.workspaceId, workspaceId),
+                    eq(schema.workspaceMembers.role, "owner"),
+                ),
+            );
+        return row?.count ?? 0;
+    }
+
+    async listWorkspaceIdsForUser(userId: string): Promise<readonly string[]> {
+        const rows = await this.db
+            .select({ workspaceId: schema.workspaceMembers.workspaceId })
+            .from(schema.workspaceMembers)
+            .where(eq(schema.workspaceMembers.userId, userId));
+        return rows.map((r) => r.workspaceId);
+    }
+
     async listByWorkspace(workspaceId: string): Promise<readonly MemberListRow[]> {
         const rows = await this.db
             .select({
                 workspaceId: schema.workspaceMembers.workspaceId,
                 userId: schema.workspaceMembers.userId,
                 email: schema.users.email,
+                image: schema.users.image,
                 role: schema.workspaceMembers.role,
+                status: schema.users.status,
                 createdAt: schema.workspaceMembers.createdAt,
             })
             .from(schema.workspaceMembers)
@@ -58,7 +105,9 @@ export class DrizzleMemberRepository implements MemberRepository {
             workspaceId: row.workspaceId,
             userId: row.userId,
             email: row.email,
+            image: row.image,
             role: toMemberRole(row.role),
+            status: toUserStatus(row.status),
             createdAt: row.createdAt,
         }));
     }
@@ -128,6 +177,11 @@ type MemberRow = typeof schema.workspaceMembers.$inferSelect;
 // `role` is a text column; narrow it to the member-role union at the boundary.
 function toMemberRole(raw: string): MemberRole {
     return raw === "owner" ? "owner" : "member";
+}
+
+// `users.status` is a text column; narrow it to the status union at the boundary.
+function toUserStatus(raw: string): UserStatus {
+    return raw === USER_STATUS.pendingDeletion ? USER_STATUS.pendingDeletion : USER_STATUS.active;
 }
 
 function toMember(row: MemberRow): WorkspaceMember {

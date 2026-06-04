@@ -1,7 +1,7 @@
 /**
  * Bootstrap global pricing rows by running the litellm sync once.
  *
- * The daily cron at `app/api/cron/pricing-sync/route.ts` populates the
+ * The daily pricing-sync cron (`lib/cron/scheduler.ts`) populates the
  * `pricing` table in production. Local dev needs the same rates before the
  * scheduler ever fires — running the same sync use case from a Bun script
  * gets there without duplicating the rate table.

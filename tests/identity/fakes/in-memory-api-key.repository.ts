@@ -22,9 +22,36 @@ export class InMemoryApiKeyRepository implements ApiKeyRepository {
             scopes: [...input.scopes],
             createdAt: new Date(),
             revokedAt: null,
+            suspendedAt: null,
         };
         this.rows.set(key.id, key);
         return key;
+    }
+
+    /** Test seam: add a key with explicit revoke/suspend state. */
+    seed(input: {
+        id: string;
+        workspaceId: string;
+        revokedAt?: Date | null;
+        suspendedAt?: Date | null;
+    }): void {
+        this.rows.set(input.id, {
+            id: input.id,
+            workspaceId: input.workspaceId,
+            keyHash: `hash-${input.id}`,
+            seal: null,
+            last6: null,
+            name: "key",
+            scopes: [],
+            createdAt: new Date(0),
+            revokedAt: input.revokedAt ?? null,
+            suspendedAt: input.suspendedAt ?? null,
+        });
+    }
+
+    /** Test seam: read a key by id regardless of workspace. */
+    find(id: string): ApiKey | undefined {
+        return this.rows.get(id);
     }
 
     async findByHash(keyHash: string): Promise<ApiKey | null> {
@@ -61,6 +88,7 @@ export class InMemoryApiKeyRepository implements ApiKeyRepository {
             scopes: [],
             createdAt: new Date(),
             revokedAt: null,
+            suspendedAt: null,
         });
     }
 
@@ -86,5 +114,21 @@ export class InMemoryApiKeyRepository implements ApiKeyRepository {
         if (!existing || existing.workspaceId !== workspaceId) return false;
         this.rows.set(id, { ...existing, revokedAt });
         return true;
+    }
+
+    async suspendByWorkspaces(workspaceIds: readonly string[], suspendedAt: Date): Promise<void> {
+        const set = new Set(workspaceIds);
+        for (const [id, row] of this.rows) {
+            if (set.has(row.workspaceId) && row.revokedAt === null && row.suspendedAt === null) {
+                this.rows.set(id, { ...row, suspendedAt });
+            }
+        }
+    }
+
+    async unsuspendByWorkspaces(workspaceIds: readonly string[]): Promise<void> {
+        const set = new Set(workspaceIds);
+        for (const [id, row] of this.rows) {
+            if (set.has(row.workspaceId)) this.rows.set(id, { ...row, suspendedAt: null });
+        }
     }
 }

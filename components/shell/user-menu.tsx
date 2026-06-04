@@ -19,11 +19,12 @@ interface UserMenuProps {
     userId: string;
     name: string;
     email: string;
+    image?: string | null | undefined;
     /** Cloud only: surfaces the account billing entry (hidden on self-host). */
     showBilling?: boolean;
 }
 
-export function UserMenu({ userId, name, email, showBilling }: UserMenuProps) {
+export function UserMenu({ userId, name, email, image, showBilling }: UserMenuProps) {
     const router = useRouter();
     const [signingOut, setSigningOut] = useState(false);
 
@@ -47,11 +48,11 @@ export function UserMenu({ userId, name, email, showBilling }: UserMenuProps) {
                 aria-label="Account menu"
                 className="cursor-pointer rounded-full outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
             >
-                <UserAvatar size="md" userId={userId} name={name} email={email} />
+                <UserAvatar size="md" userId={userId} name={name} email={email} image={image} />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56">
                 <div className="flex items-center gap-2 px-2 py-1.5">
-                    <UserAvatar size="md" userId={userId} name={name} email={email} />
+                    <UserAvatar size="md" userId={userId} name={name} email={email} image={image} />
                     <div className="min-w-0 flex-1">
                         <div className="truncate text-sm font-medium">{name}</div>
                         <div className="truncate text-xs text-muted-foreground">{email}</div>

@@ -1,7 +1,7 @@
 /**
  * Better-auth instance.
  *
- * Two sign-in flows: magic link and Google OAuth. Magic-link tokens are
+ * Two sign-in flows: email code (OTP) and Google OAuth. One-time codes are
  * mailed via the same SMTP-backed `Mailer` we use for invites; in dev that's
  * Mailhog at `localhost:1025`. Google OAuth lands the user on `/workspace`
  * after consent. No password.
@@ -17,11 +17,12 @@ import "server-only";
 import { db, schema } from "@/lib/db";
 import { env } from "@/lib/env";
 import { USER_ROLE } from "@/lib/identity/user-role";
-import { defaultSmtpMailer, sendMagicLinkEmail } from "@/lib/notification";
+import { defaultSmtpMailer, sendOtpEmail } from "@/lib/notification";
+import * as Sentry from "@sentry/nextjs";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { nextCookies } from "better-auth/next-js";
-import { magicLink } from "better-auth/plugins";
+import { emailOTP } from "better-auth/plugins";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { cache } from "react";
@@ -62,10 +63,46 @@ function buildAuth() {
                 clientSecret: env().GOOGLE_CLIENT_SECRET,
             },
         },
+        databaseHooks: {
+            session: {
+                create: {
+                    // Signing in is how a user reverts a pending account
+                    // deletion within the grace window: clear the flag and
+                    // un-suspend their keys. No-op for active accounts.
+                    // Dynamic import keeps the identity composition graph out
+                    // of the auth module's load path.
+                    after: async (session) => {
+                        // Best-effort: a failure here must never block sign-in,
+                        // which is the very action that should restore the account.
+                        try {
+                            const { reactivateAccount } = await import("./identity/server");
+                            const reactivated = await reactivateAccount({
+                                userId: session.userId,
+                            });
+                            if (reactivated) {
+                                // Surface a welcome-back toast on the next dashboard
+                                // render. Short-lived; the client reads it once and
+                                // clears it.
+                                const { cookies } = await import("next/headers");
+                                (await cookies()).set("bursora-reactivated", "1", {
+                                    maxAge: 120,
+                                    path: "/",
+                                });
+                            }
+                        } catch (err: unknown) {
+                            Sentry.captureException(err, {
+                                tags: { area: "account-deletion", step: "reactivate-hook" },
+                                extra: { userId: session.userId },
+                            });
+                        }
+                    },
+                },
+            },
+        },
         plugins: [
-            magicLink({
-                sendMagicLink: async ({ email, url }) => {
-                    await sendMagicLinkEmail({ mailer, email, url });
+            emailOTP({
+                sendVerificationOTP: async ({ email, otp }) => {
+                    await sendOtpEmail({ mailer, email, otp });
                 },
             }),
             nextCookies(),

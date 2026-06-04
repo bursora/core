@@ -6,6 +6,7 @@ import { requireSessionUI } from "@/lib/auth";
 import { getRequestTimeZone } from "@/lib/time/request-tz";
 import { Check } from "lucide-react";
 import { AccountMetaCard } from "./_components/account-meta-card";
+import { DeleteAccountCard } from "./_components/delete-account-card";
 import { ProfileForm } from "./_components/profile-form";
 
 export default async function ProfilePage() {
@@ -17,7 +18,13 @@ export default async function ProfilePage() {
         <AppShell>
             <div className="mx-auto max-w-2xl space-y-6">
                 <header className="flex items-center gap-4">
-                    <UserAvatar size="xl" userId={user.id} name={user.name} email={user.email} />
+                    <UserAvatar
+                        size="xl"
+                        userId={user.id}
+                        name={user.name}
+                        email={user.email}
+                        image={user.image}
+                    />
                     <div className="min-w-0 space-y-1">
                         <h1 className="truncate text-2xl font-semibold tracking-tight">
                             {user.name}
@@ -55,6 +62,7 @@ export default async function ProfilePage() {
                     sessionCreatedAt={session.session.createdAt}
                     tz={tz}
                 />
+                <DeleteAccountCard email={user.email} />
             </div>
         </AppShell>
     );

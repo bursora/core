@@ -17,6 +17,14 @@ class FakeMemberRepository implements MemberRepository {
     async findMembership(): Promise<WorkspaceMember | null> {
         return null;
     }
+    async removeMember(): Promise<void> {}
+    async updateRole(): Promise<void> {}
+    async countOwners(): Promise<number> {
+        return 0;
+    }
+    async listWorkspaceIdsForUser(): Promise<readonly string[]> {
+        return [];
+    }
     async listByWorkspace(workspaceId: string): Promise<readonly MemberListRow[]> {
         return this.rows.filter((r) => r.workspaceId === workspaceId);
     }
@@ -40,14 +48,18 @@ describe("listMembersUseCase", () => {
                 workspaceId,
                 userId: "u-1",
                 email: "owner@acme.test",
+                image: null,
                 role,
+                status: "active",
                 createdAt: new Date("2026-01-01T00:00:00Z"),
             },
             {
                 workspaceId: "other",
                 userId: "u-2",
                 email: "nope@x.test",
+                image: null,
                 role: "member",
+                status: "active",
                 createdAt: new Date(),
             },
         ]);

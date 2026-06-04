@@ -20,6 +20,12 @@ import {
     DialogTitle,
     DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useTimeZone } from "@/components/ui/hooks/use-time-zone";
 import { UserAvatar } from "@/components/ui/user-avatar";
 import { EmptyStateCard } from "@/components/ui/workspace/empty-state-card";
@@ -28,8 +34,19 @@ import { StatusTag } from "@/components/ui/workspace/status-tag";
 import type { ActionResult } from "@/lib/action-result";
 import { formatDate } from "@/lib/format";
 import type { MemberRole } from "@/lib/identity";
+import { USER_STATUS, type UserStatus } from "@/lib/identity/user-status";
 import { cn } from "@/lib/utils";
-import { Clock, Mail, ShieldCheck, Trash2, UserPlus, Users } from "lucide-react";
+import {
+    Clock,
+    Mail,
+    MoreHorizontal,
+    ShieldCheck,
+    ShieldOff,
+    Trash2,
+    UserMinus,
+    UserPlus,
+    Users,
+} from "lucide-react";
 import { useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { InviteForm, type InviteFormState } from "./invite-form";
@@ -37,7 +54,9 @@ import { InviteForm, type InviteFormState } from "./invite-form";
 interface Member {
     readonly userId: string;
     readonly email: string;
+    readonly image: string | null;
     readonly role: MemberRole;
+    readonly status: UserStatus;
     readonly createdAt: Date;
 }
 
@@ -51,11 +70,24 @@ interface PendingInvite {
 interface Props {
     readonly members: readonly Member[];
     readonly pending: readonly PendingInvite[];
+    readonly currentUserId: string;
+    readonly viewerIsOwner: boolean;
     readonly action: (prev: InviteFormState, formData: FormData) => Promise<InviteFormState>;
     readonly cancelAction: (formData: FormData) => Promise<ActionResult>;
+    readonly removeAction: (formData: FormData) => Promise<ActionResult>;
+    readonly changeRoleAction: (formData: FormData) => Promise<ActionResult>;
 }
 
-export function MembersList({ members, pending, action, cancelAction }: Props) {
+export function MembersList({
+    members,
+    pending,
+    currentUserId,
+    viewerIsOwner,
+    action,
+    cancelAction,
+    removeAction,
+    changeRoleAction,
+}: Props) {
     const [open, setOpen] = useState(false);
 
     const counts = useMemo(() => {
@@ -110,7 +142,15 @@ export function MembersList({ members, pending, action, cancelAction }: Props) {
             ) : (
                 <ul className="space-y-3">
                     {members.map((m) => (
-                        <MemberRow key={m.userId} member={m} />
+                        <MemberRow
+                            key={m.userId}
+                            member={m}
+                            isSelf={m.userId === currentUserId}
+                            actionable={viewerIsOwner && m.userId !== currentUserId}
+                            isLastOwner={m.role === "owner" && counts.owners <= 1}
+                            removeAction={removeAction}
+                            changeRoleAction={changeRoleAction}
+                        />
                     ))}
                 </ul>
             )}
@@ -135,37 +175,172 @@ export function MembersList({ members, pending, action, cancelAction }: Props) {
     );
 }
 
-function MemberRow({ member }: { member: Member }) {
+function MemberRow({
+    member,
+    isSelf,
+    actionable,
+    isLastOwner,
+    removeAction,
+    changeRoleAction,
+}: {
+    member: Member;
+    isSelf: boolean;
+    actionable: boolean;
+    isLastOwner: boolean;
+    removeAction: (formData: FormData) => Promise<ActionResult>;
+    changeRoleAction: (formData: FormData) => Promise<ActionResult>;
+}) {
     const tz = useTimeZone();
     const isOwner = member.role === "owner";
+    const isPendingDeletion = member.status === USER_STATUS.pendingDeletion;
+    const [pending, startTransition] = useTransition();
+    const [confirmRemove, setConfirmRemove] = useState(false);
+
+    const submitRoleChange = (role: MemberRole) => {
+        const fd = new FormData();
+        fd.set("userId", member.userId);
+        fd.set("role", role);
+        startTransition(async () => {
+            const result = await changeRoleAction(fd);
+            if (!result.ok) {
+                toast.error(result.error ?? "Failed to update role.");
+                return;
+            }
+            toast.success(
+                role === "owner"
+                    ? `${member.email} is now an owner.`
+                    : `${member.email} is now a member.`,
+            );
+        });
+    };
+
+    const submitRemove = () => {
+        const fd = new FormData();
+        fd.set("userId", member.userId);
+        startTransition(async () => {
+            const result = await removeAction(fd);
+            if (!result.ok) {
+                toast.error(result.error ?? "Failed to remove member.");
+                return;
+            }
+            toast.success(`${member.email} removed from the workspace.`);
+        });
+    };
 
     return (
-        <li>
-            <div className="flex flex-wrap items-center justify-between gap-3 rounded-[8px] border border-border bg-background p-3">
+        <li aria-busy={pending || undefined} className={cn(pending && "opacity-60")}>
+            <div
+                className={cn(
+                    "flex flex-wrap items-center justify-between gap-3 rounded-[8px] border p-3",
+                    isPendingDeletion
+                        ? "border-warning/40 bg-warning/[0.04]"
+                        : "border-border bg-background",
+                )}
+            >
                 <div className="flex min-w-0 items-center gap-3">
                     <UserAvatar
                         size="sm"
                         userId={member.userId}
                         name={member.email}
-                        className="shrink-0"
+                        image={member.image}
+                        className={cn("shrink-0", isPendingDeletion && "opacity-60")}
                     />
                     <div className="min-w-0">
-                        <div className="truncate text-sm font-medium">{member.email}</div>
-                        <div className="text-xs text-muted-foreground">
-                            Joined {formatDate(member.createdAt, tz)}
+                        <div className="flex items-center gap-1.5 truncate text-sm font-medium">
+                            {member.email}
+                            {isSelf ? (
+                                <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-normal text-muted-foreground">
+                                    you
+                                </span>
+                            ) : null}
                         </div>
+                        {isPendingDeletion ? (
+                            <div className="flex items-center gap-1 text-xs font-medium text-warning">
+                                <Clock className="size-3" />
+                                Suspended · deletes within 24h
+                            </div>
+                        ) : (
+                            <div className="text-xs text-muted-foreground">
+                                Joined {formatDate(member.createdAt, tz)}
+                            </div>
+                        )}
                     </div>
                 </div>
-                {isOwner ? (
-                    <StatusTag tone="foreground" variant="pill">
-                        <ShieldCheck className="size-3" />
-                        owner
-                    </StatusTag>
-                ) : (
-                    <StatusTag tone="muted" variant="pill">
-                        member
-                    </StatusTag>
-                )}
+                <div className="flex items-center gap-2">
+                    {isOwner ? (
+                        <StatusTag tone="foreground" variant="pill">
+                            <ShieldCheck className="size-3" />
+                            owner
+                        </StatusTag>
+                    ) : (
+                        <StatusTag tone="muted" variant="pill">
+                            member
+                        </StatusTag>
+                    )}
+                    {actionable ? (
+                        <>
+                            <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                    <Button
+                                        variant="ghost"
+                                        size="icon-sm"
+                                        aria-label={`Manage ${member.email}`}
+                                        disabled={pending}
+                                    >
+                                        <MoreHorizontal className="size-4 text-muted-foreground" />
+                                    </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                    {isOwner ? (
+                                        <DropdownMenuItem
+                                            disabled={isLastOwner}
+                                            onSelect={() => submitRoleChange("member")}
+                                        >
+                                            <ShieldOff className="size-4" />
+                                            Make member
+                                        </DropdownMenuItem>
+                                    ) : (
+                                        <DropdownMenuItem
+                                            disabled={isPendingDeletion}
+                                            onSelect={() => submitRoleChange("owner")}
+                                        >
+                                            <ShieldCheck className="size-4" />
+                                            Make owner
+                                        </DropdownMenuItem>
+                                    )}
+                                    <DropdownMenuItem
+                                        variant="destructive"
+                                        disabled={isLastOwner}
+                                        onSelect={() => setConfirmRemove(true)}
+                                    >
+                                        <UserMinus className="size-4" />
+                                        Remove from workspace
+                                    </DropdownMenuItem>
+                                </DropdownMenuContent>
+                            </DropdownMenu>
+                            <AlertDialog open={confirmRemove} onOpenChange={setConfirmRemove}>
+                                <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                        <AlertDialogTitle>Remove this member?</AlertDialogTitle>
+                                        <AlertDialogDescription>
+                                            {member.email} loses access to this workspace. Their
+                                            usage history stays. You can invite them back later.
+                                        </AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                        <AlertDialogCancel>Keep member</AlertDialogCancel>
+                                        <AlertDialogAction
+                                            variant="destructive"
+                                            onClick={submitRemove}
+                                        >
+                                            Remove member
+                                        </AlertDialogAction>
+                                    </AlertDialogFooter>
+                                </AlertDialogContent>
+                            </AlertDialog>
+                        </>
+                    ) : null}
+                </div>
             </div>
         </li>
     );

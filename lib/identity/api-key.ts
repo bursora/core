@@ -36,6 +36,12 @@ export interface ApiKey {
     readonly scopes: readonly string[];
     readonly createdAt: Date;
     readonly revokedAt: Date | null;
+    /**
+     * Set while the owning account is scheduled for deletion. The SDK lookup
+     * rejects suspended keys; reactivation clears it. Reversible, unlike
+     * `revokedAt`.
+     */
+    readonly suspendedAt: Date | null;
 }
 
 export interface IssuedApiKey {

@@ -127,6 +127,7 @@ const setupHarness = (opts: { knownKey?: boolean } = {}): Harness => {
                   scopes: ["events:write"],
                   createdAt: new Date("2025-01-01T00:00:00Z"),
                   revokedAt: null,
+                  suspendedAt: null,
               };
 
     setMeteringDepsForTesting({

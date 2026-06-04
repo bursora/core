@@ -36,6 +36,7 @@ import {
     FormLabel,
     FormMessage,
 } from "@/components/ui/form";
+import { useInflight } from "@/components/ui/hooks/use-inflight";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -136,23 +137,26 @@ export function AlertChannelsForm({
         }, PULSE_DURATION_MS);
     };
 
-    const onSubmit = (values: FormValues) => {
+    // useInflight drops a second submit while the first is still saving; the
+    // transition keeps the button's pending state in sync with that request.
+    const submit = useInflight(async (values: FormValues) => {
         const fd = new FormData();
         fd.set("workspaceId", workspaceId);
         fd.set("slackUrl", values.slackEnabled ? values.slackUrl : "");
         fd.set("discordUrl", values.discordEnabled ? values.discordUrl : "");
         fd.set("emailAddress", values.emailEnabled ? values.emailAddress : "");
 
-        startTransition(async () => {
-            const result = await saveAlertChannelsAction(fd);
-            if (result.ok) {
-                flashPulse("success");
-                toast.success("Channels saved");
-                return;
-            }
-            flashPulse("error");
-            toast.error(result.error ?? "Failed to save channels.");
-        });
+        const result = await saveAlertChannelsAction(fd);
+        if (result.ok) {
+            flashPulse("success");
+            toast.success("Channels saved");
+            return;
+        }
+        flashPulse("error");
+        toast.error(result.error ?? "Failed to save channels.");
+    });
+    const onSubmit = (values: FormValues) => {
+        startTransition(() => submit(values));
     };
 
     return (

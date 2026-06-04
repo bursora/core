@@ -5,7 +5,7 @@
  * (Mailhog in dev, any SMTP provider in prod). `InMemoryMailer` is the
  * test substitute.
  *
- * `sendMagicLinkEmail` and `sendInviteEmail` are thin renderers over a
+ * `sendOtpEmail` and `sendInviteEmail` are thin renderers over a
  * `Mailer` so callers (`lib/auth.ts`, identity invites) share the same
  * subject/body conventions.
  *
@@ -19,9 +19,11 @@ import "server-only";
 
 import { env } from "../env";
 import type { AlertRaisedEvent } from "../event-bus";
+import { formatRelativeTime } from "../format";
+import { AccountDeletionEmail } from "./emails/account-deletion";
 import { AlertEmail } from "./emails/alert";
 import { InviteEmail } from "./emails/invite";
-import { MagicLinkEmail } from "./emails/magic-link";
+import { OtpCodeEmail } from "./emails/otp-code";
 import { renderEmailPayload, type RenderOptions } from "./webhook-payload";
 
 /**
@@ -141,18 +143,18 @@ async function renderAndSend(input: {
     await input.mailer.send({ to: input.to, subject: input.subject, html, text });
 }
 
-export interface SendMagicLinkInput {
+export interface SendOtpInput {
     readonly mailer: Mailer;
     readonly email: string;
-    readonly url: string;
+    readonly otp: string;
 }
 
-export async function sendMagicLinkEmail(input: SendMagicLinkInput): Promise<void> {
+export async function sendOtpEmail(input: SendOtpInput): Promise<void> {
     await renderAndSend({
         mailer: input.mailer,
         to: input.email,
-        subject: "Sign in to Bursora",
-        node: MagicLinkEmail({ url: input.url }),
+        subject: "Your Bursora sign-in code",
+        node: OtpCodeEmail({ otp: input.otp }),
     });
 }
 
@@ -165,16 +167,34 @@ export interface SendInviteInput {
 }
 
 export async function sendInviteEmail(input: SendInviteInput): Promise<void> {
+    // The recipient's zone is unknown (they may have no account yet), so the
+    // expiry is relative ("in 1 day") rather than an absolute local time.
+    const expiresIn = formatRelativeTime(input.expiresAt);
     const node = InviteEmail(
         input.token !== undefined
-            ? { acceptUrl: input.acceptUrl, expiresAt: input.expiresAt, token: input.token }
-            : { acceptUrl: input.acceptUrl, expiresAt: input.expiresAt },
+            ? { acceptUrl: input.acceptUrl, expiresIn, token: input.token }
+            : { acceptUrl: input.acceptUrl, expiresIn },
     );
     await renderAndSend({
         mailer: input.mailer,
         to: input.email,
         subject: "You're invited to a Bursora workspace",
         node,
+    });
+}
+
+export interface SendAccountDeletionInput {
+    readonly mailer: Mailer;
+    readonly email: string;
+    readonly signInUrl: string;
+}
+
+export async function sendAccountDeletionEmail(input: SendAccountDeletionInput): Promise<void> {
+    await renderAndSend({
+        mailer: input.mailer,
+        to: input.email,
+        subject: "Your Bursora account is scheduled for deletion",
+        node: AccountDeletionEmail({ signInUrl: input.signInUrl }),
     });
 }
 

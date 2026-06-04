@@ -14,6 +14,7 @@ import {
     FormLabel,
     FormMessage,
 } from "@/components/ui/form";
+import { useInflight } from "@/components/ui/hooks/use-inflight";
 import { Input } from "@/components/ui/input";
 import { MoneyInput } from "@/components/ui/money-input";
 import { RichSelect, type RichSelectItem } from "@/components/ui/rich-select";
@@ -119,7 +120,9 @@ export function PricingOverrideForm({
         },
     });
 
-    const onSubmit = (values: FormValues) => {
+    // useInflight drops a second submit while the first is still saving; the
+    // transition keeps the button's pending state in sync with that request.
+    const submit = useInflight(async (values: FormValues) => {
         const fd = new FormData();
         fd.set("workspaceId", workspaceId);
         if (isEdit) fd.set("overrideId", overrideId);
@@ -136,26 +139,27 @@ export function PricingOverrideForm({
             fd.set("effectiveTo", values.effectiveTo);
         }
 
-        startTransition(async () => {
-            const result = await (isEdit
-                ? updatePricingOverrideAction(fd)
-                : createPricingOverrideAction(fd));
-            if (!result.ok) {
-                if (result.fieldErrors) {
-                    for (const [field, message] of Object.entries(result.fieldErrors)) {
-                        form.setError(field as keyof FormValues, {
-                            type: "server",
-                            message,
-                        });
-                    }
+        const result = await (isEdit
+            ? updatePricingOverrideAction(fd)
+            : createPricingOverrideAction(fd));
+        if (!result.ok) {
+            if (result.fieldErrors) {
+                for (const [field, message] of Object.entries(result.fieldErrors)) {
+                    form.setError(field as keyof FormValues, {
+                        type: "server",
+                        message,
+                    });
                 }
-                toast.error(result.error ?? "Could not save override");
-                return;
             }
-            toast.success(isEdit ? "Override updated" : "Override saved");
-            if (!isEdit) form.reset();
-            onSaved?.();
-        });
+            toast.error(result.error ?? "Could not save override");
+            return;
+        }
+        toast.success(isEdit ? "Override updated" : "Override saved");
+        if (!isEdit) form.reset();
+        onSaved?.();
+    });
+    const onSubmit = (values: FormValues) => {
+        startTransition(() => submit(values));
     };
 
     return (

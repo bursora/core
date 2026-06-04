@@ -10,11 +10,12 @@ import { Cta, EmailLayout, FallbackLink, Heading, Paragraph } from "./layout";
 
 export interface InviteEmailProps {
     readonly acceptUrl: string;
-    readonly expiresAt: Date;
+    /** Relative expiry, e.g. "in 1 day" — the recipient's zone is unknown. */
+    readonly expiresIn: string;
     readonly token?: string;
 }
 
-export function InviteEmail({ acceptUrl, expiresAt, token }: InviteEmailProps) {
+export function InviteEmail({ acceptUrl, expiresIn, token }: InviteEmailProps) {
     return (
         <EmailLayout preview="You're invited to a Bursora workspace">
             <Heading>You&apos;re invited to a workspace</Heading>
@@ -24,7 +25,7 @@ export function InviteEmail({ acceptUrl, expiresAt, token }: InviteEmailProps) {
             </Paragraph>
             <Cta href={acceptUrl} label="Accept invite" />
             <FallbackLink href={acceptUrl} />
-            <Paragraph>This link expires {expiresAt.toISOString()}.</Paragraph>
+            <Paragraph>This link expires {expiresIn}.</Paragraph>
             {token ? <Paragraph>Token: {token}</Paragraph> : null}
         </EmailLayout>
     );

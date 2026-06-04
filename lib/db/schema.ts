@@ -38,6 +38,13 @@ export const users = pgTable("users", {
     // `additionalFields` entry in lib/auth.ts; `input: false` there blocks
     // client writes so signup/profile/API input can never set it.
     role: text("role").notNull().default("user"),
+    // Account lifecycle: `active` | `pending_deletion`. Server-managed (not a
+    // better-auth field) — the deletion request sets it, sign-in clears it, and
+    // the account-purge cron reads it. See lib/identity/user-status.ts.
+    status: text("status").notNull().default("active"),
+    // When the 24h deletion grace window ends. Null unless status is
+    // `pending_deletion`. The purge cron deletes accounts past this instant.
+    deletionScheduledAt: timestamp("deletion_scheduled_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
@@ -110,6 +117,10 @@ export const userSubscriptions = pgTable(
         subscriptionStatus: text("subscription_status"),
         subscribedAt: timestamp("subscribed_at", { withTimezone: true }),
         refundEligibleUntil: timestamp("refund_eligible_until", { withTimezone: true }),
+        updatedAt: timestamp("updated_at", { withTimezone: true })
+            .notNull()
+            .defaultNow()
+            .$onUpdate(() => new Date()),
     },
     (t) => [
         index("user_subscriptions_provider_customer_idx").on(t.providerCustomerId),
@@ -123,6 +134,10 @@ export const workspaces = pgTable("workspaces", {
     name: text("name").notNull(),
     environment: text("environment").notNull().default("prod"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+        .notNull()
+        .defaultNow()
+        .$onUpdate(() => new Date()),
 });
 
 // --- workspace_members --------------------------------------------------------
@@ -137,6 +152,10 @@ export const workspaceMembers = pgTable(
             .references(() => users.id, { onDelete: "cascade" }),
         role: text("role").notNull().default("member"),
         createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+        updatedAt: timestamp("updated_at", { withTimezone: true })
+            .notNull()
+            .defaultNow()
+            .$onUpdate(() => new Date()),
     },
     (t) => [primaryKey({ columns: [t.workspaceId, t.userId] })],
 );
@@ -190,6 +209,14 @@ export const apiKeys = pgTable(
             .default([] as string[] as never),
         createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
         revokedAt: timestamp("revoked_at", { withTimezone: true }),
+        // Reversible suspend, set when the owning account is scheduled for
+        // deletion. The SDK key lookup rejects suspended keys; reactivation
+        // clears it. Distinct from revokedAt, which is permanent.
+        suspendedAt: timestamp("suspended_at", { withTimezone: true }),
+        updatedAt: timestamp("updated_at", { withTimezone: true })
+            .notNull()
+            .defaultNow()
+            .$onUpdate(() => new Date()),
     },
     (t) => [
         uniqueIndex("api_keys_key_hash_idx").on(t.keyHash),
@@ -238,6 +265,10 @@ export const budgets = pgTable(
         amountUsd: numeric("amount_usd", { precision: 12, scale: 4 }).notNull(),
         mode: text("mode").notNull(), // notify | throttle | block
         createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+        updatedAt: timestamp("updated_at", { withTimezone: true })
+            .notNull()
+            .defaultNow()
+            .$onUpdate(() => new Date()),
     },
     (t) => [index("budgets_scope_idx").on(t.workspaceId, t.scopeType, t.scopeId)],
 );
@@ -262,6 +293,10 @@ export const pricing = pgTable(
         effectiveFrom: timestamp("effective_from", { withTimezone: true }).notNull(),
         effectiveTo: timestamp("effective_to", { withTimezone: true }),
         createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+        updatedAt: timestamp("updated_at", { withTimezone: true })
+            .notNull()
+            .defaultNow()
+            .$onUpdate(() => new Date()),
     },
     (t) => [
         index("pricing_lookup_idx").on(t.provider, t.model, t.region, t.effectiveFrom),
@@ -279,6 +314,10 @@ export const alertRules = pgTable("alert_rules", {
     params: jsonb("params").notNull().default({}),
     channels: jsonb("channels").notNull().default([]),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+        .notNull()
+        .defaultNow()
+        .$onUpdate(() => new Date()),
 });
 
 // --- alerts -------------------------------------------------------------------
@@ -463,7 +502,10 @@ export const workspaceEventBundleUsage = pgTable(
             .references(() => workspaces.id, { onDelete: "cascade" }),
         month: text("month").notNull(), // YYYY-MM
         eventsCount: integer("events_count").notNull().default(0),
-        updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+        updatedAt: timestamp("updated_at", { withTimezone: true })
+            .notNull()
+            .defaultNow()
+            .$onUpdate(() => new Date()),
     },
     (t) => [primaryKey({ columns: [t.workspaceId, t.month] })],
 );
@@ -481,7 +523,10 @@ export const workspaceSpikeProtectionSettings = pgTable("workspace_spike_protect
     thresholdMultiplier: numeric("threshold_multiplier", { precision: 6, scale: 2 })
         .notNull()
         .default("5"),
-    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+        .notNull()
+        .defaultNow()
+        .$onUpdate(() => new Date()),
 });
 
 // --- pricing_sync_state -------------------------------------------------------
@@ -513,5 +558,8 @@ export const plans = pgTable("plans", {
     isActive: boolean("is_active").notNull().default(true),
     syncedAt: timestamp("synced_at", { withTimezone: true }).notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+        .notNull()
+        .defaultNow()
+        .$onUpdate(() => new Date()),
 });

@@ -16,4 +16,11 @@ export interface UsageEventRepository {
      * count, never the input length (issue #1002).
      */
     insertBatch(rows: readonly UsageEventRow[]): Promise<number>;
+
+    /**
+     * Erases every usage event for the given workspaces (GDPR account purge).
+     * No-op on an empty list. Issues a ClickHouse `ALTER TABLE ... DELETE`
+     * mutation, so the rows are removed asynchronously by ClickHouse.
+     */
+    eraseByWorkspaces(workspaceIds: readonly string[]): Promise<void>;
 }

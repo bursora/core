@@ -23,7 +23,7 @@ On the other machine:
 git fetch origin && git checkout worktree-clickhouse
 git submodule update --init --recursive        # lands core, site, sdk@314fe42
 bun install                                     # superproject root — wires submodules
-cp core/.env.example core/.env                  # fill: BURSORA_API_KEY_PEPPER, BETTER_AUTH_SECRET, CRON_SECRET, BURSORA_KEY (32-byte base64), REDIS_URL, CLICKHOUSE_URL
+cp core/.env.example core/.env                  # fill: BURSORA_API_KEY_PEPPER, BETTER_AUTH_SECRET, BURSORA_KEY (32-byte base64), REDIS_URL, CLICKHOUSE_URL
 ```
 
 PRs not opened yet (3 needed: core, site, superproject). Nothing merged.

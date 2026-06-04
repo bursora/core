@@ -8,6 +8,8 @@
 import { GettingStartedWidget } from "@/app/(dashboard)/workspace/[workspaceId]/_components/getting-started-widget";
 import { KeyboardShortcuts } from "@/components/shell/keyboard-shortcuts";
 import { NotificationCenter } from "@/components/shell/notification-center";
+import { ReactivatedToast } from "@/components/shell/reactivated-toast";
+import { SidebarFirstRun } from "@/components/shell/sidebar-first-run";
 import { SidebarNav } from "@/components/shell/sidebar-nav";
 import { ThemeToggle } from "@/components/shell/theme-toggle";
 import { UserMenu } from "@/components/shell/user-menu";
@@ -58,7 +60,11 @@ export async function AppShell({ children, urlWorkspaceId }: AppShellProps) {
                     />
                 </SidebarHeader>
                 <SidebarContent>
-                    <SidebarNav activeWorkspaceId={activeWorkspaceId} />
+                    {activeWorkspaceId ? (
+                        <SidebarNav activeWorkspaceId={activeWorkspaceId} />
+                    ) : (
+                        <SidebarFirstRun />
+                    )}
                 </SidebarContent>
                 <SidebarFooter className="gap-2">
                     {activeWorkspaceId ? (
@@ -88,6 +94,7 @@ export async function AppShell({ children, urlWorkspaceId }: AppShellProps) {
                             userId={session.user.id}
                             name={session.user.name}
                             email={session.user.email}
+                            image={session.user.image}
                             showBilling={env().IS_CLOUD}
                         />
                     </div>
@@ -97,6 +104,7 @@ export async function AppShell({ children, urlWorkspaceId }: AppShellProps) {
             <Suspense fallback={null}>
                 <WorkspaceUrlSync />
             </Suspense>
+            <ReactivatedToast />
             <KeyboardShortcuts workspaces={workspaces} activeWorkspaceId={activeWorkspaceId} />
         </SidebarProvider>
     );

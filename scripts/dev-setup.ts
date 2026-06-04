@@ -34,8 +34,6 @@ const DATABASE_URL = process.env.DATABASE_URL;
 if (!DATABASE_URL) throw new Error("DATABASE_URL is required");
 const PEPPER = process.env.BURSORA_API_KEY_PEPPER;
 if (!PEPPER) throw new Error("BURSORA_API_KEY_PEPPER is required");
-const CRON_SECRET = process.env.CRON_SECRET;
-if (!CRON_SECRET) throw new Error("CRON_SECRET is required");
 
 const sql = postgres(DATABASE_URL);
 const db = drizzle(sql);
@@ -75,7 +73,6 @@ function upsertEnv(source: string, key: string, value: string): string {
 
 let updated = readFileSync(envPath, "utf8");
 updated = upsertEnv(updated, "BURSORA_API_KEY", plaintext);
-updated = upsertEnv(updated, "BURSORA_CRON_SECRET", CRON_SECRET);
 writeFileSync(envPath, updated);
 
 const extraEnvPath = process.env.BURSORA_DEV_KEY_SYNC_PATH;

@@ -46,7 +46,7 @@ export function WorkspaceHeader({
                 </>
             ) : (
                 <span className="flex-1 truncate text-sm text-muted-foreground">
-                    Select workspace
+                    {workspaces.length === 0 ? "No workspace yet" : "Select workspace"}
                 </span>
             )}
         </WorkspaceSwitcher>

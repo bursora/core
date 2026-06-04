@@ -34,6 +34,7 @@ export const PROVIDER_IDS = [
     "perplexity",
     "openrouter",
     "vercel",
+    "bedrock",
 ] as const;
 
 export type ProviderId = (typeof PROVIDER_IDS)[number];
@@ -51,6 +52,7 @@ const PROVIDER_LABELS: Readonly<Record<string, string>> = {
     perplexity: "Perplexity",
     openrouter: "OpenRouter",
     vercel: "Vercel AI Gateway",
+    bedrock: "Amazon Bedrock",
     // The Vercel AI SDK is an integration path, not a billed vendor — its events
     // tag the underlying model's provider. It carries a label + icon so it
     // renders as a provider in onboarding and on the landing, but stays out of

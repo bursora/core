@@ -26,7 +26,7 @@ import type { OnboardingPlanView } from "@/lib/onboarding/plan-view";
 import { Check, Loader2, Zap } from "lucide-react";
 import type { Route } from "next";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useTransition } from "react";
 
 interface PlanStepProps {
     readonly plan: OnboardingPlanView;
@@ -102,6 +102,7 @@ export function PlanStep({
     nextPath,
 }: PlanStepProps) {
     const router = useRouter();
+    const [refreshing, startRefresh] = useTransition();
     const poll = useSubscriptionPoll(awaitingActivation && !returnedActive);
     const active = returnedActive || poll.active;
 
@@ -154,8 +155,15 @@ export function PlanStep({
                             type="button"
                             variant="outline"
                             className="w-full sm:w-auto"
-                            onClick={() => router.refresh()}
+                            disabled={refreshing}
+                            onClick={() => startRefresh(() => router.refresh())}
                         >
+                            {refreshing ? (
+                                <Loader2
+                                    aria-hidden
+                                    className="animate-spin motion-reduce:animate-none"
+                                />
+                            ) : null}
                             Refresh
                         </Button>
                     ) : null}

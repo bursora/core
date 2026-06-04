@@ -1,8 +1,34 @@
+"use client";
+
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Download } from "lucide-react";
+import { Download, Loader2 } from "lucide-react";
+import { useTransition } from "react";
+import { toast } from "sonner";
 
 export function ExportDataCard() {
+    const [pending, startTransition] = useTransition();
+
+    function onDownload() {
+        startTransition(async () => {
+            try {
+                const res = await fetch("/api/internal/user/export");
+                if (!res.ok) {
+                    throw new Error(`Export failed (${res.status})`);
+                }
+                const blob = await res.blob();
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = "bursora-data-export.json";
+                a.click();
+                URL.revokeObjectURL(url);
+            } catch {
+                toast.error("Could not export your data. Try again.");
+            }
+        });
+    }
+
     return (
         <Card>
             <CardHeader>
@@ -14,11 +40,9 @@ export function ExportDataCard() {
                 </CardDescription>
             </CardHeader>
             <CardContent>
-                <Button asChild variant="outline">
-                    <a href="/api/internal/user/export" download>
-                        <Download />
-                        Download my data
-                    </a>
+                <Button variant="outline" onClick={onDownload} disabled={pending}>
+                    {pending ? <Loader2 className="animate-spin" aria-hidden /> : <Download />}
+                    Download my data
                 </Button>
             </CardContent>
         </Card>

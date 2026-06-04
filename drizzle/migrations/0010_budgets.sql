@@ -7,6 +7,7 @@ CREATE TABLE "budgets" (
 	"amount_usd" numeric(12, 4) NOT NULL,
 	"mode" text NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "budgets_scope_type_check" CHECK ("scope_type" IN ('workspace','tenant','agent','workflow')),
 	CONSTRAINT "budgets_period_check" CHECK ("period" IN ('daily','weekly','monthly')),
 	CONSTRAINT "budgets_mode_check" CHECK ("mode" IN ('notify','throttle','block'))

@@ -3,6 +3,7 @@ CREATE TABLE "workspace_members" (
 	"user_id" uuid NOT NULL,
 	"role" text DEFAULT 'member' NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "workspace_members_workspace_id_user_id_pk" PRIMARY KEY("workspace_id","user_id")
 );
 --> statement-breakpoint

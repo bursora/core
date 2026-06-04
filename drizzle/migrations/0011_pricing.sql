@@ -10,6 +10,7 @@ CREATE TABLE "pricing" (
 	"effective_from" timestamp with time zone NOT NULL,
 	"effective_to" timestamp with time zone,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "pricing_check" CHECK ("effective_to" IS NULL OR "effective_to" > "effective_from")
 );
 --> statement-breakpoint

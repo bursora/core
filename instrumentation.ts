@@ -16,6 +16,9 @@ export function register(): void {
             dsn,
             // Errors only. No performance tracing; keeps us inside the free tier.
             tracesSampleRate: 0,
+            // Bots POST malformed multipart bodies to 404 routes; Next's FormData
+            // parser throws on the missing boundary. Harmless scanner noise, drop it.
+            ignoreErrors: ["missing final boundary while parsing FormData"],
         });
     }
 

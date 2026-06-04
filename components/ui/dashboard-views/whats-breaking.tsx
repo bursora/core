@@ -156,14 +156,14 @@ function EtaPill({ row, tz }: { readonly row: WhatsBreakingRow; readonly tz: str
 function pillText(row: WhatsBreakingRow, tz: string): string {
     if (row.etaKind === "today") return "today";
     if (row.etaKind === "safe") return `safe · ${formatDate(row.periodEnd, tz).toLowerCase()}`;
-    const days = row.etaDays ?? 0;
+    const days = row.etaDays;
     return `${formatEtaHint(days)} · ${dateHint(days, tz)}`;
 }
 
 function pillTone(row: WhatsBreakingRow): keyof typeof ETA_PILL_TONE {
     if (row.etaKind === "safe") return "safe";
     if (row.etaKind === "today") return "destructive";
-    const days = row.etaDays ?? 0;
+    const days = row.etaDays;
     if (days < ETA_URGENT_DAYS) return "destructive";
     if (days <= ETA_SOON_DAYS) return "warning";
     return "safe";

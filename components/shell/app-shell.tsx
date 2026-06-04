@@ -24,6 +24,7 @@ import {
     SidebarTrigger,
 } from "@/components/ui/sidebar";
 import { requireSessionUI } from "@/lib/auth";
+import { env } from "@/lib/env";
 import { listWorkspacesForUser } from "@/lib/identity/workspaces-for-user";
 import { cookies } from "next/headers";
 import { Suspense, type ReactNode } from "react";
@@ -87,6 +88,7 @@ export async function AppShell({ children, urlWorkspaceId }: AppShellProps) {
                             userId={session.user.id}
                             name={session.user.name}
                             email={session.user.email}
+                            showBilling={env().IS_CLOUD}
                         />
                     </div>
                 </header>

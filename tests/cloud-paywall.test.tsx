@@ -10,18 +10,15 @@
  */
 
 import { CloudPaywall } from "@/components/ui/workspace/cloud-paywall";
-import { buildWorkspacePath } from "@/lib/routes";
 import { describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 
-const WORKSPACE_ID = "11111111-2222-3333-4444-555555555555";
 const FEATURES = ["Live spend by customer, agent, and model", "Hard budget limits"] as const;
 const noop = async () => undefined;
 
 function ownerMarkup(): string {
     return renderToStaticMarkup(
         <CloudPaywall
-            workspaceId={WORKSPACE_ID}
             isOwner
             price="$29"
             interval="month"
@@ -42,19 +39,15 @@ describe("CloudPaywall", () => {
         expect(html).toContain("Live spend by customer, agent, and model");
     });
 
-    test("owner gets a Manage billing link to settings", () => {
-        expect(ownerMarkup()).toContain(`href="${buildWorkspacePath(WORKSPACE_ID, "settings")}"`);
+    test("owner gets a Manage billing link to the account billing page", () => {
+        // Billing is account-level, so it lives on its own /billing route, not in
+        // workspace settings.
+        expect(ownerMarkup()).toContain(`href="/billing"`);
     });
 
     test("a non-owner is told to ask the owner, with no Subscribe CTA", () => {
         const html = renderToStaticMarkup(
-            <CloudPaywall
-                workspaceId={WORKSPACE_ID}
-                isOwner={false}
-                price="$29"
-                interval="month"
-                features={FEATURES}
-            />,
+            <CloudPaywall isOwner={false} price="$29" interval="month" features={FEATURES} />,
         );
         expect(html).toContain("Ask the workspace owner");
         expect(html).not.toContain("Subscribe to Cloud");
@@ -63,7 +56,6 @@ describe("CloudPaywall", () => {
     test("falls back to default bullets when none are supplied", () => {
         const html = renderToStaticMarkup(
             <CloudPaywall
-                workspaceId={WORKSPACE_ID}
                 isOwner
                 price="$29"
                 interval="month"

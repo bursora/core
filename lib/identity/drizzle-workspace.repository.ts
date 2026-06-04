@@ -1,7 +1,7 @@
 import "server-only";
 
 import type { Db } from "@/lib/db";
-import { schema } from "@/lib/db";
+import { requireInsertedRow, schema } from "@/lib/db";
 import { eq } from "drizzle-orm";
 import type { Workspace } from "./workspace";
 import type { WorkspaceCreateInput, WorkspaceRepository } from "./workspace.repository";
@@ -17,8 +17,7 @@ export class DrizzleWorkspaceRepository implements WorkspaceRepository {
                 ...(input.environment ? { environment: input.environment } : {}),
             })
             .returning();
-        if (!row) throw new Error("workspace insert returned no row");
-        return toDomain(row);
+        return toDomain(requireInsertedRow(row, "workspace"));
     }
 
     async findById(id: string): Promise<Workspace | null> {

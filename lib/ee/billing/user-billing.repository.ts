@@ -39,5 +39,6 @@ export interface UserBillingUpsert {
 export interface UserBillingRepository {
     findByUserId(userId: string): Promise<UserBillingRecord | null>;
     findByProviderCustomerId(customerId: string): Promise<UserBillingRecord | null>;
+    findByProviderSubscriptionId(subscriptionId: string): Promise<UserBillingRecord | null>;
     upsert(input: UserBillingUpsert): Promise<void>;
 }

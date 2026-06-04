@@ -92,8 +92,13 @@ export const verification = pgTable("verification", {
 // verbatim (e.g. `active`, `past_due`, `cancelled`, `expired`).
 // `subscribed_at` is set the first time Checkout completes.
 // `refund_eligible_until` is signup + 30 days — used by the UI to surface the
-// money-back window. `provider_customer_id` is uniquely indexed so a provider
-// webhook can reverse-resolve the user from its customer id.
+// money-back window.
+//
+// `provider_subscription_id` is uniquely indexed: a provider subscription maps
+// to exactly one Bursora user, so webhooks reverse-resolve the user from it.
+// `provider_customer_id` is NOT unique — one provider customer (a single
+// billing email) can back several Bursora accounts the same person owns — so
+// it carries a plain index used only to open that customer's billing portal.
 export const userSubscriptions = pgTable(
     "user_subscriptions",
     {
@@ -106,7 +111,10 @@ export const userSubscriptions = pgTable(
         subscribedAt: timestamp("subscribed_at", { withTimezone: true }),
         refundEligibleUntil: timestamp("refund_eligible_until", { withTimezone: true }),
     },
-    (t) => [uniqueIndex("user_subscriptions_provider_customer_idx").on(t.providerCustomerId)],
+    (t) => [
+        index("user_subscriptions_provider_customer_idx").on(t.providerCustomerId),
+        uniqueIndex("user_subscriptions_provider_subscription_idx").on(t.providerSubscriptionId),
+    ],
 );
 
 // --- workspaces ---------------------------------------------------------------

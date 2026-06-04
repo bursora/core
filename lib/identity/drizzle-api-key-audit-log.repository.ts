@@ -1,7 +1,7 @@
 import "server-only";
 
 import type { Db } from "@/lib/db";
-import { schema } from "@/lib/db";
+import { requireInsertedRow, schema } from "@/lib/db";
 import type {
     ApiKeyAuditLogEntry,
     ApiKeyAuditLogRepository,
@@ -24,17 +24,16 @@ export class DrizzleApiKeyAuditLogRepository implements ApiKeyAuditLogRepository
             })
             .returning();
 
-        if (!row) throw new Error("api_key_audit_log insert returned no row");
-
+        const inserted = requireInsertedRow(row, "api_key_audit_log");
         return {
-            id: row.id,
-            workspaceId: row.workspaceId,
-            apiKeyId: row.apiKeyId,
-            userId: row.userId,
-            action: row.action as ApiKeyAuditLogEntry["action"],
-            metadata: (row.metadata as Record<string, unknown> | null) ?? null,
-            ip: row.ip,
-            ts: row.ts,
+            id: inserted.id,
+            workspaceId: inserted.workspaceId,
+            apiKeyId: inserted.apiKeyId,
+            userId: inserted.userId,
+            action: inserted.action as ApiKeyAuditLogEntry["action"],
+            metadata: (inserted.metadata as Record<string, unknown> | null) ?? null,
+            ip: inserted.ip,
+            ts: inserted.ts,
         };
     }
 }

@@ -7,13 +7,7 @@ import { describe, expect, test } from "bun:test";
 
 describe("SETTINGS_TABS", () => {
     test("canonical order", () => {
-        expect([...SETTINGS_TABS]).toEqual([
-            "general",
-            "billing",
-            "pricing",
-            "channels",
-            "activity",
-        ]);
+        expect([...SETTINGS_TABS]).toEqual(["general", "usage", "pricing", "channels", "activity"]);
     });
 
     test("labels the activity tab 'Activity log'", () => {

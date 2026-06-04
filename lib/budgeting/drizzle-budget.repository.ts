@@ -13,7 +13,7 @@
 import "server-only";
 
 import type { Db } from "@/lib/db";
-import { schema } from "@/lib/db";
+import { requireInsertedRow, schema } from "@/lib/db";
 import { and, desc, eq, isNull, or, type SQL } from "drizzle-orm";
 import type { BudgetMode, ScopeType } from "./budget";
 import type {
@@ -115,8 +115,7 @@ export class DrizzleBudgetRepository implements BudgetRepository {
                 mode: input.mode,
             })
             .returning();
-        if (!row) throw new Error("budget insert returned no row");
-        const mapped = toRawBudget(row);
+        const mapped = toRawBudget(requireInsertedRow(row, "budget"));
         if (mapped === null) throw new Error("budget insert produced unmappable row");
         return mapped;
     }

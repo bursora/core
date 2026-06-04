@@ -18,9 +18,8 @@
  *   - `components/ui/**`: shadcn primitives use upstream conventions
  *     (`bg-black/50` overlays, `text-white` on `bg-destructive` variants).
  *     Per-surface audits already cover the surface code that consumes
- *     these primitives.
- *   - `components/icons/brand-logos.tsx`: third-party brand-mark hex
- *     colors sourced from each service's brand guidelines.
+ *     these primitives. Also home to `brand/*` brand-mark SVGs whose hex
+ *     colors are sourced from each service's brand guidelines.
  *   - Status-badge files: emerald/amber/rose ramps paired with `dark:`
  *     variants on a per-status basis. These are NOT in the forbidden
  *     ramp list, so no allow-list entry is needed.
@@ -41,9 +40,9 @@ const SCAN_ROOTS = ["app/(dashboard)", "components"] as const;
 const ALLOW_LISTED_PREFIXES = [
     // shadcn primitives: upstream conventions (overlay `bg-black/50`,
     // `text-white` on destructive). Per-surface audits cover consumers.
+    // Also covers `components/ui/brand/*` brand marks whose hex colors
+    // come from each service's brand guidelines.
     "components/ui/",
-    // Third-party brand-mark hex colors per service guidelines.
-    "lib/icons/brand-logos.tsx",
 ] as const;
 
 const COLOR_UTILITIES = [

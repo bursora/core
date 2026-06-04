@@ -9,6 +9,7 @@
 import "server-only";
 
 import type { Db } from "@/lib/db";
+import { requireInsertedRow } from "@/lib/db";
 import { pricing } from "@/lib/db/schema";
 import { and, desc, eq, isNull, or } from "drizzle-orm";
 import type { NewPricingRow, PricingRepository, PricingRow } from "./pricing-row";
@@ -100,10 +101,7 @@ export const drizzlePricingRepository = (db: Db): PricingRepository => ({
                 effectiveTo,
             })
             .returning();
-        if (!inserted) {
-            throw new Error("pricing override insert returned no row");
-        }
-        return mapRow(inserted);
+        return mapRow(requireInsertedRow(inserted, "pricing override"));
     },
 
     listOverridesByWorkspace: async (workspaceId) => {

@@ -16,11 +16,13 @@
  * still claim a refund on the charges they already paid.
  */
 
-import { Button } from "@/components/ui/button";
+import { SubmitButton } from "@/components/ui/submit-button";
 import { DashboardSection } from "@/components/ui/workspace/dashboard-section";
 import { StatusTag, type StatusTagTone } from "@/components/ui/workspace/status-tag";
 import { isActiveSubscriptionStatus } from "@/lib/billing-status";
+import { getOnboardingPlan } from "@/lib/onboarding/plan-view";
 import { getRequestTimeZone } from "@/lib/time/request-tz";
+import { Check, Zap } from "lucide-react";
 import type { ReactNode } from "react";
 import { createCheckoutAction, openPortalAction } from "../billing-actions";
 import { getUserBillingRecord } from "../billing/server";
@@ -43,7 +45,7 @@ const STATUS_PILL: Record<string, { label: string; tone: StatusTagTone }> = {
 const INACTIVE_PILL = { label: "Inactive", tone: "muted" } as const;
 
 export async function BillingSection({ userId, status, children }: BillingSectionProps) {
-    const record = await getUserBillingRecord(userId);
+    const [record, plan] = await Promise.all([getUserBillingRecord(userId), getOnboardingPlan()]);
     // Portal button: show whenever the user has a provider customer on file,
     // even if the subscription is cancelled. Lemon Squeezy's portal lets the
     // user see invoices and re-subscribe, so the entry point is useful beyond
@@ -66,41 +68,77 @@ export async function BillingSection({ userId, status, children }: BillingSectio
         <div className="space-y-6">
             {isPastDue ? <PastDueBanner /> : null}
             <DashboardSection label="Billing">
-                <div className="rounded-md border border-border bg-muted/30 p-4">
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                        <div className="space-y-1.5">
-                            <div className="flex items-center gap-2">
-                                <h3 className="text-base font-semibold tracking-[-0.01em]">
-                                    Bursora Cloud
-                                </h3>
-                                <StatusTag tone={pill.tone} variant="pill">
-                                    {pill.label}
-                                </StatusTag>
+                {plan || hasProviderCustomer ? (
+                    <div className="rounded-[8px] border bg-background p-4 shadow-sm">
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                            <div className="space-y-1.5">
+                                <div className="flex items-center gap-2">
+                                    <h3 className="text-base font-semibold tracking-[-0.01em]">
+                                        {plan?.name ?? "Bursora Cloud"}
+                                    </h3>
+                                    <StatusTag tone={pill.tone} variant="pill">
+                                        {pill.label}
+                                    </StatusTag>
+                                </div>
+                                {plan ? (
+                                    <p className="flex items-baseline gap-1.5">
+                                        <span className="text-2xl font-semibold tabular-nums">
+                                            {plan.price}
+                                        </span>
+                                        <span className="text-sm text-muted-foreground">
+                                            / {plan.interval}
+                                        </span>
+                                    </p>
+                                ) : null}
                             </div>
-                            <p className="font-mono text-sm tabular-nums">
-                                <span className="font-semibold">$29</span>
-                                <span className="text-muted-foreground"> / month</span>
-                            </p>
+                            <div className="flex flex-wrap items-center gap-2">
+                                {hasProviderCustomer ? (
+                                    <form action={openPortalAction}>
+                                        <SubmitButton pendingLabel="Opening portal…">
+                                            Manage billing
+                                        </SubmitButton>
+                                    </form>
+                                ) : null}
+                                {!hasActiveSubscription ? (
+                                    <form action={createCheckoutAction}>
+                                        <SubmitButton pendingLabel="Opening checkout…">
+                                            Upgrade to Bursora cloud
+                                        </SubmitButton>
+                                    </form>
+                                ) : null}
+                            </div>
                         </div>
-                        <div className="flex flex-wrap items-center gap-2">
-                            {hasProviderCustomer ? (
-                                <form action={openPortalAction}>
-                                    <Button type="submit">Manage billing</Button>
-                                </form>
-                            ) : null}
-                            {!hasActiveSubscription ? (
-                                <form action={createCheckoutAction}>
-                                    <Button type="submit">Upgrade to Bursora cloud</Button>
-                                </form>
-                            ) : null}
-                        </div>
+                        <p className="mt-3 text-sm text-muted-foreground">
+                            {hasActiveSubscription
+                                ? "Managed enforcement, alerts, and dashboards. Update payment, view invoices, or cancel anytime from the billing portal."
+                                : "Managed enforcement, alerts, and dashboards for your whole team. One flat price, cancel anytime."}
+                        </p>
+                        {!hasActiveSubscription ? (
+                            <div className="mt-4 flex items-center gap-2 rounded-[8px] border border-success/25 bg-success/[0.06] px-3 py-2.5">
+                                <Zap className="size-3.5 shrink-0 text-success" strokeWidth={2.4} />
+                                <span className="font-mono text-[12px] leading-snug text-foreground/80">
+                                    Pays for itself the first night it blocks a runaway.
+                                </span>
+                            </div>
+                        ) : null}
+                        {plan && plan.features.length > 0 ? (
+                            <ul className="mt-4 flex flex-col gap-2">
+                                {plan.features.map((feature) => (
+                                    <li
+                                        key={feature}
+                                        className="flex items-start gap-2 text-sm text-foreground/90"
+                                    >
+                                        <Check
+                                            aria-hidden
+                                            className="mt-0.5 size-4 shrink-0 text-success"
+                                        />
+                                        {feature}
+                                    </li>
+                                ))}
+                            </ul>
+                        ) : null}
                     </div>
-                    <p className="mt-3 text-sm text-muted-foreground">
-                        {hasActiveSubscription
-                            ? "Managed enforcement, alerts, and dashboards. Update payment, view invoices, or cancel anytime from the billing portal."
-                            : "Managed enforcement, alerts, and dashboards for your whole team. One flat price, cancel anytime."}
-                    </p>
-                </div>
+                ) : null}
                 {status === "ok" ? (
                     <p className="mt-3 text-sm text-success">Subscription updated.</p>
                 ) : null}

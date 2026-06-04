@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { UserAvatar } from "@/components/ui/user-avatar";
 import { authClient } from "@/lib/auth-client";
-import { LogOut, UserCircle } from "lucide-react";
+import { CreditCard, LogOut, UserCircle } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -19,9 +19,11 @@ interface UserMenuProps {
     userId: string;
     name: string;
     email: string;
+    /** Cloud only: surfaces the account billing entry (hidden on self-host). */
+    showBilling?: boolean;
 }
 
-export function UserMenu({ userId, name, email }: UserMenuProps) {
+export function UserMenu({ userId, name, email, showBilling }: UserMenuProps) {
     const router = useRouter();
     const [signingOut, setSigningOut] = useState(false);
 
@@ -61,6 +63,13 @@ export function UserMenu({ userId, name, email }: UserMenuProps) {
                         <UserCircle className="mr-2 h-4 w-4" /> Profile
                     </Link>
                 </DropdownMenuItem>
+                {showBilling ? (
+                    <DropdownMenuItem asChild>
+                        <Link href="/billing">
+                            <CreditCard className="mr-2 h-4 w-4" /> Billing
+                        </Link>
+                    </DropdownMenuItem>
+                ) : null}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem disabled={signingOut} onSelect={handleSignOut}>
                     <LogOut className="mr-2 h-4 w-4" /> Sign out

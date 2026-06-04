@@ -39,17 +39,25 @@ export class InMemoryUserBillingRepository implements UserBillingRepository {
         return null;
     }
 
+    async findByProviderSubscriptionId(subscriptionId: string): Promise<UserBillingRecord | null> {
+        for (const row of this.rows.values()) {
+            if (row.providerSubscriptionId === subscriptionId) return { ...row };
+        }
+        return null;
+    }
+
     async upsert(input: UserBillingUpsert): Promise<void> {
-        // Mirror the unique(provider_customer_id) index: a concrete customer id
-        // written here is detached from any other user's row first, so the id
-        // only ever resolves to one user.
-        if (input.providerCustomerId != null) {
+        // Mirror the unique(provider_subscription_id) index: a concrete
+        // subscription id written here is detached from any other user's row
+        // first, so the id only ever resolves to one user. Customer ids are
+        // shared across a person's accounts, so they are never detached.
+        if (input.providerSubscriptionId != null) {
             for (const [userId, row] of this.rows) {
                 if (
                     userId !== input.userId &&
-                    row.providerCustomerId === input.providerCustomerId
+                    row.providerSubscriptionId === input.providerSubscriptionId
                 ) {
-                    this.rows.set(userId, { ...row, providerCustomerId: null });
+                    this.rows.set(userId, { ...row, providerSubscriptionId: null });
                 }
             }
         }

@@ -1,7 +1,7 @@
 import "server-only";
 
 import type { Db } from "@/lib/db";
-import { schema } from "@/lib/db";
+import { requireInsertedRow, schema } from "@/lib/db";
 import { and, asc, count, desc, eq, gt, isNull } from "drizzle-orm";
 import type { Invite, MemberRole, WorkspaceMember } from "./member";
 import type { InviteRepository, MemberListRow, MemberRepository } from "./member.repository";
@@ -23,8 +23,7 @@ export class DrizzleMemberRepository implements MemberRepository {
                 role: input.role,
             })
             .returning();
-        if (!row) throw new Error("member insert returned no row");
-        return toMember(row);
+        return toMember(requireInsertedRow(row, "member"));
     }
 
     async findMembership(workspaceId: string, userId: string): Promise<WorkspaceMember | null> {
@@ -59,7 +58,7 @@ export class DrizzleMemberRepository implements MemberRepository {
             workspaceId: row.workspaceId,
             userId: row.userId,
             email: row.email,
-            role: row.role === "owner" ? "owner" : "member",
+            role: toMemberRole(row.role),
             createdAt: row.createdAt,
         }));
     }
@@ -126,11 +125,16 @@ export class DrizzleMemberRepository implements MemberRepository {
 
 type MemberRow = typeof schema.workspaceMembers.$inferSelect;
 
+// `role` is a text column; narrow it to the member-role union at the boundary.
+function toMemberRole(raw: string): MemberRole {
+    return raw === "owner" ? "owner" : "member";
+}
+
 function toMember(row: MemberRow): WorkspaceMember {
     return {
         workspaceId: row.workspaceId,
         userId: row.userId,
-        role: row.role === "owner" ? "owner" : "member",
+        role: toMemberRole(row.role),
         createdAt: row.createdAt,
     };
 }
@@ -157,8 +161,7 @@ export class DrizzleInviteRepository implements InviteRepository {
                 expiresAt: input.expiresAt,
             })
             .returning();
-        if (!row) throw new Error("invite insert returned no row");
-        return toInvite(row);
+        return toInvite(requireInsertedRow(row, "invite"));
     }
 
     async findByToken(token: string): Promise<Invite | null> {
@@ -242,7 +245,7 @@ function toInvite(row: InviteRow): Invite {
         workspaceId: row.workspaceId,
         email: row.email,
         invitedBy: row.invitedBy,
-        role: row.role === "owner" ? "owner" : "member",
+        role: toMemberRole(row.role),
         createdAt: row.createdAt,
         acceptedAt: row.acceptedAt,
         expiresAt: row.expiresAt,

@@ -76,24 +76,53 @@ describe("UserBillingRepository", () => {
         expect(await repo.findByProviderCustomerId("cus_absent")).toBeNull();
     });
 
-    test("claiming a customer id held by another user transfers it instead of failing", async () => {
+    test("findByProviderSubscriptionId reverse-resolves the owning user", async () => {
         const repo = new InMemoryUserBillingRepository();
+        await repo.upsert({ userId: OTHER_USER_ID, providerSubscriptionId: "sub_other" });
+        await repo.upsert({ userId: USER_ID, providerSubscriptionId: "sub_target" });
+
+        expect((await repo.findByProviderSubscriptionId("sub_target"))?.userId).toBe(USER_ID);
+    });
+
+    test("a customer id is shared across a person's accounts, not detached", async () => {
+        const repo = new InMemoryUserBillingRepository();
+        // One billing customer backs two accounts the same person owns; each has
+        // its own subscription.
         await repo.upsert({
             userId: OTHER_USER_ID,
             providerCustomerId: "cus_shared",
+            providerSubscriptionId: "sub_a",
             subscriptionStatus: "active",
         });
-
-        // A fresh user re-runs checkout against the same provider customer.
         await repo.upsert({
             userId: USER_ID,
             providerCustomerId: "cus_shared",
+            providerSubscriptionId: "sub_b",
             subscriptionStatus: "active",
         });
 
-        // The id now resolves only to the new claimant; the stale row is detached.
-        expect((await repo.findByProviderCustomerId("cus_shared"))?.userId).toBe(USER_ID);
+        // Both rows keep the customer id — it is not stolen by the newer write.
+        expect((await repo.findByUserId(OTHER_USER_ID))?.providerCustomerId).toBe("cus_shared");
         expect((await repo.findByUserId(USER_ID))?.providerCustomerId).toBe("cus_shared");
-        expect((await repo.findByUserId(OTHER_USER_ID))?.providerCustomerId).toBeNull();
+    });
+
+    test("claiming a subscription id held by another user transfers it instead of failing", async () => {
+        const repo = new InMemoryUserBillingRepository();
+        await repo.upsert({
+            userId: OTHER_USER_ID,
+            providerSubscriptionId: "sub_shared",
+            subscriptionStatus: "active",
+        });
+
+        await repo.upsert({
+            userId: USER_ID,
+            providerSubscriptionId: "sub_shared",
+            subscriptionStatus: "active",
+        });
+
+        // The id resolves only to the new claimant; the stale row is detached.
+        expect((await repo.findByProviderSubscriptionId("sub_shared"))?.userId).toBe(USER_ID);
+        expect((await repo.findByUserId(USER_ID))?.providerSubscriptionId).toBe("sub_shared");
+        expect((await repo.findByUserId(OTHER_USER_ID))?.providerSubscriptionId).toBeNull();
     });
 });

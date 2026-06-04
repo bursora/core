@@ -1,7 +1,7 @@
 import "server-only";
 
 import type { Db } from "@/lib/db";
-import { schema } from "@/lib/db";
+import { requireInsertedRow, schema } from "@/lib/db";
 import { and, desc, eq, isNull } from "drizzle-orm";
 import type { ApiKey, ApiKeySeal } from "./api-key";
 import type { ApiKeyRepository } from "./api-key.repository";
@@ -30,8 +30,7 @@ export class DrizzleApiKeyRepository implements ApiKeyRepository {
                 scopes: [...input.scopes],
             })
             .returning();
-        if (!row) throw new Error("api_key insert returned no row");
-        return toApiKey(row);
+        return toApiKey(requireInsertedRow(row, "api_key"));
     }
 
     async findByHash(keyHash: string): Promise<ApiKey | null> {

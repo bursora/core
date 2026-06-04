@@ -23,7 +23,7 @@ export async function CloudPaywallPage({ workspaceId, title, subtitle }: CloudPa
     return (
         <section className="flex flex-col gap-6">
             <PageHeader title={title} {...(subtitle !== undefined ? { subtitle } : {})} />
-            <CloudPaywall workspaceId={workspaceId} {...paywall} />
+            <CloudPaywall {...paywall} />
         </section>
     );
 }

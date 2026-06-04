@@ -21,3 +21,19 @@ export function assertEffectiveWindow(effectiveFrom: Date, effectiveTo: Date | n
         throw new Error("effectiveTo must be strictly after effectiveFrom");
     }
 }
+
+/** Full validation shared by the create and update override write paths. */
+export function assertPricingInput(input: {
+    readonly inputPer1mUsd: string;
+    readonly outputPer1mUsd: string;
+    readonly cachePer1mUsd: string | null;
+    readonly effectiveFrom: Date;
+    readonly effectiveTo: Date | null;
+}): void {
+    assertNonNegativeRate("inputPer1mUsd", input.inputPer1mUsd);
+    assertNonNegativeRate("outputPer1mUsd", input.outputPer1mUsd);
+    if (input.cachePer1mUsd !== null) {
+        assertNonNegativeRate("cachePer1mUsd", input.cachePer1mUsd);
+    }
+    assertEffectiveWindow(input.effectiveFrom, input.effectiveTo);
+}

@@ -127,6 +127,20 @@ export function defaultSmtpMailer(opts?: {
     return mailer;
 }
 
+/** Render an email node to HTML + plain text and hand it to the mailer. */
+async function renderAndSend(input: {
+    readonly mailer: Mailer;
+    readonly to: string;
+    readonly subject: string;
+    readonly node: Parameters<typeof render>[0];
+}): Promise<void> {
+    const [html, text] = await Promise.all([
+        render(input.node),
+        render(input.node, { plainText: true }),
+    ]);
+    await input.mailer.send({ to: input.to, subject: input.subject, html, text });
+}
+
 export interface SendMagicLinkInput {
     readonly mailer: Mailer;
     readonly email: string;
@@ -134,13 +148,11 @@ export interface SendMagicLinkInput {
 }
 
 export async function sendMagicLinkEmail(input: SendMagicLinkInput): Promise<void> {
-    const node = MagicLinkEmail({ url: input.url });
-    const [html, text] = await Promise.all([render(node), render(node, { plainText: true })]);
-    await input.mailer.send({
+    await renderAndSend({
+        mailer: input.mailer,
         to: input.email,
         subject: "Sign in to Bursora",
-        html,
-        text,
+        node: MagicLinkEmail({ url: input.url }),
     });
 }
 
@@ -158,12 +170,11 @@ export async function sendInviteEmail(input: SendInviteInput): Promise<void> {
             ? { acceptUrl: input.acceptUrl, expiresAt: input.expiresAt, token: input.token }
             : { acceptUrl: input.acceptUrl, expiresAt: input.expiresAt },
     );
-    const [html, text] = await Promise.all([render(node), render(node, { plainText: true })]);
-    await input.mailer.send({
+    await renderAndSend({
+        mailer: input.mailer,
         to: input.email,
         subject: "You're invited to a Bursora workspace",
-        html,
-        text,
+        node,
     });
 }
 
@@ -176,14 +187,12 @@ export interface SendAlertInput {
 
 export async function sendAlertEmail(input: SendAlertInput): Promise<void> {
     const renderOptions = input.renderOptions ?? {};
-    const node = AlertEmail({ event: input.event, renderOptions });
-    const [html, text] = await Promise.all([render(node), render(node, { plainText: true })]);
     const { subject } = renderEmailPayload(input.event, renderOptions);
-    await input.mailer.send({
+    await renderAndSend({
+        mailer: input.mailer,
         to: input.email,
         subject,
-        html,
-        text,
+        node: AlertEmail({ event: input.event, renderOptions }),
     });
 }
 

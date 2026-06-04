@@ -9,6 +9,7 @@ import { ThemeToggle } from "@/components/shell/theme-toggle";
 import { UserMenu } from "@/components/shell/user-menu";
 import { Logo } from "@/components/ui/brand/logo";
 import { requireSessionUI } from "@/lib/auth";
+import { env } from "@/lib/env";
 import type { ReactNode } from "react";
 
 export async function OnboardingShell({ children }: { readonly children: ReactNode }) {
@@ -26,6 +27,7 @@ export async function OnboardingShell({ children }: { readonly children: ReactNo
                         userId={session.user.id}
                         name={session.user.name}
                         email={session.user.email}
+                        showBilling={env().IS_CLOUD}
                     />
                 </div>
             </header>

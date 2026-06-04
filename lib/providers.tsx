@@ -1,20 +1,18 @@
+import { AnthropicLogo } from "@/components/ui/brand/anthropic-logo";
+import { DeepSeekLogo } from "@/components/ui/brand/deepseek-logo";
+import { FireworksLogo } from "@/components/ui/brand/fireworks-logo";
+import { GoogleLogo } from "@/components/ui/brand/google-logo";
+import { GroqLogo } from "@/components/ui/brand/groq-logo";
+import { MistralLogo } from "@/components/ui/brand/mistral-logo";
+import { OpenAILogo } from "@/components/ui/brand/openai-logo";
+import { OpenRouterLogo } from "@/components/ui/brand/openrouter-logo";
+import { PerplexityLogo } from "@/components/ui/brand/perplexity-logo";
+import { TogetherLogo } from "@/components/ui/brand/together-logo";
+import { VercelLogo } from "@/components/ui/brand/vercel-logo";
+import { XaiLogo } from "@/components/ui/brand/xai-logo";
 import { Server } from "lucide-react";
 import type { ReactNode } from "react";
 import type { FacetedFilterOption } from "./filter-option";
-import {
-    AnthropicLogo,
-    DeepSeekLogo,
-    FireworksLogo,
-    GoogleLogo,
-    GroqLogo,
-    MistralLogo,
-    OpenAILogo,
-    OpenRouterLogo,
-    PerplexityLogo,
-    TogetherLogo,
-    VercelLogo,
-    XaiLogo,
-} from "./icons/brand-logos";
 
 /**
  * Canonical provider ids, in display order. The set Bursora detects (SDK

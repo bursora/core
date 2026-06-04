@@ -11,7 +11,7 @@
  */
 
 import type { PricingRepository, PricingRow } from "./pricing-row";
-import { assertEffectiveWindow, assertNonNegativeRate } from "./validate-pricing-input";
+import { assertPricingInput } from "./validate-pricing-input";
 
 export interface CreatePricingOverrideInput {
     readonly pricing: PricingRepository;
@@ -29,12 +29,7 @@ export interface CreatePricingOverrideInput {
 export async function createPricingOverride(
     input: CreatePricingOverrideInput,
 ): Promise<PricingRow> {
-    assertNonNegativeRate("inputPer1mUsd", input.inputPer1mUsd);
-    assertNonNegativeRate("outputPer1mUsd", input.outputPer1mUsd);
-    if (input.cachePer1mUsd !== null) {
-        assertNonNegativeRate("cachePer1mUsd", input.cachePer1mUsd);
-    }
-    assertEffectiveWindow(input.effectiveFrom, input.effectiveTo);
+    assertPricingInput(input);
 
     return input.pricing.insertOverride({
         workspaceId: input.workspaceId,

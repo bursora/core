@@ -22,7 +22,7 @@ interface RunwayProjectionProps {
 
 export async function RunwayProjection({ workspaceId }: RunwayProjectionProps) {
     const now = new Date();
-    const [projection, cap] = await Promise.all([
+    const [projection, capUsd] = await Promise.all([
         getProjectedEom({ workspaceId, now }),
         getMonthlySpendCap(workspaceId),
     ]);
@@ -31,14 +31,16 @@ export async function RunwayProjection({ workspaceId }: RunwayProjectionProps) {
     const vsLastMonth = hasPriorMonth
         ? computeDelta(projection.projected, projection.priorMonth)
         : null;
-    const capRatio = cap !== null && cap > 0 ? projection.projected / cap : null;
+    const cap =
+        capUsd !== null && capUsd > 0
+            ? { usd: capUsd, ratio: projection.projected / capUsd }
+            : null;
 
     return (
         <RunwayProjectionView
             projected={projection.projected}
             vsLastMonth={vsLastMonth}
             cap={cap}
-            capRatio={capRatio}
             confidence={confidenceLabel(projection.daysElapsed)}
         />
     );

@@ -23,7 +23,7 @@ import { Button } from "@/components/ui/button";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { StatusTag } from "@/components/ui/workspace/status-tag";
 import type { OnboardingPlanView } from "@/lib/onboarding/plan-view";
-import { Check, Loader2 } from "lucide-react";
+import { Check, Loader2, Zap } from "lucide-react";
 import type { Route } from "next";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -165,13 +165,13 @@ export function PlanStep({
     }
 
     return (
-        <section className="rounded-[8px] border border-border bg-background p-6">
+        <section className="rounded-[8px] border bg-background p-6 shadow-sm">
             <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="space-y-1">
                     <h2 className="text-base font-semibold tracking-[-0.01em]">{plan.name}</h2>
-                    <p className="font-mono text-sm tabular-nums">
-                        <span className="font-semibold">{plan.price}</span>
-                        <span className="text-muted-foreground"> / {plan.interval}</span>
+                    <p className="flex items-baseline gap-1.5">
+                        <span className="text-2xl font-semibold tabular-nums">{plan.price}</span>
+                        <span className="text-sm text-muted-foreground">/ {plan.interval}</span>
                     </p>
                 </div>
                 <StatusTag tone="muted" variant="pill">
@@ -179,14 +179,21 @@ export function PlanStep({
                 </StatusTag>
             </div>
 
+            <div className="mt-4 flex items-center gap-2 rounded-[8px] border border-success/25 bg-success/[0.06] px-3 py-2.5">
+                <Zap className="size-3.5 shrink-0 text-success" strokeWidth={2.4} />
+                <span className="font-mono text-[12px] leading-snug text-foreground/80">
+                    Pays for itself the first night it blocks a runaway.
+                </span>
+            </div>
+
             {plan.features.length > 0 ? (
                 <ul className="mt-4 space-y-2">
                     {plan.features.map((feature) => (
                         <li
                             key={feature}
-                            className="flex items-center gap-2 text-sm text-muted-foreground"
+                            className="flex items-start gap-2 text-sm text-foreground/90"
                         >
-                            <Check aria-hidden className="size-4 shrink-0 text-success" />
+                            <Check aria-hidden className="mt-0.5 size-4 shrink-0 text-success" />
                             {feature}
                         </li>
                     ))}

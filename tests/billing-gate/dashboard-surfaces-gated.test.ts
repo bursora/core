@@ -30,8 +30,6 @@ const GATED_PAGES: string[] = [
     join(WORKSPACE_DIR, "budgets", "page.tsx"),
     join(WORKSPACE_DIR, "budgets", "[budgetId]", "page.tsx"),
     join(WORKSPACE_DIR, "alerts", "page.tsx"),
-    join(WORKSPACE_DIR, "keys", "page.tsx"),
-    join(WORKSPACE_DIR, "members", "page.tsx"),
 ];
 
 // First real data read in each page. The gate must appear before this token so
@@ -42,8 +40,6 @@ const FIRST_DATA_FETCH: Record<string, string> = {
     "budgets/page.tsx": "listBudgets(",
     "budgets/[budgetId]/page.tsx": "getBudget(",
     "alerts/page.tsx": "listDistinctMeteringValuesBulk(",
-    "keys/page.tsx": "readIssuedKey(",
-    "members/page.tsx": "listWorkspaceMembers(",
 };
 
 const read = (path: string): string => readFileSync(path, "utf8");
@@ -94,13 +90,11 @@ describe("CloudPaywallPage hands the blur view the workspace id + resolved paywa
         const src = read(join(WORKSPACE_DIR, "_components", "cloud-paywall-page.tsx"));
         // CloudPaywallPage resolves owner + plan (price, bullets, checkout) in
         // resolveCloudPaywallData and spreads them into the blur view.
-        expect(src).toMatch(
-            /<CloudPaywall\s+workspaceId=\{workspaceId\}\s+\{\.\.\.paywall\}\s*\/>/,
-        );
+        expect(src).toMatch(/<CloudPaywall\s+\{\.\.\.paywall\}\s*\/>/);
     });
 });
 
-describe("settings: activity gated, billing reachable when locked", () => {
+describe("settings: activity gated when locked", () => {
     const src = read(join(WORKSPACE_DIR, "settings", "page.tsx"));
 
     test("the activity log tab is paywalled when locked", () => {
@@ -109,9 +103,15 @@ describe("settings: activity gated, billing reachable when locked", () => {
         expect(src).toContain("cloudWorkspaceLocked");
         expect(src).toMatch(/activity:\s*locked\s*&&\s*paywall\s*\?/);
     });
+});
 
-    test("billing stays reachable so a locked user can subscribe", () => {
-        // Billing must render whenever cloud, never behind the `locked` gate.
+describe("billing reachable when locked so a user can subscribe", () => {
+    // Billing is account-level, so it lives on its own /billing route — never
+    // behind the workspace lock. A locked user reaches it to subscribe
+    // regardless of any single workspace's state.
+    const src = read(join(REPO_ROOT, "app", "(dashboard)", "billing", "page.tsx"));
+
+    test("the billing page renders the account billing section", () => {
         expect(src).toContain("BillingSection");
     });
 });
@@ -120,7 +120,10 @@ describe("every workspace page is gated unless allowlisted (fail-closed)", () =>
     // Coverage guard: a new page added under the workspace dir without the gate
     // must FAIL here rather than silently shipping un-paywalled. The explicit
     // allowlist is the only escape hatch, so ungating is a deliberate edit.
-    const UNGATED = new Set(["settings/page.tsx"]);
+    // Settings stays reachable so a locked user can subscribe; API keys and
+    // members stay reachable so a lapsed workspace can still rotate its keys and
+    // manage who has access.
+    const UNGATED = new Set(["settings/page.tsx", "keys/page.tsx", "members/page.tsx"]);
 
     const pageFiles = readdirSync(WORKSPACE_DIR, { recursive: true })
         .map((p) => String(p).split("\\").join("/"))

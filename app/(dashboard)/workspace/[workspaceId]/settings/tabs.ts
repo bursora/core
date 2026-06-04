@@ -4,12 +4,12 @@
  * pulling the client-only TabsClient module across the RSC boundary.
  */
 
-export const SETTINGS_TABS = ["general", "billing", "pricing", "channels", "activity"] as const;
+export const SETTINGS_TABS = ["general", "usage", "pricing", "channels", "activity"] as const;
 export type SettingsTab = (typeof SETTINGS_TABS)[number];
 
 export const SETTINGS_TAB_LABELS: Record<SettingsTab, string> = {
     general: "General",
-    billing: "Billing",
+    usage: "Usage",
     pricing: "Pricing overrides",
     channels: "Alert channels",
     activity: "Activity log",

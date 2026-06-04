@@ -6,7 +6,7 @@
  */
 
 import type { PricingRepository, PricingRow } from "./pricing-row";
-import { assertEffectiveWindow, assertNonNegativeRate } from "./validate-pricing-input";
+import { assertPricingInput } from "./validate-pricing-input";
 
 export interface UpdatePricingOverrideInput {
     readonly pricing: PricingRepository;
@@ -25,12 +25,7 @@ export interface UpdatePricingOverrideInput {
 export async function updatePricingOverride(
     input: UpdatePricingOverrideInput,
 ): Promise<PricingRow> {
-    assertNonNegativeRate("inputPer1mUsd", input.inputPer1mUsd);
-    assertNonNegativeRate("outputPer1mUsd", input.outputPer1mUsd);
-    if (input.cachePer1mUsd !== null) {
-        assertNonNegativeRate("cachePer1mUsd", input.cachePer1mUsd);
-    }
-    assertEffectiveWindow(input.effectiveFrom, input.effectiveTo);
+    assertPricingInput(input);
 
     const updated = await input.pricing.updateOverride({
         id: input.id,

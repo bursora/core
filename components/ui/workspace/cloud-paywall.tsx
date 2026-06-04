@@ -12,12 +12,10 @@
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SubmitButton } from "@/components/ui/submit-button";
-import { buildWorkspacePath } from "@/lib/routes";
-import { Check, Lock } from "lucide-react";
+import { Check, Lock, Zap } from "lucide-react";
 import Link from "next/link";
 
 interface CloudPaywallProps {
-    readonly workspaceId: string;
     /** Whether the viewer is the workspace owner (the one whose sub unlocks it). */
     readonly isOwner: boolean;
     /** Formatted plan price, e.g. `$29`. */
@@ -37,7 +35,6 @@ const FALLBACK_FEATURES = [
 ] as const;
 
 export function CloudPaywall({
-    workspaceId,
     isOwner,
     price,
     interval,
@@ -70,7 +67,7 @@ export function CloudPaywall({
             </div>
 
             <div className="relative flex min-h-[24rem] items-center justify-center bg-background/70 p-6 dark:bg-background/80">
-                <div className="w-full max-w-sm rounded-[8px] border border-border bg-background p-6 shadow-sm dark:bg-muted/30">
+                <div className="w-full max-w-sm rounded-[8px] border bg-background p-6 shadow-sm dark:bg-muted/30">
                     <div className="flex items-center gap-2.5">
                         <span
                             className="flex size-9 items-center justify-center rounded-md bg-muted text-foreground"
@@ -96,6 +93,13 @@ export function CloudPaywall({
                         <span className="text-sm text-muted-foreground">/ {interval}</span>
                         <span className="ml-auto text-xs text-muted-foreground">
                             cancel anytime
+                        </span>
+                    </div>
+
+                    <div className="mt-4 flex items-center gap-2 rounded-[8px] border border-success/25 bg-success/[0.06] px-3 py-2.5">
+                        <Zap className="size-3.5 shrink-0 text-success" strokeWidth={2.4} />
+                        <span className="font-mono text-[12px] leading-snug text-foreground/80">
+                            Pays for itself the first night it blocks a runaway.
                         </span>
                     </div>
 
@@ -133,9 +137,7 @@ export function CloudPaywall({
                                 variant="link"
                                 className="h-auto p-0 text-xs font-normal text-muted-foreground underline underline-offset-2 hover:text-foreground"
                             >
-                                <Link href={buildWorkspacePath(workspaceId, "settings")}>
-                                    Manage billing
-                                </Link>
+                                <Link href="/billing">Manage billing</Link>
                             </Button>
                         </p>
                     ) : null}

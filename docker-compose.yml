@@ -71,12 +71,15 @@ services:
             nofile:
                 soft: 262144
                 hard: 262144
-        # No host port. ClickHouse is the single source of truth for every
-        # tenant's usage events and this image runs the default user with no
-        # password. The app reaches it over the internal compose network
-        # (CLICKHOUSE_URL=http://clickhouse-server:8123) and migrations run via
-        # `docker compose run`, so 8123 never needs publishing. Binding it to the
-        # host would expose unauthenticated read/write to all workspaces' spend.
+        # Bind to loopback only, never 0.0.0.0. This image runs the default user
+        # with no password and ClickHouse is the source of truth for every
+        # tenant's usage events, so a public bind would expose unauthenticated
+        # read/write to all workspaces' spend. 127.0.0.1 keeps it reachable for
+        # host-side `bun run dev` (CLICKHOUSE_URL=http://localhost:8123) while
+        # staying off every external interface. In-container callers use the
+        # compose network (clickhouse-server:8123) regardless.
+        ports:
+            - "127.0.0.1:${CLICKHOUSE_PORT:-8123}:8123"
         volumes:
             - clickhouse_data:/var/lib/clickhouse
         healthcheck:

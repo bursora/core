@@ -16,7 +16,6 @@ import { resolveSettingsTab } from "./tabs";
 interface SettingsPageProps {
     params: Promise<{ workspaceId: string }>;
     searchParams: Promise<{
-        billing?: string;
         channelsSaved?: string;
         tab?: string;
         kind?: string;
@@ -47,20 +46,10 @@ export default async function SettingsPage({ params, searchParams }: SettingsPag
     const locked = await cloudWorkspaceLocked(workspaceId);
     const paywall = locked ? await resolveCloudPaywallData(workspaceId, session.user.id) : null;
     const channelsSaved = search.channelsSaved === "1";
-    const billingStatus =
-        search.billing === "ok" || search.billing === "cancel"
-            ? (search.billing as "ok" | "cancel")
-            : null;
     const tabs = isCloud
-        ? (["general", "billing", "pricing", "channels", "activity"] as const)
+        ? (["general", "usage", "pricing", "channels", "activity"] as const)
         : (["general", "pricing", "channels", "activity"] as const);
     const activeTab = resolveSettingsTab(search.tab, tabs);
-
-    const isOss = process.env.OSS_BUILD === "true";
-    const BillingSection =
-        isCloud && !isOss
-            ? (await import("@/lib/ee/components/billing-section")).BillingSection
-            : null;
 
     return (
         <div className="space-y-6">
@@ -68,7 +57,7 @@ export default async function SettingsPage({ params, searchParams }: SettingsPag
                 title="Settings"
                 subtitle={
                     isCloud
-                        ? "Workspace profile, billing, pricing overrides, and alert channels."
+                        ? "Workspace profile, usage, pricing overrides, and alert channels."
                         : "Workspace profile, pricing overrides, and alert channels."
                 }
             />
@@ -84,13 +73,9 @@ export default async function SettingsPage({ params, searchParams }: SettingsPag
                             isOwner={membership.role === "owner"}
                         />
                     ),
-                    ...(isCloud && BillingSection
+                    ...(isCloud
                         ? {
-                              billing: (
-                                  <BillingSection userId={session.user.id} status={billingStatus}>
-                                      <EventBundleSection workspaceId={workspaceId} />
-                                  </BillingSection>
-                              ),
+                              usage: <EventBundleSection workspaceId={workspaceId} />,
                           }
                         : {}),
                     pricing: (
@@ -120,7 +105,7 @@ export default async function SettingsPage({ params, searchParams }: SettingsPag
                     ),
                     activity:
                         locked && paywall ? (
-                            <CloudPaywall workspaceId={workspaceId} {...paywall} />
+                            <CloudPaywall {...paywall} />
                         ) : (
                             <ActivityTab
                                 workspaceId={workspaceId}

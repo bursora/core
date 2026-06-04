@@ -132,8 +132,9 @@ async function onSubscriptionActivated(
         typeof event.status === "string" && event.status.length > 0 ? event.status : "active";
     await users.upsert({
         userId,
-        providerCustomerId: event.customerId ?? null,
-        providerSubscriptionId: event.subscriptionId ?? null,
+        // Write ids only when the event carries them, so a present id is never
+        // clobbered with null (the activation event always carries both).
+        ...providerIds(event),
         subscriptionStatus: statusFromEvent,
         // Stamp subscribed_at only on the first checkout. Re-checkouts after
         // a cancel keep the original signup timestamp; refund window does NOT
@@ -188,11 +189,11 @@ async function onOrderRefunded(event: WebhookEvent, users: UserBillingRepository
 
 /**
  * Customer + subscription ids to backfill from any event that carries them, so
- * a row never ends up active (or past_due) with a null customer id when LS
- * delivers an `updated` / `payment` event before — or instead of — the
- * activation event. Only present ids are written; the upsert leaves untouched
- * fields alone. A null/absent id is never written, so it can't clobber ids a
- * prior event already stored.
+ * a row never ends up active (or past_due) with a null id when LS delivers an
+ * `updated` / `payment` event before — or instead of — the activation event.
+ * Only present ids are written; the upsert leaves untouched fields alone. A
+ * null/absent id is never written, so it can't clobber ids a prior event
+ * already stored.
  */
 function providerIds(event: WebhookEvent): {
     providerCustomerId?: string;
@@ -208,10 +209,17 @@ async function resolveUserId(
     event: WebhookEvent,
     users: UserBillingRepository,
 ): Promise<string | null> {
-    // Prefer the user_id LS echoed back via custom_data on first activation;
-    // fall back to the provider customer id for later events (renewal, cancel,
-    // refund) that do not carry custom_data.
+    // Prefer the user_id LS echoed back via custom_data on first activation.
+    // Later events (renewal, cancel, refund) carry no custom_data, so resolve
+    // by the provider subscription id — it maps to exactly one user. Fall back
+    // to the customer id only for events that carry no subscription id (e.g. a
+    // dashboard order refund); with a shared customer that match is the first
+    // owning row, which is acceptable for that rare path.
     if (event.userId) return event.userId;
+    if (event.subscriptionId) {
+        const record = await users.findByProviderSubscriptionId(event.subscriptionId);
+        if (record) return record.userId;
+    }
     if (event.customerId) {
         const record = await users.findByProviderCustomerId(event.customerId);
         return record?.userId ?? null;

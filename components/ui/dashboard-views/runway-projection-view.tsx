@@ -10,10 +10,8 @@ export interface RunwayProjectionViewProps {
     readonly projected: number;
     /** Delta vs the prior month, or null for a workspace's first month. */
     readonly vsLastMonth: number | null;
-    /** Monthly spend cap in dollars, or null when no workspace cap exists. */
-    readonly cap: number | null;
-    /** projected / cap, or null when there is no cap to measure against. */
-    readonly capRatio: number | null;
+    /** Monthly spend cap in dollars and projected/cap ratio, or null when no workspace cap exists. */
+    readonly cap: { readonly usd: number; readonly ratio: number } | null;
     readonly confidence: string;
 }
 
@@ -24,10 +22,9 @@ export function RunwayProjectionView({
     projected,
     vsLastMonth,
     cap,
-    capRatio,
     confidence,
 }: RunwayProjectionViewProps) {
-    const capTone = toneForRatio(capRatio);
+    const capTone = cap ? toneForRatio(cap.ratio) : "";
 
     return (
         <section className="rounded-[8px] border border-border bg-background p-5">
@@ -50,11 +47,11 @@ export function RunwayProjectionView({
                         <span className="mx-2 text-muted-foreground/40">·</span>
                     </>
                 )}
-                {capRatio === null ? (
+                {cap === null ? (
                     <span>no monthly cap</span>
                 ) : (
                     <span className={cn("tabular-nums", capTone)}>
-                        {formatDashboardPercent(capRatio)} of {formatDashboardUsd(cap ?? 0)} cap
+                        {formatDashboardPercent(cap.ratio)} of {formatDashboardUsd(cap.usd)} cap
                     </span>
                 )}
             </div>
@@ -65,8 +62,7 @@ export function RunwayProjectionView({
     );
 }
 
-function toneForRatio(ratio: number | null): string {
-    if (ratio === null) return "";
+function toneForRatio(ratio: number): string {
     if (ratio >= CAP_BREACH_RATIO) return "text-destructive";
     if (ratio >= CAP_WARN_RATIO) return "text-warning";
     return "";

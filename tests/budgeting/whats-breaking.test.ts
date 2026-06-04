@@ -38,8 +38,9 @@ describe("computeWhatsBreaking", () => {
         });
 
         expect(rows).toHaveLength(1);
-        expect(rows[0]?.etaKind).toBe("eta");
-        expect(rows[0]?.etaDays).toBe(8);
+        const row = rows[0];
+        if (row?.etaKind !== "eta") throw new Error("expected eta row");
+        expect(row.etaDays).toBe(8);
     });
 
     test("overage budget (usage > 1) becomes etaKind 'today' regardless of dailyRate", () => {
@@ -50,7 +51,7 @@ describe("computeWhatsBreaking", () => {
         });
 
         expect(rows[0]?.etaKind).toBe("today");
-        expect(rows[0]?.etaDays).toBeUndefined();
+        expect(rows[0]).not.toHaveProperty("etaDays");
     });
 
     test("zero-headroom budget (usage exactly 1) becomes etaKind 'today'", () => {
@@ -71,7 +72,7 @@ describe("computeWhatsBreaking", () => {
         });
 
         expect(rows[0]?.etaKind).toBe("safe");
-        expect(rows[0]?.etaDays).toBeUndefined();
+        expect(rows[0]).not.toHaveProperty("etaDays");
     });
 
     test("ETA exceeding days-to-period-end yields 'safe through period'", () => {

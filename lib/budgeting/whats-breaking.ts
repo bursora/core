@@ -22,8 +22,6 @@ import type { BudgetMode, ScopeType } from "./budget";
 import type { Period, PeriodResolver } from "./period";
 import { defaultPeriodResolver } from "./period";
 
-export type EtaKind = "today" | "eta" | "safe";
-
 export interface WhatsBreakingInput {
     /**
      * Per-budget headroom rows. The caller (the server loader) resolves
@@ -48,7 +46,7 @@ export interface WhatsBreakingInput {
     readonly periodResolver?: PeriodResolver;
 }
 
-export interface WhatsBreakingRow {
+interface WhatsBreakingRowBase {
     readonly budgetId: string;
     readonly scopeType: ScopeType;
     readonly scopeId: string | null;
@@ -57,12 +55,16 @@ export interface WhatsBreakingRow {
     readonly limit: number;
     readonly spent: number;
     readonly usage: number;
-    readonly etaKind: EtaKind;
-    /** Days remaining when `etaKind === "eta"`; undefined otherwise. */
-    readonly etaDays?: number;
     /** Calendar end of the budget's current period, used as date hint. */
     readonly periodEnd: Date;
 }
+
+/**
+ * One headroom row plus its ETA verdict. `etaDays` exists exactly when
+ * `etaKind === "eta"`; the discriminant guarantees it, so no caller needs a
+ * fallback.
+ */
+export type WhatsBreakingRow = WhatsBreakingRowBase & EtaResult;
 
 const MS_PER_DAY = 86_400_000;
 
@@ -127,7 +129,7 @@ function byUrgency(a: WhatsBreakingRow, b: WhatsBreakingRow): number {
     const tierDiff = tier(a) - tier(b);
     if (tierDiff !== 0) return tierDiff;
     if (a.etaKind === "eta" && b.etaKind === "eta") {
-        return (a.etaDays ?? 0) - (b.etaDays ?? 0);
+        return a.etaDays - b.etaDays;
     }
     if (a.etaKind === "safe" && b.etaKind === "safe") {
         return a.periodEnd.getTime() - b.periodEnd.getTime();

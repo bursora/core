@@ -7,6 +7,7 @@ import { getRequestTimeZone } from "@/lib/time/request-tz";
 import { Check } from "lucide-react";
 import { AccountMetaCard } from "./_components/account-meta-card";
 import { DeleteAccountCard } from "./_components/delete-account-card";
+import { ExportDataCard } from "./_components/export-data-card";
 import { ProfileForm } from "./_components/profile-form";
 
 export default async function ProfilePage() {
@@ -62,6 +63,7 @@ export default async function ProfilePage() {
                     sessionCreatedAt={session.session.createdAt}
                     tz={tz}
                 />
+                <ExportDataCard />
                 <DeleteAccountCard email={user.email} />
             </div>
         </AppShell>

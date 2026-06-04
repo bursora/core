@@ -694,3 +694,66 @@ describe("LemonSqueezyApiAdapter.verifyCredentials", () => {
         await expect(adapter.verifyCredentials()).rejects.toThrow();
     });
 });
+
+describe("LemonSqueezyApiAdapter.cancelSubscription", () => {
+    test("DELETEs /v1/subscriptions/{id} with the bearer key", async () => {
+        const { fetcher, calls } = recordingFetch([
+            new Response(JSON.stringify({ data: { id: "sub_1", attributes: {} } }), {
+                status: 200,
+                headers: { "content-type": "application/vnd.api+json" },
+            }),
+        ]);
+
+        const adapter = new LemonSqueezyApiAdapter({
+            apiKey: API_KEY,
+            webhookSecret: WEBHOOK_SECRET,
+            storeId: STORE_ID,
+            fetch: fetcher,
+        });
+
+        await adapter.cancelSubscription("sub_1");
+
+        expect(calls).toHaveLength(1);
+        expect(calls[0]?.url).toBe("https://api.lemonsqueezy.com/v1/subscriptions/sub_1");
+        expect(calls[0]?.init.method).toBe("DELETE");
+        expect((calls[0]?.init.headers as Record<string, string>).Authorization).toBe(
+            `Bearer ${API_KEY}`,
+        );
+    });
+
+    test("treats a 404 as success (subscription already gone upstream)", async () => {
+        const { fetcher } = recordingFetch([
+            new Response(JSON.stringify({ errors: [{ detail: "Not found" }] }), {
+                status: 404,
+                headers: { "content-type": "application/vnd.api+json" },
+            }),
+        ]);
+
+        const adapter = new LemonSqueezyApiAdapter({
+            apiKey: API_KEY,
+            webhookSecret: WEBHOOK_SECRET,
+            storeId: STORE_ID,
+            fetch: fetcher,
+        });
+
+        await expect(adapter.cancelSubscription("sub_gone")).resolves.toBeUndefined();
+    });
+
+    test("throws on a non-404 error so the purge can retry", async () => {
+        const { fetcher } = recordingFetch([
+            new Response(JSON.stringify({ errors: [{ detail: "Internal error" }] }), {
+                status: 500,
+                headers: { "content-type": "application/vnd.api+json" },
+            }),
+        ]);
+
+        const adapter = new LemonSqueezyApiAdapter({
+            apiKey: API_KEY,
+            webhookSecret: WEBHOOK_SECRET,
+            storeId: STORE_ID,
+            fetch: fetcher,
+        });
+
+        await expect(adapter.cancelSubscription("sub_1")).rejects.toThrow();
+    });
+});

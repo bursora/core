@@ -56,4 +56,14 @@ export class FakePaymentProviderAdapter implements PaymentProviderAdapter {
         }
         return this.verifyCredentialsResult;
     }
+
+    public readonly cancelSubscriptionCalls: string[] = [];
+    public cancelSubscriptionShouldThrow = false;
+
+    async cancelSubscription(subscriptionId: string): Promise<void> {
+        this.cancelSubscriptionCalls.push(subscriptionId);
+        if (this.cancelSubscriptionShouldThrow) {
+            throw new Error("cancelSubscription forced failure");
+        }
+    }
 }

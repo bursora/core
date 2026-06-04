@@ -14,9 +14,11 @@ import { db } from "@/lib/db";
 import { env } from "@/lib/env";
 import { DrizzleMemberRepository } from "@/lib/identity/drizzle-member.repository";
 import { drizzlePlanRepository } from "@/lib/plans/drizzle-plan.repository";
+import * as Sentry from "@sentry/nextjs";
 import { cache } from "react";
 import type { BillingWebhookEventStore } from "./billing-webhook-event.store";
 import { billingWebhookPruneCutoff } from "./billing-webhook-retention";
+import { cancelSubscriptionOnAccountDeletionUseCase } from "./cancel-subscription-on-account-deletion.usecase";
 import { createCheckoutSessionUseCase } from "./create-checkout-session.usecase";
 import { DrizzleBillingWebhookEventStore } from "./drizzle-billing-webhook-event.store";
 import { DrizzleUserBillingRepository } from "./drizzle-user-billing.repository";
@@ -177,6 +179,38 @@ export async function handleWebhook(input: {
         provider: deps.provider,
         users: deps.users,
         webhookEvents: deps.webhookEvents,
+    });
+}
+
+/**
+ * Cancel a deleting user's Lemon Squeezy subscription so it stops billing once
+ * the Postgres user row (and its subscription record) is erased. The
+ * account-purge cron calls this through a cloud-only dynamic import, just
+ * before the user delete. No active subscription → no-op.
+ *
+ * A deletion inside the money-back window is reported to Sentry for manual
+ * review rather than auto-refunded: LS ships no programmatic refund, so support
+ * issues it from the dashboard against the (provider-side) ids logged here.
+ */
+export async function cancelSubscriptionOnAccountDeletion(userId: string): Promise<void> {
+    const deps = billingDeps();
+    await cancelSubscriptionOnAccountDeletionUseCase({
+        userId,
+        now: new Date(),
+        users: deps.users,
+        provider: deps.provider,
+        onRefundEligible: (info) => {
+            Sentry.captureMessage("account deleted within refund window; issue manual refund", {
+                level: "warning",
+                tags: { area: "billing", step: "account-deletion-refund" },
+                extra: {
+                    userId: info.userId,
+                    providerSubscriptionId: info.providerSubscriptionId,
+                    providerCustomerId: info.providerCustomerId,
+                    refundEligibleUntil: info.refundEligibleUntil.toISOString(),
+                },
+            });
+        },
     });
 }
 

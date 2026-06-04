@@ -113,4 +113,10 @@ export interface PaymentProviderAdapter {
      * a dead key from a flaky upstream. Used by the boot-time health check.
      */
     verifyCredentials(): Promise<VerifyCredentialsResult>;
+    /**
+     * Cancel the subscription so it stops billing on the provider. Called as a
+     * user's account is purged, before the local subscription row is erased.
+     * Idempotent: a subscription already gone upstream is treated as success.
+     */
+    cancelSubscription(subscriptionId: string): Promise<void>;
 }

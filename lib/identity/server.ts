@@ -199,6 +199,18 @@ export async function reactivateAccount(input: { userId: string }): Promise<bool
  */
 export async function runAccountPurgeCron(now: Date): Promise<{ purged: number; failed: number }> {
     const due = await users().listDueForPurge(now);
+
+    // EE, cloud-only: cancel each purged account's Lemon Squeezy subscription
+    // before its row is erased, so a paid sub is not left billing upstream.
+    // Dynamic import + OSS_BUILD guard keep EE out of the OSS bundle (same
+    // pattern as the cron scheduler); self-host has no provider, so the hook
+    // stays undefined and the delete proceeds without it.
+    let onBeforeUserDelete: ((userId: string) => Promise<void>) | undefined;
+    if (process.env.OSS_BUILD !== "true" && env().IS_CLOUD) {
+        const { cancelSubscriptionOnAccountDeletion } = await import("@/lib/ee/billing/server");
+        onBeforeUserDelete = cancelSubscriptionOnAccountDeletion;
+    }
+
     let purged = 0;
     let failed = 0;
     for (const userId of due) {
@@ -210,6 +222,7 @@ export async function runAccountPurgeCron(now: Date): Promise<{ purged: number; 
                 workspaces: workspaces(),
                 onWorkspacesDeleted: (workspaceIds) =>
                     meteringDeps().eventsRepo.eraseByWorkspaces(workspaceIds),
+                ...(onBeforeUserDelete ? { onBeforeUserDelete } : {}),
             });
             purged += 1;
         } catch (err: unknown) {

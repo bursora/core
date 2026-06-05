@@ -8,7 +8,8 @@ import {
     Workflow,
     type LucideIcon,
 } from "lucide-react";
-import type { BudgetMode, Period, ScopeType } from "./budgeting";
+import type { BudgetMode, ScopeType } from "./budgeting/budget";
+import type { Period } from "./budgeting/period";
 import type { StatusTagTone } from "./status-tag-tone";
 
 interface ScopeMeta {

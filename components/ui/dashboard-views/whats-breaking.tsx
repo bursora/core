@@ -2,15 +2,10 @@
 // inline mode tag, ETA pill, usage bar, spend/limit/pct, and action links.
 // Empty state inlines a "create your first budget" CTA.
 
-import {
-    BUDGET_USAGE_DANGER_THRESHOLD,
-    ETA_SOON_DAYS,
-    ETA_URGENT_DAYS,
-    budgetUsageBarTone,
-    formatEtaHint,
-    type ScopeType,
-    type WhatsBreakingRow,
-} from "@/lib/budgeting";
+import type { ScopeType } from "@/lib/budgeting/budget";
+import { ETA_SOON_DAYS, ETA_URGENT_DAYS, formatEtaHint } from "@/lib/budgeting/eta-format";
+import { BUDGET_USAGE_DANGER_THRESHOLD, budgetUsageBarTone } from "@/lib/budgeting/usage-tone";
+import type { WhatsBreakingRow } from "@/lib/budgeting/whats-breaking";
 import { formatDate, formatUsd } from "@/lib/format";
 import { buildWorkspacePath } from "@/lib/routes";
 import { cn } from "@/lib/utils";

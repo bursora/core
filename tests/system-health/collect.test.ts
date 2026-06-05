@@ -75,8 +75,8 @@ describe("sentryHealth", () => {
 });
 
 describe("getCronStatus", () => {
-    test("reports not-started with no jobs before the scheduler boots", () => {
-        const status = getCronStatus();
+    test("reports not-started with no jobs before the scheduler boots", async () => {
+        const status = await getCronStatus();
         expect(status.started).toBe(false);
         expect(status.jobs).toEqual([]);
     });

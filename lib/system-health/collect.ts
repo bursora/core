@@ -151,19 +151,22 @@ function runtimeInfo(): RuntimeInfo {
 }
 
 export async function collectSystemHealth(): Promise<SystemHealth> {
-    const services = await Promise.all([
-        timedCheck("postgres", "Postgres", () => db().execute(sql`select 1`)),
-        timedCheck("clickhouse", "ClickHouse", () => clickhouseClient().ping()),
-        timedCheck("redis", "Redis", () => redisClient(env().REDIS_URL).ping()),
-        timedCheck("smtp", "SMTP", () => defaultSmtpMailer().verify()),
-        timedCheck("google", "Google OAuth", googleOAuthProbe),
-        Promise.resolve(sentryHealth()),
-        billingHealth(),
+    const [services, cron] = await Promise.all([
+        Promise.all([
+            timedCheck("postgres", "Postgres", () => db().execute(sql`select 1`)),
+            timedCheck("clickhouse", "ClickHouse", () => clickhouseClient().ping()),
+            timedCheck("redis", "Redis", () => redisClient(env().REDIS_URL).ping()),
+            timedCheck("smtp", "SMTP", () => defaultSmtpMailer().verify()),
+            timedCheck("google", "Google OAuth", googleOAuthProbe),
+            Promise.resolve(sentryHealth()),
+            billingHealth(),
+        ]),
+        getCronStatus(),
     ]);
     return {
         runtime: runtimeInfo(),
         services,
-        cron: getCronStatus(),
+        cron,
         checkedAt: new Date(),
     };
 }

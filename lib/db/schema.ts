@@ -538,6 +538,21 @@ export const pricingSyncState = pgTable("pricing_sync_state", {
     lastSyncedAt: timestamp("last_synced_at", { withTimezone: true }).notNull(),
 });
 
+// --- cron_run_state -----------------------------------------------------------
+// Durable last-run record per in-process cron job, keyed by job name. The
+// scheduler upserts a row when each run finishes so the admin status page reads
+// last-run / health that survive a process restart; next-run and the live
+// `running` flag stay in-memory (recomputed at boot). Distinct from
+// pricing_sync_state, which is a billing-correctness heartbeat read by pricing
+// logic rather than the status page.
+export const cronRunState = pgTable("cron_run_state", {
+    name: text("name").primaryKey(),
+    lastRunAt: timestamp("last_run_at", { withTimezone: true }).notNull(),
+    lastOk: boolean("last_ok").notNull(),
+    lastError: text("last_error"),
+    lastDurationMs: integer("last_duration_ms").notNull(),
+});
+
 // --- plans --------------------------------------------------------------------
 // Single source of truth for cloud pricing. Name/description/price/interval and
 // currency mirror Lemon Squeezy (synced by the DB seeder when cloud + LS keys

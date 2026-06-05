@@ -10,12 +10,13 @@ cd core
 bun install
 ```
 
-Requires Bun >= 1.0. You need a Postgres database; point `DATABASE_URL` at it, then:
+Requires Bun >= 1.0. Copy `.env.example` to `.env` and fill the `__REPLACE_ME__` secrets. The app needs Postgres, Redis, and ClickHouse to boot; `docker compose up -d` brings up all three. The example `.env` already points `DATABASE_URL`, `REDIS_URL`, and `CLICKHOUSE_URL` at them (with a localhost variant noted for non-Docker dev). Then:
 
 ```bash
-bun run db:migrate   # apply migrations
-bun run db:seed      # load development pricing rows
-bun run dev          # Next dev server on :3000
+cp .env.example .env   # fill BETTER_AUTH_SECRET, BURSORA_API_KEY_PEPPER, BURSORA_KEY, Google OAuth
+bun run db:migrate     # apply Postgres + ClickHouse migrations
+bun run db:seed        # load development pricing rows
+bun run dev            # Next dev server on :3000
 ```
 
 ## Run the checks

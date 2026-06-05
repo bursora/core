@@ -1,6 +1,6 @@
 # Bursora
 
-Next.js 16 app (App Router + Turbopack) for the Bursora dashboard on `app.bursora.com`. Also publishes the `@bursora/core` package: shared UI primitives and pure helpers consumed by the sibling `site/` marketing app.
+Next.js 16 app (App Router + Turbopack) for the Bursora dashboard on `app.bursora.com`. The sibling `site/` marketing app imports shared UI primitives and pure helpers from here via the `@bursora/core` path alias; the package is private (`@bursora/core` is an import alias, not a published artifact).
 
 ## Layout
 

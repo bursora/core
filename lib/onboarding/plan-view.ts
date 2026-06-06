@@ -1,20 +1,28 @@
 /**
- * Display data for the onboarding plan card. Reads the single active cloud plan
- * from the plans table (the daily sync's source of truth) and shapes its price,
- * interval, and config-derived features for the client step. Nothing here is
- * hardcoded — price and the included-events feature come straight off the row.
+ * Display data for the onboarding plan card. Reads the active cloud plan rows
+ * from the plans table (the daily sync's source of truth) and shapes a price
+ * per billing interval plus config-derived features for the client step. The
+ * card offers a monthly/annual toggle, so the view carries both intervals.
+ * Nothing here is hardcoded — every price and the included-events feature come
+ * straight off a row.
  */
 
 import "server-only";
 
 import { db } from "@/lib/db";
 import { drizzlePlanRepository } from "@/lib/plans/drizzle-plan.repository";
-import type { PlanConfig } from "@/lib/plans/plan";
+import type { BillingInterval, Plan, PlanConfig } from "@/lib/plans/plan";
+import { cache } from "react";
+
+export interface OnboardingPlanPrice {
+    readonly price: string;
+    readonly interval: BillingInterval;
+}
 
 export interface OnboardingPlanView {
     readonly name: string;
-    readonly price: string;
-    readonly interval: string;
+    readonly monthly: OnboardingPlanPrice | null;
+    readonly annual: OnboardingPlanPrice | null;
     readonly features: readonly string[];
 }
 
@@ -49,13 +57,36 @@ function planFeatures(config: PlanConfig): readonly string[] {
     return bullets;
 }
 
-export async function getOnboardingPlan(): Promise<OnboardingPlanView | null> {
-    const plan = await drizzlePlanRepository(db()).findActive();
-    if (!plan) return null;
+const priceFor = (
+    plans: readonly Plan[],
+    interval: BillingInterval,
+): OnboardingPlanPrice | null => {
+    const plan = plans.find((p) => p.interval === interval);
+    return plan ? { price: formatPlanPrice(plan.priceCents, plan.currency), interval } : null;
+};
+
+/**
+ * Shape the active plan rows into the onboarding card's view model. Returns
+ * `null` when no plan is active (self-host / unseeded). Pure — the page reads
+ * the rows and passes them in; tests exercise this without a database.
+ */
+export function toOnboardingPlanView(plans: readonly Plan[]): OnboardingPlanView | null {
+    const first = plans[0];
+    if (!first) return null;
     return {
-        name: plan.name,
-        price: formatPlanPrice(plan.priceCents, plan.currency),
-        interval: plan.interval,
-        features: planFeatures(plan.config),
+        name: first.name,
+        monthly: priceFor(plans, "month"),
+        annual: priceFor(plans, "year"),
+        features: planFeatures(first.config),
     };
 }
+
+/**
+ * Per-request memoized so multiple server components in one render tree (paywall
+ * + billing section) share a single `listActive()` read. Matches the `cache()`
+ * pattern on `getUserBillingRecord`.
+ */
+export const getOnboardingPlan = cache(async (): Promise<OnboardingPlanView | null> => {
+    const plans = await drizzlePlanRepository(db()).listActive();
+    return toOnboardingPlanView(plans);
+});

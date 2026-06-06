@@ -1,10 +1,10 @@
 /**
  * Drizzle implementation of the plan repositories.
  *
- * One concrete object satisfies both the read API (`listActive`, `findActive`)
- * and the seed-side write (`upsertByVariant`). The read half carries no EE
- * imports, so a future public pricing route or checkout page can call it
- * without pulling `@/lib/ee/*`.
+ * One concrete object satisfies both the read API (`listActive`) and the
+ * seed-side write (`upsertByVariant`). The read half carries no EE imports, so a
+ * future public pricing route or checkout page can call it without pulling
+ * `@/lib/ee/*`.
  *
  * `upsertByVariant` relies on the unique constraint on `ls_variant_id`: insert,
  * or on conflict update every provider-owned column plus `config` and
@@ -47,17 +47,6 @@ export const drizzlePlanRepository = (db: Db): PlanReadRepository & PlanSyncRepo
             .orderBy(asc(plans.priceCents))
             .limit(ACTIVE_PLANS_LIMIT);
         return rows.map(mapRow);
-    },
-
-    findActive: async () => {
-        const rows = await db
-            .select()
-            .from(plans)
-            .where(eq(plans.isActive, true))
-            .orderBy(asc(plans.priceCents))
-            .limit(1);
-        const row = rows[0];
-        return row ? mapRow(row) : null;
     },
 
     upsertByVariant: async (plan: PlanUpsert) => {

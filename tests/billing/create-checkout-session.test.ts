@@ -18,33 +18,49 @@ import { describe, expect, test } from "bun:test";
 const USER_ID = "11111111-2222-3333-4444-555555555555";
 
 describe("createCheckoutSessionUseCase", () => {
-    test("passes the active plan's lsVariantId to the provider", async () => {
+    test("opens the variant matching the requested interval", async () => {
         const provider = new FakePaymentProviderAdapter();
         const plans = new InMemoryPlanRepository();
-        plans.seed({ lsVariantId: "variant_from_db" });
+        plans.seed({ lsVariantId: "variant_monthly", interval: "month", priceCents: 2900 });
+        plans.seed({ lsVariantId: "variant_annual", interval: "year", priceCents: 29000 });
 
-        const result = await createCheckoutSessionUseCase({
+        const monthly = await createCheckoutSessionUseCase({
             userId: USER_ID,
             userEmail: "owner@example.com",
+            interval: "month",
             successUrl: "https://app.test/ok",
             cancelUrl: "https://app.test/cancel",
             provider,
             plans,
         });
 
-        expect(provider.checkoutCalls[0]?.variantId).toBe("variant_from_db");
+        expect(provider.checkoutCalls[0]?.variantId).toBe("variant_monthly");
         expect(provider.checkoutCalls[0]?.userId).toBe(USER_ID);
-        expect(result.url).toBe(provider.nextCheckoutResult.url);
+        expect(monthly.url).toBe(provider.nextCheckoutResult.url);
+
+        await createCheckoutSessionUseCase({
+            userId: USER_ID,
+            userEmail: "owner@example.com",
+            interval: "year",
+            successUrl: "https://app.test/ok",
+            cancelUrl: "https://app.test/cancel",
+            provider,
+            plans,
+        });
+
+        expect(provider.checkoutCalls[1]?.variantId).toBe("variant_annual");
     });
 
-    test("throws NoActiveCloudPlanError when no active plan exists", async () => {
+    test("throws NoActiveCloudPlanError when no plan matches the interval", async () => {
         const provider = new FakePaymentProviderAdapter();
         const plans = new InMemoryPlanRepository();
+        plans.seed({ lsVariantId: "variant_monthly", interval: "month" });
 
         await expect(
             createCheckoutSessionUseCase({
                 userId: USER_ID,
                 userEmail: "owner@example.com",
+                interval: "year",
                 successUrl: "https://app.test/ok",
                 cancelUrl: "https://app.test/cancel",
                 provider,

@@ -25,9 +25,10 @@ export async function isUserSubscribed(userId: string): Promise<boolean> {
 /**
  * The user-scoped checkout server action, loaded on demand so the import only
  * resolves on cloud (where the plan step renders). Passed to the client plan
- * step as a form action.
+ * step as a form action; the form's hidden `interval` field carries the chosen
+ * billing interval into the action's `FormData`.
  */
-export async function getCheckoutAction(): Promise<() => Promise<void>> {
+export async function getCheckoutAction(): Promise<(formData: FormData) => Promise<void>> {
     const billing =
         process.env.OSS_BUILD === "true" ? null : await import("@/lib/ee/billing-actions");
     if (!billing) throw new Error("Cloud billing is unavailable in self-host builds.");

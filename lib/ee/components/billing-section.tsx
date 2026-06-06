@@ -80,13 +80,13 @@ export async function BillingSection({ userId, status, children }: BillingSectio
                                         {pill.label}
                                     </StatusTag>
                                 </div>
-                                {plan ? (
+                                {plan?.monthly ? (
                                     <p className="flex items-baseline gap-1.5">
                                         <span className="text-2xl font-semibold tabular-nums">
-                                            {plan.price}
+                                            {plan.monthly.price}
                                         </span>
                                         <span className="text-sm text-muted-foreground">
-                                            / {plan.interval}
+                                            / month
                                         </span>
                                     </p>
                                 ) : null}
@@ -101,6 +101,7 @@ export async function BillingSection({ userId, status, children }: BillingSectio
                                 ) : null}
                                 {!hasActiveSubscription ? (
                                     <form action={createCheckoutAction}>
+                                        <input type="hidden" name="interval" value="month" />
                                         <SubmitButton pendingLabel="Opening checkout…">
                                             Upgrade to Bursora cloud
                                         </SubmitButton>

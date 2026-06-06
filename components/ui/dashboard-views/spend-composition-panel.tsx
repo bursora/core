@@ -1,5 +1,6 @@
 import { formatUsd, formatWholePercent } from "@/lib/format";
 import type { CustomerComposition } from "@/lib/spend-composition/compute";
+import type { Facet } from "@/lib/spend-types";
 import { cn } from "@/lib/utils";
 import type { Route } from "next";
 import Link from "next/link";
@@ -13,7 +14,19 @@ export interface SpendCompositionPanelProps {
     /** Target for the "View all spend →" affordance. Pass `null` to drop the
      *  link (e.g. landing-page composition where the route is auth-gated). */
     readonly viewAllHref: Route | null;
+    /** Scope the rows represent. Drives the row noun; defaults to tenant
+     *  (rendered as "customer"), the only facet the real dashboard composes. */
+    readonly facet?: Facet;
 }
+
+// Singular noun shown per row. Tenant reads as "customer" to match the rest of
+// the product's customer-facing wording; plurals are the noun + "s".
+const FACET_NOUN: Record<Facet, string> = {
+    tenant: "customer",
+    agent: "agent",
+    workflow: "workflow",
+    model: "model",
+};
 
 // /70 opacity matches the `bg-primary/70` fill the other dashboard share
 // bars use, keeping every slice on the app's tone scale.
@@ -38,7 +51,9 @@ export function SpendCompositionPanel({
     rows,
     windowLabel,
     viewAllHref,
+    facet = "tenant",
 }: SpendCompositionPanelProps) {
+    const noun = FACET_NOUN[facet];
     const actions =
         viewAllHref === null ? undefined : (
             <Button asChild variant="link" size="sm" className="h-auto p-0">
@@ -49,17 +64,17 @@ export function SpendCompositionPanel({
     return (
         <DashboardSection
             label="Where it goes"
-            sublabel={`top customers · this ${windowLabel.toLowerCase()}`}
+            sublabel={`top ${noun}s · this ${windowLabel.toLowerCase()}`}
             actions={actions}
         >
             {rows.length === 0 ? (
                 <p className="text-sm text-muted-foreground">
-                    No tagged customer spend in this window.
+                    No tagged {noun} spend in this window.
                 </p>
             ) : (
                 <div className="flex flex-col gap-4">
                     {rows.map((row) => (
-                        <CustomerRow key={row.tenantId} row={row} />
+                        <CustomerRow key={row.tenantId} row={row} noun={noun} />
                     ))}
                 </div>
             )}
@@ -67,7 +82,7 @@ export function SpendCompositionPanel({
     );
 }
 
-function CustomerRow({ row }: { readonly row: CustomerComposition }) {
+function CustomerRow({ row, noun }: { readonly row: CustomerComposition; readonly noun: string }) {
     const slices: Slice[] = row.models.map((m, i) => ({
         key: m.model,
         model: m.model,
@@ -83,7 +98,7 @@ function CustomerRow({ row }: { readonly row: CustomerComposition }) {
             <div className="flex items-baseline justify-between gap-3">
                 <div className="flex min-w-0 items-center gap-2">
                     <span className="font-mono text-[10px] uppercase tracking-[0.08em] text-muted-foreground/70">
-                        customer
+                        {noun}
                     </span>
                     <code className="truncate font-mono text-[11px] uppercase tracking-[0.08em] text-foreground">
                         {row.tenantId}

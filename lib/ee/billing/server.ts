@@ -14,6 +14,7 @@ import { db } from "@/lib/db";
 import { env } from "@/lib/env";
 import { DrizzleMemberRepository } from "@/lib/identity/drizzle-member.repository";
 import { drizzlePlanRepository } from "@/lib/plans/drizzle-plan.repository";
+import type { BillingInterval } from "@/lib/plans/plan";
 import * as Sentry from "@sentry/nextjs";
 import { cache } from "react";
 import type { BillingWebhookEventStore } from "./billing-webhook-event.store";
@@ -137,20 +138,22 @@ const landingUrl = (status: "ok" | "cancel"): string =>
     `${billingDeps().appUrl}/workspace?billing=${status}`;
 
 /**
- * Open Lemon Squeezy checkout for the active Bursora Cloud plan, keyed to the
- * subscribing user. The variant is resolved from the `plans` table (the daily
- * sync's source of truth), charges at checkout, and auto-renews on LS's side;
- * Bursora records no bill of its own. Throws `NoActiveCloudPlanError` when no
- * plan is configured.
+ * Open Lemon Squeezy checkout for the active Bursora Cloud plan on the chosen
+ * billing interval (monthly or annual), keyed to the subscribing user. The
+ * variant is resolved from the `plans` table (the daily sync's source of
+ * truth), charges at checkout, and auto-renews on LS's side; Bursora records no
+ * bill of its own. Throws `NoActiveCloudPlanError` when no plan matches.
  */
 export async function createCheckoutSession(input: {
     userId: string;
     userEmail: string;
+    interval: BillingInterval;
 }): Promise<{ url: string }> {
     const deps = billingDeps();
     return createCheckoutSessionUseCase({
         userId: input.userId,
         userEmail: input.userEmail,
+        interval: input.interval,
         successUrl: landingUrl("ok"),
         cancelUrl: landingUrl("cancel"),
         provider: deps.provider,

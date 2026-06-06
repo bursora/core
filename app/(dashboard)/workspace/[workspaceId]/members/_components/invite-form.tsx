@@ -77,6 +77,7 @@ export function InviteForm({ action, onInvited }: Props) {
                     type="email"
                     required
                     autoComplete="off"
+                    className="ph-no-capture"
                     placeholder="teammate@acme.test"
                     aria-invalid={state.error ? true : undefined}
                     aria-describedby={state.error ? errorId : undefined}

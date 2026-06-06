@@ -15,6 +15,7 @@ import { ThemeToggle } from "@/components/shell/theme-toggle";
 import { UserMenu } from "@/components/shell/user-menu";
 import { WorkspaceHeader } from "@/components/shell/workspace-header";
 import { WorkspaceUrlSync } from "@/components/shell/workspace-url-sync";
+import { AnalyticsIdentity } from "@/components/ui/analytics/analytics-identity";
 import { Logo } from "@/components/ui/brand/logo";
 import {
     Sidebar,
@@ -25,6 +26,7 @@ import {
     SidebarProvider,
     SidebarTrigger,
 } from "@/components/ui/sidebar";
+import { buildIdentity } from "@/lib/analytics/identity";
 import { requireSessionUI } from "@/lib/auth";
 import { env } from "@/lib/env";
 import { USER_ROLE } from "@/lib/identity/user-role";
@@ -49,6 +51,10 @@ export async function AppShell({ children, urlWorkspaceId }: AppShellProps) {
         available: workspaces,
     });
     const activeWorkspace = workspaces.find((w) => w.id === activeWorkspaceId) ?? null;
+    const identity = buildIdentity({
+        userId: session.user.id,
+        workspaceId: activeWorkspaceId,
+    });
 
     return (
         <SidebarProvider>
@@ -83,7 +89,7 @@ export async function AppShell({ children, urlWorkspaceId }: AppShellProps) {
                 <header className="sticky top-0 z-10 flex h-14 items-center gap-3 border-b bg-background/80 px-4 backdrop-blur">
                     <SidebarTrigger className="md:hidden" />
                     {activeWorkspace ? (
-                        <span className="truncate text-sm font-medium text-foreground">
+                        <span className="ph-no-capture truncate text-sm font-medium text-foreground">
                             {activeWorkspace.name}
                         </span>
                     ) : null}
@@ -108,6 +114,7 @@ export async function AppShell({ children, urlWorkspaceId }: AppShellProps) {
             </Suspense>
             <ReactivatedToast />
             <KeyboardShortcuts workspaces={workspaces} activeWorkspaceId={activeWorkspaceId} />
+            <AnalyticsIdentity {...identity} />
         </SidebarProvider>
     );
 }

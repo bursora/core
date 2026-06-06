@@ -16,6 +16,19 @@ export interface PlanConfig {
     readonly [key: string]: unknown;
 }
 
+/**
+ * The two billing intervals a cloud plan can be sold on, matching Lemon
+ * Squeezy's variant `interval` values. Annual is monthly priced for ten months
+ * (two months free). Used to validate the interval a checkout asks for and to
+ * select the matching plan row.
+ */
+export type BillingInterval = "month" | "year";
+
+/** Narrow an untrusted string to a `BillingInterval`, or `null` if neither. */
+export function parseBillingInterval(value: unknown): BillingInterval | null {
+    return value === "month" || value === "year" ? value : null;
+}
+
 export interface Plan {
     id: string;
     lsProductId: string;
@@ -54,12 +67,6 @@ export interface PlanReadRepository {
      * reads first. Inactive plans are excluded.
      */
     listActive(): Promise<readonly Plan[]>;
-
-    /**
-     * The single active cloud plan. Returns the cheapest active plan, or `null`
-     * when none exist. Bursora Cloud ships one plan today; this collapses to it.
-     */
-    findActive(): Promise<Plan | null>;
 }
 
 /**

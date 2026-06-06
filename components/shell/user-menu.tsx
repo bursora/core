@@ -12,6 +12,7 @@ import { authClient } from "@/lib/auth-client";
 import { Activity, CreditCard, LogOut, UserCircle } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import posthog from "posthog-js";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -34,6 +35,10 @@ export function UserMenu({ userId, name, email, image, showBilling, isAdmin }: U
         setSigningOut(true);
         try {
             await authClient.signOut();
+            // Drop the identified person so a shared browser doesn't attribute
+            // the next visitor's events to the user who just left. No-ops when
+            // analytics is off.
+            if (posthog.__loaded) posthog.reset();
             router.replace("/login");
             router.refresh();
         } catch (err) {
@@ -56,8 +61,10 @@ export function UserMenu({ userId, name, email, image, showBilling, isAdmin }: U
                 <div className="flex items-center gap-2 px-2 py-1.5">
                     <UserAvatar size="md" userId={userId} name={name} email={email} image={image} />
                     <div className="min-w-0 flex-1">
-                        <div className="truncate text-sm font-medium">{name}</div>
-                        <div className="truncate text-xs text-muted-foreground">{email}</div>
+                        <div className="ph-no-capture truncate text-sm font-medium">{name}</div>
+                        <div className="ph-no-capture truncate text-xs text-muted-foreground">
+                            {email}
+                        </div>
                     </div>
                 </div>
                 <DropdownMenuSeparator />

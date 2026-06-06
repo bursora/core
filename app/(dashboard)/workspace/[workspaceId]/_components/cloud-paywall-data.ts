@@ -4,13 +4,14 @@ import { env } from "@/lib/env";
 import { getWorkspaceOwnerUserId } from "@/lib/identity/server";
 import { getCheckoutAction } from "@/lib/onboarding/plan-entry";
 import { getOnboardingPlan } from "@/lib/onboarding/plan-view";
+import type { BillingInterval } from "@/lib/plans/plan";
 
 export interface CloudPaywallData {
     readonly isOwner: boolean;
     readonly price: string;
-    readonly interval: string;
+    readonly interval: BillingInterval;
     readonly features: readonly string[];
-    readonly checkoutAction?: () => Promise<void>;
+    readonly checkoutAction?: (formData: FormData) => Promise<void>;
 }
 
 /**
@@ -30,10 +31,12 @@ export async function resolveCloudPaywallData(
         getWorkspaceOwnerUserId(workspaceId),
         getOnboardingPlan(),
     ]);
-    // The paywall only renders on cloud, where the daily sync always leaves a
-    // plan row. If it's missing, that's a real misconfiguration — surface it
-    // rather than papering over it with a fabricated price.
-    if (!plan) {
+    // The paywall only renders on cloud, where the daily sync leaves a monthly
+    // (and usually annual) plan row. Prefer monthly for the headline price, fall
+    // back to annual if only that interval is synced. No row at all is a real
+    // misconfiguration — surface it rather than fabricate a price.
+    const headline = plan?.monthly ?? plan?.annual;
+    if (!headline) {
         throw new Error(
             "resolveCloudPaywallData: no synced cloud plan; price must come from the plans table",
         );
@@ -43,11 +46,12 @@ export async function resolveCloudPaywallData(
 
     return {
         isOwner,
-        price: plan.price,
-        interval: plan.interval,
+        price: headline.price,
+        interval: headline.interval,
         // Skip the events-ceiling bullet (features[0]); the unlock pitch leads
-        // with what the dashboard gives, not the fair-use cap.
-        features: plan.features.slice(1, 4),
+        // with what the dashboard gives, not the fair-use cap. `plan` is non-null
+        // here (headline derives from it).
+        features: (plan?.features ?? []).slice(1, 4),
         ...(checkoutAction ? { checkoutAction } : {}),
     };
 }

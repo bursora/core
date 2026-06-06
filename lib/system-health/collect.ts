@@ -87,6 +87,38 @@ async function googleOAuthProbe(): Promise<void> {
 }
 
 /**
+ * Reachability of the PostHog ingestion host. The flags endpoint answers a
+ * GET with the (publishable) project token and returns 200 whenever the host
+ * is reachable, so this confirms events can leave the box. It does not validate
+ * the token (the endpoint is permissive); like the Google probe it is a
+ * connectivity check, not an auth check.
+ */
+async function posthogProbe(host: string, token: string): Promise<void> {
+    const response = await fetch(
+        `${host.replace(/\/$/, "")}/flags?token=${encodeURIComponent(token)}`,
+        {
+            signal: AbortSignal.timeout(CHECK_TIMEOUT_MS),
+        },
+    );
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+}
+
+/**
+ * PostHog health, gated on the key like Sentry: no key (the self-host default)
+ * renders "disabled", a configured key probes the ingestion host live. Reads
+ * `process.env.POSTHOG_KEY` directly so the disabled branch needs no validated
+ * env; the host is only read once the probe actually runs.
+ */
+export async function posthogHealth(): Promise<ServiceHealth> {
+    const label = "PostHog";
+    const token = process.env.POSTHOG_KEY ?? "";
+    if (token.length === 0) {
+        return { key: "posthog", label, status: "disabled", detail: "Not configured" };
+    }
+    return timedCheck("posthog", label, () => posthogProbe(env().POSTHOG_HOST, token));
+}
+
+/**
  * Sentry health from the in-process SDK, not just env. `isInitialized()` is
  * true only if `Sentry.init` actually ran with a client in this runtime, so it
  * catches a DSN that's set but never initialized (the env var alone can't).
@@ -159,6 +191,7 @@ export async function collectSystemHealth(): Promise<SystemHealth> {
             timedCheck("smtp", "SMTP", () => defaultSmtpMailer().verify()),
             timedCheck("google", "Google OAuth", googleOAuthProbe),
             Promise.resolve(sentryHealth()),
+            posthogHealth(),
             billingHealth(),
         ]),
         getCronStatus(),

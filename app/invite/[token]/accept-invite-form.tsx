@@ -39,7 +39,7 @@ export function AcceptInviteForm({ token, action }: Props) {
     }
 
     return (
-        <form action={formAction} className="flex flex-col gap-4">
+        <form action={formAction} className="ph-no-capture flex flex-col gap-4">
             <input type="hidden" name="token" value={token} />
             <SubmitButton pendingLabel="Joining…" className="w-full">
                 Accept invite

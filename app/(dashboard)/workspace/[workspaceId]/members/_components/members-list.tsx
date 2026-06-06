@@ -246,7 +246,7 @@ function MemberRow({
                         className={cn("shrink-0", isPendingDeletion && "opacity-60")}
                     />
                     <div className="min-w-0">
-                        <div className="flex items-center gap-1.5 truncate text-sm font-medium">
+                        <div className="ph-no-capture flex items-center gap-1.5 truncate text-sm font-medium">
                             {member.email}
                             {isSelf ? (
                                 <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-normal text-muted-foreground">
@@ -286,6 +286,7 @@ function MemberRow({
                                         size="icon-sm"
                                         aria-label={`Manage ${member.email}`}
                                         disabled={pending}
+                                        className="ph-no-capture"
                                     >
                                         <MoreHorizontal className="size-4 text-muted-foreground" />
                                     </Button>
@@ -322,7 +323,7 @@ function MemberRow({
                                 <AlertDialogContent>
                                     <AlertDialogHeader>
                                         <AlertDialogTitle>Remove this member?</AlertDialogTitle>
-                                        <AlertDialogDescription>
+                                        <AlertDialogDescription className="ph-no-capture">
                                             {member.email} loses access to this workspace. Their
                                             usage history stays. You can invite them back later.
                                         </AlertDialogDescription>
@@ -385,7 +386,9 @@ function PendingRow({
                         <Mail className="size-4" />
                     </div>
                     <div className="min-w-0">
-                        <div className="truncate text-sm font-medium">{invite.email}</div>
+                        <div className="ph-no-capture truncate text-sm font-medium">
+                            {invite.email}
+                        </div>
                         <div className="flex items-center gap-1 text-xs text-muted-foreground">
                             <Clock className="size-3" />
                             {expired
@@ -407,6 +410,7 @@ function PendingRow({
                                 size="icon-sm"
                                 aria-label={`Cancel invite to ${invite.email}`}
                                 disabled={pending}
+                                className="ph-no-capture"
                             >
                                 <Trash2 className="size-4 text-muted-foreground" />
                             </Button>
@@ -414,7 +418,7 @@ function PendingRow({
                         <AlertDialogContent>
                             <AlertDialogHeader>
                                 <AlertDialogTitle>Cancel this invite?</AlertDialogTitle>
-                                <AlertDialogDescription>
+                                <AlertDialogDescription className="ph-no-capture">
                                     Revokes the pending invitation for {invite.email}. The link in
                                     their email will stop working.
                                 </AlertDialogDescription>

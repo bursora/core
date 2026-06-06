@@ -45,6 +45,8 @@ interface PaletteCommand {
     readonly shortcut?: string;
     readonly run: () => void;
     readonly disabled?: boolean;
+    /** Label is a customer-chosen name (PII); keep it out of autocapture text. */
+    readonly sensitiveLabel?: boolean;
 }
 
 interface CommandPaletteProps {
@@ -111,6 +113,7 @@ export function CommandPalette({
             id: `workspace.${ws.id}`,
             label: ws.name,
             icon: LayoutDashboard,
+            sensitiveLabel: true,
             leading: <WorkspaceAvatar name={ws.name} workspaceId={ws.id} size="xs" />,
             run: () => {
                 setWorkspaceCookie(ws.id);
@@ -235,7 +238,9 @@ function PaletteRow({ command, onPick, fallbackIcon }: PaletteRowProps) {
             ) : (
                 <Icon className="mr-2 h-4 w-4" />
             )}
-            <span>{command.label}</span>
+            <span className={command.sensitiveLabel ? "ph-no-capture" : undefined}>
+                {command.label}
+            </span>
             {command.shortcut ? <CommandShortcut>{command.shortcut}</CommandShortcut> : null}
         </CommandItem>
     );

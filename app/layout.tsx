@@ -1,6 +1,8 @@
+import { PostHogProvider } from "@/components/ui/analytics/posthog-provider";
 import { TimeZoneProvider } from "@/components/ui/hooks/use-time-zone";
 import { ThemeProvider } from "@/components/ui/shell/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
+import { env } from "@/lib/env";
 import { getRequestTimeZone } from "@/lib/time/request-tz";
 import { cn } from "@/lib/utils";
 import type { Metadata } from "next";
@@ -35,12 +37,14 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
             suppressHydrationWarning
         >
             <body>
-                <TimeZoneProvider tz={tz}>
-                    <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
-                        {children}
-                        <Toaster richColors />
-                    </ThemeProvider>
-                </TimeZoneProvider>
+                <PostHogProvider posthogKey={env().POSTHOG_KEY} posthogHost={env().POSTHOG_HOST}>
+                    <TimeZoneProvider tz={tz}>
+                        <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+                            {children}
+                            <Toaster richColors />
+                        </ThemeProvider>
+                    </TimeZoneProvider>
+                </PostHogProvider>
             </body>
         </html>
     );

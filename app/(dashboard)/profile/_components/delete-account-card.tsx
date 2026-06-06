@@ -82,7 +82,7 @@ export function DeleteAccountCard({ email }: DeleteAccountCardProps) {
                         <div className="space-y-2 py-2">
                             <Label htmlFor="confirm-account-email">
                                 Type{" "}
-                                <code className="rounded bg-muted px-1 font-mono text-xs">
+                                <code className="ph-no-capture rounded bg-muted px-1 font-mono text-xs">
                                     {email}
                                 </code>{" "}
                                 to confirm.
@@ -92,6 +92,7 @@ export function DeleteAccountCard({ email }: DeleteAccountCardProps) {
                                 value={confirmation}
                                 onChange={(e) => setConfirmation(e.target.value)}
                                 autoComplete="off"
+                                className="ph-no-capture"
                             />
                         </div>
                         <AlertDialogFooter>

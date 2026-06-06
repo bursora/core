@@ -9,9 +9,11 @@
 // `checkoutAction` is the user-scoped Lemon Squeezy checkout, injected by the
 // page so this shared component never imports EE billing.
 
+import { PaywallViewBeacon } from "@/components/ui/analytics/paywall-view-beacon";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SubmitButton } from "@/components/ui/submit-button";
+import type { BillingInterval } from "@/lib/plans/plan";
 import { Check, Lock, Zap } from "lucide-react";
 import Link from "next/link";
 
@@ -21,11 +23,11 @@ interface CloudPaywallProps {
     /** Formatted plan price, e.g. `$29`. */
     readonly price: string;
     /** Billing interval, e.g. `month`. */
-    readonly interval: string;
+    readonly interval: BillingInterval;
     /** Value bullets to show; falls back to a default trio when empty. */
     readonly features: readonly string[];
     /** User-scoped checkout action; present only for the owner on cloud. */
-    readonly checkoutAction?: () => Promise<void>;
+    readonly checkoutAction?: (formData: FormData) => Promise<void>;
 }
 
 const FALLBACK_FEATURES = [
@@ -45,6 +47,7 @@ export function CloudPaywall({
 
     return (
         <section className="relative isolate overflow-hidden rounded-[8px] border border-border bg-background">
+            <PaywallViewBeacon isOwner={isOwner} />
             <div
                 aria-hidden
                 className="pointer-events-none absolute inset-0 select-none overflow-hidden p-5 blur-[6px]"
@@ -118,6 +121,7 @@ export function CloudPaywall({
                     <div className="mt-5">
                         {isOwner && checkoutAction ? (
                             <form action={checkoutAction}>
+                                <input type="hidden" name="interval" value={interval} />
                                 <SubmitButton className="w-full" pendingLabel="Opening checkout…">
                                     Subscribe to Cloud
                                 </SubmitButton>

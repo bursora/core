@@ -40,10 +40,10 @@ describe("WizardStepper", () => {
         );
     });
 
-    test("a skipped plan step reads as skipped (dash + strikethrough), not done", () => {
-        const html = renderToStaticMarkup(<WizardStepper current={1} showPlan planSkipped />);
+    test("a passed plan step reads as done (green check)", () => {
+        const html = renderToStaticMarkup(<WizardStepper current={1} showPlan />);
         expect(html).toContain("Plan");
-        expect(html).toContain("line-through");
+        expect(html).toContain("text-success");
     });
 });
 

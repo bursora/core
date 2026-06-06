@@ -3,6 +3,7 @@
 import { actionFail, actionOk, type ActionResult } from "@/lib/action-result";
 import { workspaceIdFromForm } from "@/lib/actions/form-fields";
 import { withWorkspace } from "@/lib/actions/with-workspace";
+import { anonymousId, captureServerEvent } from "@/lib/analytics/server-capture";
 import { ValidationError, type BudgetMode, type Period, type ScopeType } from "@/lib/budgeting";
 import { createBudget, deleteBudget, updateBudget } from "@/lib/budgeting/server";
 import { buildWorkspacePath } from "@/lib/routes";
@@ -18,8 +19,9 @@ const optionalScopeId = (form: FormData): string | null => {
 };
 
 export const createBudgetAction = withWorkspace(
-    async (_ctx, formData: FormData): Promise<ActionResult> => {
+    async (ctx, formData: FormData): Promise<ActionResult> => {
         const workspaceId = workspaceIdFromForm(formData);
+        const mode = stringField(formData, "mode") as BudgetMode;
 
         try {
             await createBudget({
@@ -28,7 +30,7 @@ export const createBudgetAction = withWorkspace(
                 scopeId: optionalScopeId(formData),
                 period: stringField(formData, "period") as Period,
                 amountUsd: stringField(formData, "amountUsd"),
-                mode: stringField(formData, "mode") as BudgetMode,
+                mode,
             });
         } catch (err) {
             if (err instanceof ValidationError) {
@@ -36,6 +38,14 @@ export const createBudgetAction = withWorkspace(
             }
             throw err;
         }
+
+        // Funnel beacon. No PII: the distinct id is a hash of the user id, and
+        // `mode` (block/alert) is a non-identifying flag. No-ops on self-host.
+        await captureServerEvent({
+            event: "budget_created",
+            distinctId: anonymousId(ctx.session.user.id),
+            properties: { mode },
+        });
 
         revalidatePath(budgetsPath(workspaceId));
         return actionOk();

@@ -27,11 +27,11 @@ export default async function ProfilePage() {
                         image={user.image}
                     />
                     <div className="min-w-0 space-y-1">
-                        <h1 className="truncate text-2xl font-semibold tracking-tight">
+                        <h1 className="ph-no-capture truncate text-2xl font-semibold tracking-tight">
                             {user.name}
                         </h1>
                         <div className="flex flex-wrap items-center gap-2">
-                            <span className="truncate text-sm text-muted-foreground">
+                            <span className="ph-no-capture truncate text-sm text-muted-foreground">
                                 {user.email}
                             </span>
                             <Badge

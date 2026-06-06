@@ -47,6 +47,7 @@ export function ProfileForm({ currentName }: ProfileFormProps) {
                     maxLength={MAX_LENGTH}
                     minLength={1}
                     aria-invalid={state.fieldErrors?.name ? true : undefined}
+                    className="ph-no-capture"
                 />
                 {state.fieldErrors?.name ? (
                     <p className="text-xs text-destructive">{state.fieldErrors.name}</p>

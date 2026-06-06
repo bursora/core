@@ -1,14 +1,14 @@
 /**
  * Header for the setup wizard. Labelled steps; the current one is filled,
- * completed ones show a green check, a skipped plan step shows a muted dash, and
- * pending ones are muted. Purely presentational — the active step comes from the
- * `?step` URL the page reads, so back/refresh keep the indicator in sync. PLAN
- * is cloud-only; `showPlan` drops it for self-host.
+ * completed ones show a green check, and pending ones are muted. Purely
+ * presentational — the active step comes from the `?step` URL the page reads, so
+ * back/refresh keep the indicator in sync. PLAN is cloud-only; `showPlan` drops
+ * it for self-host.
  */
 
 import type { WizardStep } from "@/lib/onboarding/wizard-step";
 import { cn } from "@/lib/utils";
-import { Check, Minus } from "lucide-react";
+import { Check } from "lucide-react";
 
 const ALL_STEPS: ReadonlyArray<{ readonly step: WizardStep; readonly label: string }> = [
     { step: 0, label: "Plan" },
@@ -19,21 +19,17 @@ const ALL_STEPS: ReadonlyArray<{ readonly step: WizardStep; readonly label: stri
 
 interface WizardStepperProps {
     readonly current: WizardStep;
-    /** Cloud shows the optional plan step; self-host starts at Workspace. */
+    /** Cloud shows the plan step; self-host starts at Workspace. */
     readonly showPlan: boolean;
-    /** Render a passed plan step as skipped (dash) rather than done (check). */
-    readonly planSkipped?: boolean;
 }
 
-export function WizardStepper({ current, showPlan, planSkipped = false }: WizardStepperProps) {
+export function WizardStepper({ current, showPlan }: WizardStepperProps) {
     const steps = showPlan ? ALL_STEPS : ALL_STEPS.filter((s) => s.step !== 0);
     return (
         <ol className="flex items-center gap-2" aria-label="Setup progress">
             {steps.map(({ step, label }, i) => {
                 const active = step === current;
-                const past = step < current;
-                const skipped = past && step === 0 && planSkipped;
-                const done = past && !skipped;
+                const done = step < current;
                 return (
                     <li key={step} className="flex items-center gap-2">
                         <span
@@ -41,15 +37,12 @@ export function WizardStepper({ current, showPlan, planSkipped = false }: Wizard
                                 "flex items-center gap-1.5 font-mono text-[10.5px] uppercase tracking-[0.08em]",
                                 done && "text-success",
                                 active && "text-foreground",
-                                skipped && "text-muted-foreground line-through",
-                                !done && !active && !skipped && "text-muted-foreground/50",
+                                !done && !active && "text-muted-foreground/50",
                             )}
                             aria-current={active ? "step" : undefined}
                         >
                             {done ? (
                                 <Check aria-hidden className="size-3 text-success" />
-                            ) : skipped ? (
-                                <Minus aria-hidden className="size-3 text-muted-foreground" />
                             ) : (
                                 <span
                                     aria-hidden

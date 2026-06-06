@@ -1,17 +1,16 @@
 "use client";
 
 /**
- * Step ⓪ of the setup wizard: the optional, cloud-only Bursora Cloud plan card.
+ * Step ⓪ of the setup wizard: the mandatory, cloud-only Bursora Cloud plan card.
  * Price and features come from the plans table (passed in), never hardcoded.
  *
  * States:
- *   - default — plan card with "Subscribe to Cloud" (user-scoped checkout) and
- *     "Skip for now". The subscribe form's SubmitButton spins while the redirect
- *     to checkout is in flight.
+ *   - default — plan card with "Subscribe to Cloud" (user-scoped checkout). The
+ *     subscribe form's SubmitButton spins while the redirect to checkout is in
+ *     flight.
  *   - finalizing — the user just returned from a successful checkout but the
  *     activation webhook hasn't landed yet. Poll the subscription-status signal
- *     until it flips active; show a "finalizing…" panel meanwhile. Skip stays
- *     available so a slow webhook never traps the user.
+ *     until it flips active; show a "finalizing…" panel meanwhile.
  *   - subscribed — active (on arrival, or once the poll confirms): collapse to a
  *     confirmation and auto-advance to the workspace step.
  *
@@ -19,10 +18,12 @@
  * checkout redirect — the reported race where the card re-appeared post-payment.
  */
 
+import { BillingIntervalToggle } from "@/components/ui/billing-interval-toggle";
 import { Button } from "@/components/ui/button";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { StatusTag } from "@/components/ui/workspace/status-tag";
 import type { OnboardingPlanView } from "@/lib/onboarding/plan-view";
+import type { BillingInterval } from "@/lib/plans/plan";
 import { Check, Loader2, Zap } from "lucide-react";
 import type { Route } from "next";
 import { useRouter } from "next/navigation";
@@ -30,8 +31,7 @@ import { useEffect, useState, useTransition } from "react";
 
 interface PlanStepProps {
     readonly plan: OnboardingPlanView;
-    readonly checkoutAction: () => Promise<void>;
-    readonly skipAction: () => Promise<void>;
+    readonly checkoutAction: (formData: FormData) => Promise<void>;
     /** Active on arrival (webhook landed before the checkout redirect). */
     readonly returnedActive: boolean;
     /** Returned from checkout but not yet active — poll until the webhook lands. */
@@ -96,7 +96,6 @@ function useSubscriptionPoll(enabled: boolean): { active: boolean; timedOut: boo
 export function PlanStep({
     plan,
     checkoutAction,
-    skipAction,
     returnedActive,
     awaitingActivation,
     nextPath,
@@ -105,6 +104,15 @@ export function PlanStep({
     const [refreshing, startRefresh] = useTransition();
     const poll = useSubscriptionPoll(awaitingActivation && !returnedActive);
     const active = returnedActive || poll.active;
+    // Default to annual (two months free) where it exists: the interval this
+    // toggle sets binds at checkout, so this is the honest, effective place to
+    // nudge the higher-value plan — monthly stays one click away, and the card
+    // shows the true yearly total, not a masked per-month figure. Fall back to
+    // monthly when no annual variant is synced so the card always shows a price.
+    const [interval, setBillingInterval] = useState<BillingInterval>(
+        plan.annual ? "year" : "month",
+    );
+    const selected = interval === "year" ? plan.annual : plan.monthly;
 
     useEffect(() => {
         if (!active) return;
@@ -141,16 +149,11 @@ export function PlanStep({
                 </div>
                 <p className="mt-2 text-sm text-muted-foreground" aria-live="polite">
                     {poll.timedOut
-                        ? "This is taking longer than usual. Your payment went through — refresh in a moment, or continue and it'll unlock once confirmed."
+                        ? "This is taking longer than usual. Your payment went through — refresh in a moment and it'll unlock once confirmed."
                         : "Payment received. Confirming your subscription — this usually takes a few seconds."}
                 </p>
-                <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-                    <form action={skipAction}>
-                        <Button type="submit" variant="ghost" className="w-full sm:w-auto">
-                            Continue
-                        </Button>
-                    </form>
-                    {poll.timedOut ? (
+                {poll.timedOut ? (
+                    <div className="mt-5 flex justify-end">
                         <Button
                             type="button"
                             variant="outline"
@@ -166,8 +169,8 @@ export function PlanStep({
                             ) : null}
                             Refresh
                         </Button>
-                    ) : null}
-                </div>
+                    </div>
+                ) : null}
             </section>
         );
     }
@@ -177,15 +180,27 @@ export function PlanStep({
             <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="space-y-1">
                     <h2 className="text-base font-semibold tracking-[-0.01em]">{plan.name}</h2>
-                    <p className="flex items-baseline gap-1.5">
-                        <span className="text-2xl font-semibold tabular-nums">{plan.price}</span>
-                        <span className="text-sm text-muted-foreground">/ {plan.interval}</span>
-                    </p>
+                    {selected ? (
+                        <p className="flex items-baseline gap-1.5">
+                            <span className="text-2xl font-semibold tabular-nums">
+                                {selected.price}
+                            </span>
+                            <span className="text-sm text-muted-foreground">
+                                / {selected.interval}
+                            </span>
+                        </p>
+                    ) : null}
                 </div>
                 <StatusTag tone="muted" variant="pill">
-                    Optional
+                    Required
                 </StatusTag>
             </div>
+
+            {plan.annual && plan.monthly ? (
+                <div className="mt-4">
+                    <BillingIntervalToggle value={interval} onChange={setBillingInterval} />
+                </div>
+            ) : null}
 
             <div className="mt-4 flex items-center gap-2 rounded-[8px] border border-success/25 bg-success/[0.06] px-3 py-2.5">
                 <Zap className="size-3.5 shrink-0 text-success" strokeWidth={2.4} />
@@ -208,13 +223,9 @@ export function PlanStep({
                 </ul>
             ) : null}
 
-            <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-                <form action={skipAction}>
-                    <Button type="submit" variant="ghost" className="w-full sm:w-auto">
-                        Skip for now
-                    </Button>
-                </form>
+            <div className="mt-6 flex justify-end">
                 <form action={checkoutAction}>
+                    <input type="hidden" name="interval" value={interval} />
                     <SubmitButton
                         pendingLabel="Redirecting…"
                         autoFocus

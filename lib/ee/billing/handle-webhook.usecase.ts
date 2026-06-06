@@ -1,3 +1,4 @@
+import { anonymousId, captureServerEvent } from "@/lib/analytics/server-capture";
 import type { BillingWebhookEventStore } from "./billing-webhook-event.store";
 import type { PaymentProviderAdapter, WebhookEvent } from "./payment-provider.adapter";
 import type { UserBillingRepository } from "./user-billing.repository";
@@ -130,6 +131,7 @@ async function onSubscriptionActivated(
     // (resumed/unpaused).
     const statusFromEvent =
         typeof event.status === "string" && event.status.length > 0 ? event.status : "active";
+    const isFirstCheckout = existing?.subscribedAt == null;
     await users.upsert({
         userId,
         // Write ids only when the event carries them, so a present id is never
@@ -139,10 +141,14 @@ async function onSubscriptionActivated(
         // Stamp subscribed_at only on the first checkout. Re-checkouts after
         // a cancel keep the original signup timestamp; refund window does NOT
         // reset.
-        ...(existing?.subscribedAt == null
-            ? { subscribedAt: now, refundEligibleUntil: refundUntil }
-            : {}),
+        ...(isFirstCheckout ? { subscribedAt: now, refundEligibleUntil: refundUntil } : {}),
     });
+    // Conversion beacon, only on the first activation so a resume/unpause never
+    // re-counts. No PII: the distinct id is a hash of the user id. No-ops on
+    // self-host (no PostHog key).
+    if (isFirstCheckout) {
+        await captureServerEvent({ event: "subscribed", distinctId: anonymousId(userId) });
+    }
 }
 
 async function onSubscriptionStatusChange(

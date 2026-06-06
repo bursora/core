@@ -307,6 +307,7 @@ export function AlertChannelsForm({
                                                 type="email"
                                                 inputMode="email"
                                                 autoComplete="email"
+                                                className="ph-no-capture"
                                                 placeholder={userEmail}
                                                 {...field}
                                             />

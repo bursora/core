@@ -75,7 +75,9 @@ export function RevealApiKeyCell({ keyId, workspaceId, revealable, last6 }: Reve
         <form action={formAction} className="flex items-center gap-2">
             <input type="hidden" name="workspaceId" value={workspaceId} />
             <input type="hidden" name="keyId" value={keyId} />
-            <code className="font-mono text-xs text-muted-foreground">{maskPreview(last6)}</code>
+            <code className="ph-no-capture font-mono text-xs text-muted-foreground">
+                {maskPreview(last6)}
+            </code>
             <Button
                 type="submit"
                 variant="outline"

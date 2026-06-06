@@ -64,6 +64,30 @@ function buildAuth() {
             },
         },
         databaseHooks: {
+            user: {
+                create: {
+                    // Real signup hook: fires once when a new user row is
+                    // created (first email-code verify or first Google
+                    // consent). Best-effort funnel beacon, no PII — the distinct
+                    // id is a hash of the user id, never the email. No-ops on
+                    // self-host (no PostHog key). Dynamic import keeps the
+                    // analytics graph off the auth module's load path.
+                    after: async (user) => {
+                        try {
+                            const { captureServerEvent, anonymousId } =
+                                await import("./analytics/server-capture");
+                            await captureServerEvent({
+                                event: "signup",
+                                distinctId: anonymousId(user.id),
+                            });
+                        } catch (err: unknown) {
+                            Sentry.captureException(err, {
+                                tags: { area: "analytics", step: "signup" },
+                            });
+                        }
+                    },
+                },
+            },
             session: {
                 create: {
                     // Signing in is how a user reverts a pending account

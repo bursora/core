@@ -7,7 +7,7 @@
 import type { Route } from "next";
 
 /**
- * Step ⓪ PLAN is the optional, cloud-only subscribe step; ① WORKSPACE, ② API
+ * Step ⓪ PLAN is the mandatory, cloud-only subscribe step; ① WORKSPACE, ② API
  * KEY, ③ CONNECT follow. Self-host starts at ①.
  */
 export type WizardStep = 0 | 1 | 2 | 3;
@@ -41,4 +41,20 @@ export function wizardStepPath(step: WizardStep, workspaceId?: string): Route {
  */
 export function planStepReturnedActivePath(): Route {
     return "/workspace/new?step=0&billing=ok" as Route;
+}
+
+/**
+ * Subscribe-first gate for workspace creation. On cloud an owner cannot reach
+ * the workspace step without an active subscription — they belong on the plan
+ * step ⓪ until checkout completes. Self-host has no plan step, so it always
+ * reaches workspace creation. Returns the step the user is allowed to be at.
+ */
+export function workspaceCreationGate({
+    isCloud,
+    subscribed,
+}: {
+    readonly isCloud: boolean;
+    readonly subscribed: boolean;
+}): Extract<WizardStep, 0 | 1> {
+    return isCloud && !subscribed ? 0 : 1;
 }

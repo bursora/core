@@ -5,7 +5,12 @@
  */
 
 import { getCronStatus } from "@/lib/cron/scheduler";
-import { probeFailureReason, sentryHealth, withTimeout } from "@/lib/system-health/collect";
+import {
+    posthogHealth,
+    probeFailureReason,
+    sentryHealth,
+    withTimeout,
+} from "@/lib/system-health/collect";
 import { afterEach, describe, expect, test } from "bun:test";
 
 describe("withTimeout", () => {
@@ -71,6 +76,21 @@ describe("sentryHealth", () => {
         const health = sentryHealth();
         expect(health.status).toBe("down");
         expect(health.error).toMatch(/not initialized/i);
+    });
+});
+
+describe("posthogHealth", () => {
+    const originalKey = process.env.POSTHOG_KEY;
+    afterEach(() => {
+        if (originalKey === undefined) delete process.env.POSTHOG_KEY;
+        else process.env.POSTHOG_KEY = originalKey;
+    });
+
+    test("disabled when no key is configured", async () => {
+        delete process.env.POSTHOG_KEY;
+        const health = await posthogHealth();
+        expect(health.status).toBe("disabled");
+        expect(health.key).toBe("posthog");
     });
 });
 

@@ -36,7 +36,7 @@ export function WorkspaceHeader({
                         size="md"
                     />
                     <div className="min-w-0 flex-1">
-                        <div className="truncate text-sm font-medium text-foreground">
+                        <div className="ph-no-capture truncate text-sm font-medium text-foreground">
                             {activeWorkspace.name}
                         </div>
                         <div className="truncate font-mono text-[11px] text-muted-foreground">

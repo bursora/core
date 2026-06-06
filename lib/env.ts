@@ -109,6 +109,15 @@ export interface Env {
     readonly CLICKHOUSE_PASSWORD: string;
     /** ClickHouse database. Defaults to `default`. */
     readonly CLICKHOUSE_DATABASE: string;
+    /**
+     * PostHog project API key (publishable `phc_`), for both server-side funnel
+     * capture and the client provider (the root layout passes it down as a
+     * prop). Empty when analytics is off (the self-host default): no key, no
+     * network call, no client script.
+     */
+    readonly POSTHOG_KEY: string;
+    /** PostHog ingestion host. Defaults to the US cloud endpoint. */
+    readonly POSTHOG_HOST: string;
 }
 
 const parseBool = (value: string | undefined, fallback: boolean): boolean => {
@@ -244,6 +253,8 @@ export function loadEnv(source: Record<string, string | undefined>): Env {
         CLICKHOUSE_USER: source.CLICKHOUSE_USER ?? "default",
         CLICKHOUSE_PASSWORD: source.CLICKHOUSE_PASSWORD ?? "",
         CLICKHOUSE_DATABASE: source.CLICKHOUSE_DATABASE ?? "default",
+        POSTHOG_KEY: source.POSTHOG_KEY ?? "",
+        POSTHOG_HOST: source.POSTHOG_HOST ?? "https://us.i.posthog.com",
     });
 }
 

@@ -2,8 +2,8 @@
  * Entry redirect for `/workspace`. Resolves the active workspace from the
  * cookie or the user's first membership and redirects to
  * `/workspace/[workspaceId]`. When the user has no memberships, redirects
- * straight into the setup wizard: cloud + unsubscribed (and not already
- * skipped) starts at the plan step; everyone else at the workspace step.
+ * straight into the setup wizard: a cloud owner without an active subscription
+ * starts at the plan step; everyone else at the workspace step.
  *
  * Login's `callbackURL` points here so newly-signed-in users land on a real
  * workspace home (or the setup flow) without each page repeating resolution.
@@ -14,8 +14,11 @@ import { requireSessionUI } from "@/lib/auth";
 import { env } from "@/lib/env";
 import { listWorkspacesForUser } from "@/lib/identity/workspaces-for-user";
 import { isUserSubscribed } from "@/lib/onboarding/plan-entry";
-import { isPlanStepSkipped } from "@/lib/onboarding/plan-skip-cookie";
-import { planStepReturnedActivePath, wizardStepPath } from "@/lib/onboarding/wizard-step";
+import {
+    planStepReturnedActivePath,
+    wizardStepPath,
+    workspaceCreationGate,
+} from "@/lib/onboarding/wizard-step";
 import { buildWorkspacePath } from "@/lib/routes";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
@@ -38,9 +41,9 @@ export default async function WorkspaceEntryPage({ searchParams }: WorkspaceEntr
             // it activates. Dropping it here strands the user on the buy card.
             if (billing === "ok") redirect(planStepReturnedActivePath());
             const subscribed = await isUserSubscribed(session.user.id);
-            // Already subscribed, not returning from checkout: go create a workspace.
-            if (subscribed) redirect(wizardStepPath(1));
-            if (!(await isPlanStepSkipped(session.user.id))) redirect(wizardStepPath(0));
+            // Subscribe-first: an unsubscribed cloud owner must pass the plan
+            // step before reaching workspace creation.
+            redirect(wizardStepPath(workspaceCreationGate({ isCloud: true, subscribed })));
         }
         redirect(wizardStepPath(1));
     }

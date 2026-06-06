@@ -4,9 +4,13 @@ import { requireSessionUI } from "@/lib/auth";
 import { env } from "@/lib/env";
 import { assertWorkspaceMemberOrNotFound, listApiKeys } from "@/lib/identity/server";
 import { getCheckoutAction, isUserSubscribed } from "@/lib/onboarding/plan-entry";
-import { isPlanStepSkipped } from "@/lib/onboarding/plan-skip-cookie";
 import { getOnboardingPlan } from "@/lib/onboarding/plan-view";
-import { parseWizardStep, wizardStepPath, type WizardStep } from "@/lib/onboarding/wizard-step";
+import {
+    parseWizardStep,
+    wizardStepPath,
+    workspaceCreationGate,
+    type WizardStep,
+} from "@/lib/onboarding/wizard-step";
 import { deriveOnboardingWorkspaceName } from "@/lib/onboarding/workspace-name";
 import { Building2, KeyRound, Terminal } from "lucide-react";
 import { redirect } from "next/navigation";
@@ -14,7 +18,7 @@ import { ConnectStep } from "./_components/connect-step";
 import { KeyStep } from "./_components/key-step";
 import { PlanStep } from "./_components/plan-step";
 import { WizardStepper } from "./_components/wizard-stepper";
-import { createWorkspaceAction, skipPlanStepAction } from "./actions";
+import { createWorkspaceAction } from "./actions";
 import { NewWorkspaceForm } from "./new-workspace-form";
 
 interface NewWorkspacePageProps {
@@ -48,7 +52,7 @@ export default async function NewWorkspacePage({ searchParams }: NewWorkspacePag
     const isCloud = env().IS_CLOUD;
     const step = parseWizardStep(rawStep);
 
-    // Step ⓪ Plan is the optional, cloud-only subscribe step.
+    // Step ⓪ Plan is the mandatory, cloud-only subscribe step.
     if (step === 0 && !isCloud) redirect(wizardStepPath(1));
     if (step === 0) {
         const subscribed = await isUserSubscribed(session.user.id);
@@ -62,7 +66,8 @@ export default async function NewWorkspacePage({ searchParams }: NewWorkspacePag
         // so it self-updates the moment the subscription activates.
         const awaitingActivation = returnedFromCheckout && !subscribed;
         const plan = await getOnboardingPlan();
-        // No active plan configured — skip a step we can't render.
+        // No active plan configured — let the user through rather than trap them
+        // on a step we can't render.
         if (!plan) redirect(wizardStepPath(1));
         const checkoutAction = await getCheckoutAction();
         return (
@@ -73,13 +78,25 @@ export default async function NewWorkspacePage({ searchParams }: NewWorkspacePag
                 <PlanStep
                     plan={plan}
                     checkoutAction={checkoutAction}
-                    skipAction={skipPlanStepAction}
                     returnedActive={returnedActive}
                     awaitingActivation={awaitingActivation}
                     nextPath={wizardStepPath(1)}
                 />
             </OnboardingShell>
         );
+    }
+
+    // Subscribe-first gate: on cloud an owner cannot reach workspace creation
+    // without an active subscription. Route them to the plan step until checkout
+    // completes. Steps ②/③ act on a workspace that already exists, which means
+    // creation already passed the gate, so they aren't re-checked here. When no
+    // plan is configured there's nothing to subscribe to (the plan step bails
+    // the same way), so let creation through rather than loop step 1 ↔ step 0.
+    if (step === 1 && isCloud) {
+        const subscribed = await isUserSubscribed(session.user.id);
+        if (workspaceCreationGate({ isCloud, subscribed }) === 0 && (await getOnboardingPlan())) {
+            redirect(wizardStepPath(0));
+        }
     }
 
     // Steps ② and ③ are scoped to a workspace the user owns; `/workspace/new`
@@ -90,14 +107,13 @@ export default async function NewWorkspacePage({ searchParams }: NewWorkspacePag
         await assertWorkspaceMemberOrNotFound({ workspaceId: ws, userId: session.user.id });
     }
 
-    const planSkipped = isCloud && (await isPlanStepSkipped(session.user.id));
     const header = HEADERS[step];
     const Icon = header.icon;
 
     return (
         <OnboardingShell>
             <div className="mb-6">
-                <WizardStepper current={step} showPlan={isCloud} planSkipped={planSkipped} />
+                <WizardStepper current={step} showPlan={isCloud} />
             </div>
             <section className="rounded-[8px] border border-border bg-background p-6">
                 <div className="flex items-start gap-3">

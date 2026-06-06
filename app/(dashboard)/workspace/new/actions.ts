@@ -22,27 +22,18 @@ import {
     WORKSPACE_COOKIE_MAX_AGE_SECONDS,
 } from "@/components/shell/app-shell-helpers";
 import { requestSourceIp } from "@/lib/actions/request-ip";
+import { anonymousId, captureServerEvent } from "@/lib/analytics/server-capture";
 import { getRequestSession } from "@/lib/auth";
+import { env } from "@/lib/env";
 import { createWorkspace, issueApiKey, listApiKeys } from "@/lib/identity/server";
-import { setPlanStepSkipped } from "@/lib/onboarding/plan-skip-cookie";
-import { wizardStepPath } from "@/lib/onboarding/wizard-step";
+import { isUserSubscribed } from "@/lib/onboarding/plan-entry";
+import { getOnboardingPlan } from "@/lib/onboarding/plan-view";
+import { wizardStepPath, workspaceCreationGate } from "@/lib/onboarding/wizard-step";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import type { NewWorkspaceState } from "./new-workspace-form";
 
 const FIRST_KEY_NAME = "Default";
-
-/**
- * Skip the optional plan step ⓪. Records the skip so the `/workspace` entry
- * redirect doesn't route the user back here, then advances to the workspace
- * step. Never blocks progress.
- */
-export async function skipPlanStepAction(): Promise<void> {
-    const session = await getRequestSession();
-    if (!session) redirect("/login");
-    await setPlanStepSkipped(session.user.id);
-    redirect(wizardStepPath(1));
-}
 
 export async function createWorkspaceAction(
     _prev: NewWorkspaceState,
@@ -50,6 +41,17 @@ export async function createWorkspaceAction(
 ): Promise<NewWorkspaceState> {
     const session = await getRequestSession();
     if (!session) redirect("/login");
+
+    // Subscribe-first gate, enforced at the mutation (not just the page render).
+    // Mirrors the step-1 gate in `page.tsx`: on cloud an unsubscribed owner with
+    // a configured plan belongs on the plan step until checkout completes.
+    const subscribed = await isUserSubscribed(session.user.id);
+    if (
+        workspaceCreationGate({ isCloud: env().IS_CLOUD, subscribed }) === 0 &&
+        (await getOnboardingPlan())
+    ) {
+        redirect(wizardStepPath(0));
+    }
 
     const name = String(formData.get("name") ?? "").trim();
     if (name.length === 0) {
@@ -73,6 +75,13 @@ export async function createWorkspaceAction(
         };
     }
 
+    // Funnel beacon. No PII: the distinct id is a hash of the user id. No-ops on
+    // self-host (no PostHog key).
+    await captureServerEvent({
+        event: "workspace_created",
+        distinctId: anonymousId(session.user.id),
+    });
+
     const jar = await cookies();
     jar.set(WORKSPACE_COOKIE, workspaceId, {
         path: "/",
@@ -90,6 +99,10 @@ export async function createWorkspaceAction(
             name: FIRST_KEY_NAME,
             userId: session.user.id,
             ip: await requestSourceIp(),
+        });
+        await captureServerEvent({
+            event: "api_key_issued",
+            distinctId: anonymousId(session.user.id),
         });
         jar.set(ISSUED_KEY_COOKIE, issued.plaintext, {
             httpOnly: true,

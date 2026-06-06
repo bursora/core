@@ -73,7 +73,7 @@ export function WorkspaceSwitcher({
                                     className="gap-2"
                                 >
                                     <WorkspaceAvatar name={ws.name} workspaceId={ws.id} size="xs" />
-                                    <span className="flex-1 truncate">{ws.name}</span>
+                                    <span className="ph-no-capture flex-1 truncate">{ws.name}</span>
                                     <Check
                                         className={cn(
                                             "h-4 w-4 shrink-0",

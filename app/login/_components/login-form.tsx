@@ -230,6 +230,7 @@ export function LoginForm() {
                                         <Input
                                             type="email"
                                             autoComplete="email"
+                                            className="ph-no-capture"
                                             placeholder="you@company.com"
                                             autoFocus
                                             {...field}

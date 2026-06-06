@@ -1,8 +1,8 @@
 /**
  * Render-side tests for the setup wizard's plan step ⓪.
  *
- *   - default: the plan card shows the DB-sourced price + features and both the
- *     "Subscribe to Cloud" and "Skip for now" controls.
+ *   - default: the plan card shows the DB-sourced price + features and the
+ *     "Subscribe to Cloud" control; the step is mandatory, so there's no skip.
  *   - returned-active: collapses to a "Subscribed" confirmation and drops the
  *     subscribe control (the effect auto-advances; effects don't run under
  *     renderToStaticMarkup, so only the markup is asserted here).
@@ -24,8 +24,8 @@ beforeAll(() => {
 
 const PLAN: OnboardingPlanView = {
     name: "Bursora Cloud",
-    price: "$29",
-    interval: "month",
+    monthly: { price: "$29", interval: "month" },
+    annual: { price: "$290", interval: "year" },
     features: ["5M events / month"],
 };
 
@@ -39,7 +39,6 @@ async function render(
         <PlanStep
             plan={PLAN}
             checkoutAction={noop}
-            skipAction={noop}
             returnedActive={opts.returnedActive ?? false}
             awaitingActivation={opts.awaitingActivation ?? false}
             nextPath={"/workspace/new" as never}
@@ -48,14 +47,19 @@ async function render(
 }
 
 describe("PlanStep", () => {
-    test("default state shows the DB plan and both controls", async () => {
+    test("default state shows the DB plan, the interval toggle, and the subscribe control, no skip", async () => {
         const html = await render();
         expect(html).toContain("Bursora Cloud");
         expect(html).toContain("$29");
-        expect(html).toContain("month");
         expect(html).toContain("5M events / month");
         expect(html).toContain("Subscribe to Cloud");
-        expect(html).toContain("Skip for now");
+        // Monthly/annual toggle with the annual savings nudge.
+        expect(html).toContain("Monthly");
+        expect(html).toContain("Annual");
+        expect(html).toContain("2 months free");
+        // The chosen interval rides to the action via a hidden field.
+        expect(html).toContain('name="interval"');
+        expect(html).not.toContain("Skip for now");
     });
 
     test("returned-active collapses to a Subscribed confirmation", async () => {

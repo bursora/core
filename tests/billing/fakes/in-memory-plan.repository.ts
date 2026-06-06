@@ -1,10 +1,9 @@
 /**
  * In-memory `PlanReadRepository` for billing/checkout tests.
  *
- * `listActive` returns the seeded plans in insertion order; `findActive`
- * returns the first or `null` when none are seeded. Mirrors the production
- * Drizzle repo's contract (active-only, cheapest-first) closely enough for
- * unit tests that never touch a database.
+ * `listActive` returns the seeded plans in insertion order. Mirrors the
+ * production Drizzle repo's contract (active-only, cheapest-first) closely
+ * enough for unit tests that never touch a database.
  */
 
 import type { Plan, PlanReadRepository } from "@/lib/plans/plan";
@@ -35,9 +34,5 @@ export class InMemoryPlanRepository implements PlanReadRepository {
 
     async listActive(): Promise<readonly Plan[]> {
         return [...this.active];
-    }
-
-    async findActive(): Promise<Plan | null> {
-        return this.active[0] ?? null;
     }
 }

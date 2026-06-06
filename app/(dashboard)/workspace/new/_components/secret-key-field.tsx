@@ -40,7 +40,7 @@ export function SecretKeyField({ value }: SecretKeyFieldProps) {
                 value={value}
                 onFocus={(e) => e.currentTarget.select()}
                 aria-label="Secret API key"
-                className="select-all pr-11 font-mono text-xs"
+                className="ph-no-capture select-all pr-11 font-mono text-xs"
             />
             <Button
                 type="button"

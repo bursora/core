@@ -18,6 +18,9 @@
  * `X-Bursora-Cap-Hit`: `rate` (rate limit) or `spike` (spike protection).
  */
 
+import { markFirstEvent } from "@/lib/analytics/first-event-marker";
+import { anonymousId, captureServerEvent } from "@/lib/analytics/server-capture";
+import { env } from "@/lib/env";
 import { recordEventBundleUsage } from "@/lib/event-bundle/middleware";
 import { recordAuthFailure } from "@/lib/identity/with-bursora-key";
 import { withSdkAuthz } from "@/lib/identity/with-sdk-authz";
@@ -26,7 +29,7 @@ import { ingestEvents } from "@/lib/metering/server";
 import { setupErrorLogger } from "@/lib/setup-errors/server";
 import { applySpikeProtection } from "@/lib/spike-protection/middleware";
 import type { SpikeDecision } from "@/lib/spike-protection/types";
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import { z } from "zod";
 
 export const dynamic = "force-dynamic";
@@ -154,6 +157,26 @@ export async function POST(request: Request): Promise<NextResponse> {
         workspaceId: authz.apiKey.workspaceId,
         eventCount: summary.billable,
     });
+
+    // Activation beacon: fire `first_event_received` exactly once per workspace,
+    // when its very first billable event lands. `markFirstEvent` is an O(1)
+    // Redis `SET NX` that returns true only on the claiming ingest, so there is
+    // no per-request ClickHouse COUNT and the beacon self-suppresses after the
+    // first hit. Gated on `POSTHOG_KEY` so the self-host / key-less hot path
+    // pays nothing. No PII: the distinct id is a hash of the workspace id.
+    // Deferred via `after()`: the marker + beacon have zero bearing on the 202,
+    // so the per-ingest `SET NX` runs after the response flushes, not on the path.
+    if (summary.billable > 0 && env().POSTHOG_KEY.length > 0) {
+        const workspaceId = authz.apiKey.workspaceId;
+        after(async () => {
+            if (await markFirstEvent(workspaceId)) {
+                await captureServerEvent({
+                    event: "first_event_received",
+                    distinctId: anonymousId(workspaceId),
+                });
+            }
+        });
+    }
 
     const body: Record<string, unknown> = { status: "accepted" };
     if (summary.unpriced.length > 0) {

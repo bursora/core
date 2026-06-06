@@ -46,7 +46,7 @@ export function IssuedKeyCard({ plaintext }: IssuedKeyCardProps) {
                                 readOnly
                                 value={plaintext}
                                 onFocus={(e) => e.currentTarget.select()}
-                                className="flex-1 font-mono select-all"
+                                className="ph-no-capture flex-1 font-mono select-all"
                             />
                             <CopyButton value={plaintext} label="Copy" />
                             <Button

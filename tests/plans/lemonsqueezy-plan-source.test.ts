@@ -82,6 +82,90 @@ describe("lemonSqueezyPlanSource", () => {
         ]);
     });
 
+    test("returns one plan per published variant (monthly + annual)", async () => {
+        // The cloud product carries two published variants: monthly $29 and
+        // annual $290 (2 months free). The source must emit a FetchedPlan for
+        // each so the plans table carries both billing intervals.
+        const annual = {
+            id: "1725999",
+            attributes: {
+                name: "Annual",
+                price: 29000,
+                interval: "year",
+                interval_count: 1,
+                status: "published",
+            },
+        };
+        const { fetcher } = makeFetch({
+            "/v1/products/1101649/variants": { data: [VARIANT.data, annual] },
+            "/v1/products?filter": PRODUCTS,
+            "/v1/stores/389222": STORE,
+        });
+
+        const plans = await lemonSqueezyPlanSource({
+            apiKey: "test-key",
+            storeId: "389222",
+            trackedProductNames: ["Bursora Cloud"],
+            fetch: fetcher,
+        }).fetchPlans();
+
+        expect(plans).toEqual([
+            {
+                lsProductId: "1101649",
+                lsVariantId: "1725367",
+                name: "Bursora Cloud",
+                description: "<p>Cloud</p>",
+                priceCents: 2900,
+                currency: "USD",
+                interval: "month",
+                intervalCount: 1,
+            },
+            {
+                lsProductId: "1101649",
+                lsVariantId: "1725999",
+                name: "Bursora Cloud",
+                description: "<p>Cloud</p>",
+                priceCents: 29000,
+                currency: "USD",
+                interval: "year",
+                intervalCount: 1,
+            },
+        ]);
+    });
+
+    test("dedups two published variants of the same interval, keeping the higher price", async () => {
+        // A superseded $0.50 monthly variant left in `published` status alongside
+        // the live $29 monthly one. Both are published, so a naive keep-all would
+        // emit two monthly rows and let checkout's interval `.find()` resolve the
+        // stale cheaper price. The source must keep only the higher-priced one.
+        const stale = {
+            id: "1725000",
+            attributes: {
+                name: "Default (old)",
+                price: 50,
+                interval: "month",
+                interval_count: 1,
+                status: "published",
+            },
+        };
+        const { fetcher } = makeFetch({
+            "/v1/products/1101649/variants": { data: [stale, VARIANT.data] },
+            "/v1/products?filter": PRODUCTS,
+            "/v1/stores/389222": STORE,
+        });
+
+        const plans = await lemonSqueezyPlanSource({
+            apiKey: "test-key",
+            storeId: "389222",
+            trackedProductNames: ["Bursora Cloud"],
+            fetch: fetcher,
+        }).fetchPlans();
+
+        expect(plans).toHaveLength(1);
+        expect(plans[0]?.lsVariantId).toBe("1725367");
+        expect(plans[0]?.priceCents).toBe(2900);
+    });
+
     test("selects the published variant, ignoring a pending one that sorts first", async () => {
         // The product carries a pending $0.50 variant (sort 1) alongside the
         // published $29 one (sort 2); the source must pick the published.

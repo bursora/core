@@ -4,9 +4,10 @@
  * Implements the `PlanSource` port by hitting the LS JSON:API. Lists the store's
  * products and matches each tracked plan by product name — the only identifier
  * stable across LS test and live modes (product id and slug both differ per
- * mode). For each match it reads name + description, the product's published
- * variant (price + interval + interval_count + variant id), and the store
- * currency. Returns neutral `FetchedPlan` rows the sync use case upserts.
+ * mode). For each match it reads name + description, every published variant
+ * (price + interval + interval_count + variant id), and the store currency.
+ * A product with monthly + annual variants yields one `FetchedPlan` per
+ * variant, so the plans table carries both billing intervals.
  *
  * Lives under `drizzle/` so this LS-calling code is NEVER statically imported
  * by a bundled module — the OSS Next build excludes it. Mirrors the auth +
@@ -66,17 +67,19 @@ export function lemonSqueezyPlanSource(config: LemonSqueezyPlanSourceConfig): Pl
                         `lemonsqueezy plan source: no product named "${name}" in store ${config.storeId}`,
                     );
                 }
-                const variant = parseVariant(await get(`/v1/products/${product.id}/variants`));
-                plans.push({
-                    lsProductId: product.id,
-                    lsVariantId: variant.id,
-                    name: product.name,
-                    description: product.description,
-                    priceCents: variant.priceCents,
-                    currency,
-                    interval: variant.interval,
-                    intervalCount: variant.intervalCount,
-                });
+                const variants = parseVariants(await get(`/v1/products/${product.id}/variants`));
+                for (const variant of variants) {
+                    plans.push({
+                        lsProductId: product.id,
+                        lsVariantId: variant.id,
+                        name: product.name,
+                        description: product.description,
+                        priceCents: variant.priceCents,
+                        currency,
+                        interval: variant.interval,
+                        intervalCount: variant.intervalCount,
+                    });
+                }
             }
             return plans;
         },
@@ -143,33 +146,42 @@ function parseProductList(payload: unknown): Map<string, ParsedProduct> {
     return byName;
 }
 
-function parseVariant(payload: unknown): {
-    id: string;
-    priceCents: number;
-    interval: string;
-    intervalCount: number;
-} {
+interface ParsedVariant {
+    readonly id: string;
+    readonly priceCents: number;
+    readonly interval: string;
+    readonly intervalCount: number;
+}
+
+function parseVariants(payload: unknown): readonly ParsedVariant[] {
     const data = asRecord(payload, "variants").data;
     if (!Array.isArray(data) || data.length === 0) {
         throw new Error("lemonsqueezy plan source: product has no variants");
     }
-    // A product can carry pending/draft variants alongside the live one (e.g. a
-    // superseded price). Only a published variant is sellable, so select that
-    // one rather than the first in sort order.
-    const published = data.find(
-        (v) =>
-            asRecord(asRecord(v, "variant").attributes, "variant.attributes").status ===
-            "published",
-    );
-    if (published === undefined) {
+    // A product can carry pending/draft variants alongside the live ones (e.g. a
+    // superseded price). Only published variants are sellable, and a single
+    // product holds one per billing interval (monthly + annual). Dedup per
+    // interval so a stale same-interval published variant can't add a second plan
+    // row that checkout's interval `.find()` resolves to the wrong (cheaper)
+    // price — keep the highest-priced published variant for each interval.
+    const byInterval = new Map<string, ParsedVariant>();
+    for (const entry of data) {
+        const attrs = asRecord(asRecord(entry, "variant").attributes, "variant.attributes");
+        if (attrs.status !== "published") continue;
+        const variant = asRecord(entry, "published variant");
+        const parsed: ParsedVariant = {
+            id: requireString(variant.id, "variant id"),
+            priceCents: requireInteger(attrs.price, "variant price"),
+            interval: requireString(attrs.interval, "variant interval"),
+            intervalCount: requireInteger(attrs.interval_count, "variant interval_count"),
+        };
+        const existing = byInterval.get(parsed.interval);
+        if (existing === undefined || parsed.priceCents > existing.priceCents) {
+            byInterval.set(parsed.interval, parsed);
+        }
+    }
+    if (byInterval.size === 0) {
         throw new Error("lemonsqueezy plan source: product has no published variant");
     }
-    const variant = asRecord(published, "published variant");
-    const attrs = asRecord(variant.attributes, "published variant.attributes");
-    return {
-        id: requireString(variant.id, "variant id"),
-        priceCents: requireInteger(attrs.price, "variant price"),
-        interval: requireString(attrs.interval, "variant interval"),
-        intervalCount: requireInteger(attrs.interval_count, "variant interval_count"),
-    };
+    return [...byInterval.values()];
 }

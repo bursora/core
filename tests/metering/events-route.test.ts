@@ -17,6 +17,8 @@
  *   - 202 with `unpriced` (provider+model) listed when a model has no pricing
  *     row (issue #915); structured server log fires; priced siblings persist;
  *     a fully-unpriced batch persists nothing but still reports the gap
+ *   - ingest data-layer failure → records an `ingest_failed` setup error on the
+ *     workspace rollup, then rethrows (5xx) so the SDK retries
  */
 
 import { InMemoryEventBundleCounterStore } from "@/lib/event-bundle/in-memory.adapter";
@@ -649,5 +651,45 @@ describe("POST /api/v1/events", () => {
         expect(serialized.includes("secret-customer-id")).toBe(false);
 
         warn.mockRestore();
+    });
+
+    test("ingest failure records an ingest_failed setup error and rethrows so the SDK retries", async () => {
+        const harness = setupHarness();
+        const setupErrors = new InMemorySetupErrorRepository();
+        setSetupErrorsDepsForTesting({
+            repo: setupErrors,
+            now: () => new Date("2025-05-10T12:00:00.000Z"),
+            notifications: new InMemoryNotificationsRepository(),
+            listMemberUserIds: async () => [],
+        });
+        // Data layer down (ClickHouse / Postgres): the priced row reaches the
+        // sink and the write throws. The route must surface it on the workspace
+        // rollup and rethrow (5xx) so the SDK keeps the events and retries.
+        setMeteringDepsForTesting({
+            eventsRepo: {
+                async insertBatch(): Promise<number> {
+                    throw new Error("clickhouse unavailable");
+                },
+                async eraseByWorkspaces(): Promise<void> {},
+            },
+            pricingRepo: harness.pricing,
+            dedup: new InMemoryRequestDedupGuard(),
+        });
+
+        let threw = false;
+        try {
+            await POST(
+                makeRequest(JSON.stringify(validEventBody()), { "x-bursora-key": PLAINTEXT }),
+            );
+        } catch {
+            threw = true;
+        }
+        expect(threw).toBe(true);
+
+        // The failure-path log is fire-and-forget; let it drain before asserting.
+        await new Promise((r) => setTimeout(r, 0));
+        expect(setupErrors.rows.length).toBe(1);
+        expect(setupErrors.rows[0]?.category).toBe("ingest_failed");
+        expect(setupErrors.rows[0]?.workspaceId).toBe(WORKSPACE);
     });
 });

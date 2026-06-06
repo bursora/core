@@ -67,6 +67,7 @@ const ACTIVITY_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 const SETUP_ERROR_LABELS: Record<string, string> = {
     auth_revoked: "Unrecognized API key",
     ingest_invalid_body: "Invalid ingest payload",
+    ingest_failed: "Some usage events didn't record",
     auth_unknown: "Unknown API key",
 };
 

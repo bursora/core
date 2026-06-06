@@ -20,6 +20,10 @@ export const NOTICE_LABELS: Record<DashboardSetupErrorCategory, NoticeLabel> = {
         title: "Invalid ingest payload",
         body: `Ingest requests that failed validation in the last 24h: ${COUNT_PLACEHOLDER}. Update your SDK.`,
     },
+    ingest_failed: {
+        title: "Some usage events didn't record",
+        body: `Usage events Bursora failed to record in the last 24h: ${COUNT_PLACEHOLDER}. Recent spend may be undercounted; the SDK retries automatically.`,
+    },
     sdk_unknown_provider: {
         title: "SDK could not detect provider",
         body: `wrap() calls that could not detect a provider in the last 24h: ${COUNT_PLACEHOLDER}. Confirm the SDK wraps a supported client.`,

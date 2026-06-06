@@ -93,27 +93,43 @@ export async function POST(request: Request): Promise<NextResponse> {
     });
     if (!decision.allowed) return capResponse(decision);
 
-    const summary = await ingestEvents({
-        workspaceId: authz.apiKey.workspaceId,
-        events: parsed.value.events.map((e) => ({
-            provider: e.provider,
-            model: e.model,
-            region: e.region,
-            promptTokens: e.promptTokens,
-            completionTokens: e.completionTokens,
-            cacheTokens: e.cacheTokens,
-            cacheWriteTokens: e.cacheWriteTokens,
-            cacheWrite1hTokens: e.cacheWrite1hTokens,
-            batch: e.batch,
-            ts: new Date(e.ts),
-            tenantId: e.tenantId ?? null,
-            agentId: e.agentId ?? null,
-            workflowId: e.workflowId ?? null,
-            latencyMs: e.latencyMs ?? null,
-            requestId: e.requestId ?? null,
-            errored: e.errored ?? false,
-        })),
-    });
+    let summary: Awaited<ReturnType<typeof ingestEvents>>;
+    try {
+        summary = await ingestEvents({
+            workspaceId: authz.apiKey.workspaceId,
+            events: parsed.value.events.map((e) => ({
+                provider: e.provider,
+                model: e.model,
+                region: e.region,
+                promptTokens: e.promptTokens,
+                completionTokens: e.completionTokens,
+                cacheTokens: e.cacheTokens,
+                cacheWriteTokens: e.cacheWriteTokens,
+                cacheWrite1hTokens: e.cacheWrite1hTokens,
+                batch: e.batch,
+                ts: new Date(e.ts),
+                tenantId: e.tenantId ?? null,
+                agentId: e.agentId ?? null,
+                workflowId: e.workflowId ?? null,
+                latencyMs: e.latencyMs ?? null,
+                requestId: e.requestId ?? null,
+                errored: e.errored ?? false,
+            })),
+        });
+    } catch (err) {
+        // Ingest reached the data layer and failed (ClickHouse / Postgres
+        // unavailable, transient write error). Record it on the workspace's
+        // setup-error rollup so the admin sees "some usage events didn't record"
+        // on the dashboard, then rethrow so the SDK gets a 5xx and retries.
+        // Fire-and-forget, matching the invalid-body path above: the recorder
+        // swallows its own errors, and not awaiting keeps the 5xx off this write
+        // (which itself no-ops during a full Postgres outage).
+        void setupErrorLogger().log({
+            kind: "ingest_failed",
+            workspaceId: authz.apiKey.workspaceId,
+        });
+        throw err;
+    }
 
     // Issue #915: surface unpriced (provider, model) pairs to the SDK author +
     // customer ops instead of silently storing cost_usd = 0. The priced rows in

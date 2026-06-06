@@ -37,6 +37,7 @@ export interface SetupErrorRepository {
 
 export type RecordSetupErrorInput =
     | { readonly kind: "ingest_invalid_body"; readonly workspaceId: string }
+    | { readonly kind: "ingest_failed"; readonly workspaceId: string }
     | { readonly kind: "sdk_unknown_provider"; readonly workspaceId: string }
     | {
           readonly kind: "auth_failure";
@@ -137,7 +138,11 @@ export async function recordSetupErrorUseCase(args: {
     listMemberUserIds: (workspaceId: string) => Promise<readonly string[]>;
 }): Promise<void> {
     const bucketHour = truncateToHour(args.now);
-    if (args.input.kind === "ingest_invalid_body" || args.input.kind === "sdk_unknown_provider") {
+    if (
+        args.input.kind === "ingest_invalid_body" ||
+        args.input.kind === "ingest_failed" ||
+        args.input.kind === "sdk_unknown_provider"
+    ) {
         const category = args.input.kind;
         const { created } = await args.repo.incrementBucket({
             workspaceId: args.input.workspaceId,

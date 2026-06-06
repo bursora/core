@@ -5,6 +5,7 @@ export const DASHBOARD_WINDOW_MS = 24 * 60 * 60 * 1000;
 export const DASHBOARD_SETUP_ERROR_CATEGORIES = [
     "auth_revoked",
     "ingest_invalid_body",
+    "ingest_failed",
     "sdk_unknown_provider",
 ] as const;
 

@@ -363,10 +363,10 @@ export const alerts = pgTable(
 );
 
 // --- setup_errors ------------------------------------------------------------
-// Hourly counters of SDK setup failures, surfaced on the workspace dashboard
-// banner. Two distinct signals:
-//   - ingest_invalid_body / sdk_unknown_provider → per-workspace
-//                                                  (workspace_id set, post-auth)
+// Hourly counters of SDK setup / ingest failures, surfaced on the workspace
+// dashboard banner. Two distinct signals:
+//   - ingest_invalid_body / ingest_failed /      → per-workspace
+//     sdk_unknown_provider                         (workspace_id set, post-auth)
 //   - auth_unknown                               → global bucket (workspace_id
 //                                                  NULL), admin-only
 //                                                  observability. All auth

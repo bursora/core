@@ -18,13 +18,18 @@ interface Props {
     readonly action: (prev: NewWorkspaceState, formData: FormData) => Promise<NewWorkspaceState>;
     /** Prefilled "{firstName}'s Workspace"; selected on focus so one keystroke replaces it. */
     readonly defaultName: string;
+    /**
+     * Show the Cancel link. False during first-run onboarding, where the user
+     * has no workspace to return to and Cancel would loop back to this form.
+     */
+    readonly showCancel?: boolean;
 }
 
 const INITIAL: NewWorkspaceState = { error: null };
 const MAX_LEN = 60;
 const DEFAULT_ENVIRONMENT = "prod";
 
-export function NewWorkspaceForm({ action, defaultName }: Props) {
+export function NewWorkspaceForm({ action, defaultName, showCancel = true }: Props) {
     const [state, formAction] = useActionState(action, INITIAL);
     const [name, setName] = useState(defaultName);
     const [environment, setEnvironment] = useState<string>(DEFAULT_ENVIRONMENT);
@@ -105,9 +110,11 @@ export function NewWorkspaceForm({ action, defaultName }: Props) {
             </div>
 
             <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-                <Button type="button" variant="ghost" asChild>
-                    <Link href="/workspace">Cancel</Link>
-                </Button>
+                {showCancel ? (
+                    <Button type="button" variant="ghost" asChild>
+                        <Link href="/workspace">Cancel</Link>
+                    </Button>
+                ) : null}
                 <SubmitButton
                     pendingLabel="Creating…"
                     disabled={!canSubmit}

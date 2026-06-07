@@ -48,6 +48,7 @@ type CodeValues = z.infer<typeof codeFormSchema>;
 export function LoginForm() {
     const [sentTo, setSentTo] = useState<string | null>(null);
     const [googlePending, setGooglePending] = useState(false);
+    const [redirecting, setRedirecting] = useState(false);
     const emailForm = useForm<EmailValues>({
         resolver: zodResolver(emailFormSchema),
         defaultValues: { email: "" },
@@ -83,6 +84,10 @@ export function LoginForm() {
             toast.error(message);
             return;
         }
+        // Keep the button in its pending state through the redirect — the
+        // navigation below is async, so without this the spinner clears and
+        // the button is clickable again in the gap before the page unloads.
+        setRedirecting(true);
         window.location.assign(LOGIN_CALLBACK_URL);
     };
 
@@ -169,8 +174,8 @@ export function LoginForm() {
                             )}
                         />
                         <SubmitButton
-                            pending={codeForm.formState.isSubmitting}
-                            pendingLabel="Verifying…"
+                            pending={codeForm.formState.isSubmitting || redirecting}
+                            pendingLabel={redirecting ? "Signing in…" : "Verifying…"}
                             className="w-full"
                         >
                             Sign in

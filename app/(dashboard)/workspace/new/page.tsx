@@ -3,6 +3,7 @@ import { OnboardingShell } from "@/components/shell/onboarding-shell";
 import { requireSessionUI } from "@/lib/auth";
 import { env } from "@/lib/env";
 import { assertWorkspaceMemberOrNotFound, listApiKeys } from "@/lib/identity/server";
+import { listWorkspacesForUser } from "@/lib/identity/workspaces-for-user";
 import { getCheckoutAction, isUserSubscribed } from "@/lib/onboarding/plan-entry";
 import { getOnboardingPlan } from "@/lib/onboarding/plan-view";
 import {
@@ -111,6 +112,12 @@ export default async function NewWorkspacePage({ searchParams }: NewWorkspacePag
     const header = HEADERS[step];
     const Icon = header.icon;
 
+    // Cancel only makes sense when the user already owns a workspace to return
+    // to (creating an additional one via the switcher). During first-run
+    // onboarding there's nothing to go back to, so hide it.
+    const canCancelCreate =
+        step === 1 ? (await listWorkspacesForUser(session.user.id)).length > 0 : false;
+
     return (
         <OnboardingShell>
             <div className="mb-6">
@@ -139,6 +146,7 @@ export default async function NewWorkspacePage({ searchParams }: NewWorkspacePag
                                 name: session.user.name,
                                 email: session.user.email,
                             })}
+                            showCancel={canCancelCreate}
                         />
                     ) : null}
                     {step === 2 && ws ? <KeyStepSection workspaceId={ws} /> : null}

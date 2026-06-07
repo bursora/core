@@ -1502,6 +1502,12 @@
                     "primaryKey": false,
                     "notNull": false
                 },
+                "provider_variant_id": {
+                    "name": "provider_variant_id",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": false
+                },
                 "subscription_status": {
                     "name": "subscription_status",
                     "type": "text",

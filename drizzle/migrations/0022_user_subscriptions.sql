@@ -2,6 +2,7 @@ CREATE TABLE "user_subscriptions" (
 	"user_id" uuid PRIMARY KEY NOT NULL,
 	"provider_customer_id" text,
 	"provider_subscription_id" text,
+	"provider_variant_id" text,
 	"subscription_status" text,
 	"subscribed_at" timestamp with time zone,
 	"refund_eligible_until" timestamp with time zone,

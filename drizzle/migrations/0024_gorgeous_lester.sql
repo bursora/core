@@ -1,1 +1,0 @@
-ALTER TABLE "user_subscriptions" ADD COLUMN "provider_variant_id" text;

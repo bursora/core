@@ -1,56 +1,69 @@
 # Bursora
 
-Next.js 16 app (App Router + Turbopack) for the Bursora dashboard on `app.bursora.com`. The sibling `site/` marketing app imports shared UI primitives and pure helpers from here via the `@bursora/core` path alias; the package is private (`@bursora/core` is an import alias, not a published artifact).
+[![license](https://img.shields.io/badge/license-Apache--2.0-2563eb?style=flat-square)](./LICENSE)
+[![Next.js](https://img.shields.io/badge/Next.js-16-000?style=flat-square)](https://nextjs.org)
+[![docs](https://img.shields.io/badge/docs-bursora.com-7c3aed?style=flat-square)](https://bursora.com/docs)
 
-## Layout
+**A budget that says no before the AI call goes out.** This repo is the dashboard and API behind `app.bursora.com`, and the thing you self-host if you'd rather run it yourself.
+
+Bursora sits between your app and the AI provider. Before each call, it checks the budget; over a limit, it blocks; under, the call goes through and Bursora records what it cost. You get live spend grouped by customer, agent, workflow, and model, plus hard limits, alerts, and a kill switch. The SDK wrap is [one line](https://github.com/bursora/sdk); nothing routes through us.
+
+The full product story, in plain English, is at **[bursora.com/docs](https://bursora.com/docs)**. This README is for people running or hacking on the code.
+
+## Self-host
+
+Everything outside `lib/ee/` is Apache 2.0; that's the community edition. Bring your own Postgres, run the OSS build, and you have the whole product minus the managed billing. No feature gates, no SLA.
+
+```bash
+bun install
+bun run build:oss   # production build without the EE billing module
+```
+
+Full walkthrough (env, Postgres + ClickHouse, first workspace): **[bursora.com/docs/get-started/self-host](https://bursora.com/docs/get-started/self-host)**.
+
+## Develop
+
+```bash
+bun install
+bun run dev         # Next dev server on :3000
+bun run typecheck   # next typegen && tsc --noEmit
+bun run lint
+bun test
+```
+
+Database:
+
+```bash
+bun run db:migrate  # apply migrations (Postgres + ClickHouse)
+bun run db:seed     # development pricing rows
+bun run db:reset    # setup, migrate, seed from scratch
+```
+
+## How it's laid out
 
 ```
 app/
-  (dashboard)/   # app.bursora.com surface — workspace, profile, alerts, budgets, etc.
-  login/, invite/
-  api/           # v1, auth, internal, cron, webhooks
+  (dashboard)/   workspace, spend, budgets, alerts, profile
+  api/           v1, auth, internal, cron, webhooks
 components/
-  ui/            # shadcn primitives + dashboard-views, workspace, brand, filters, hooks, shell subdirs
-  shell/         # dashboard chrome (app-shell, sidebar-nav, user-menu, command-palette, ...)
+  ui/            shadcn primitives + dashboard views, filters, shell
+  shell/         dashboard chrome (sidebar, command palette, ...)
 lib/
-  ee/            # source-available Enterprise module (Lemon Squeezy billing). See lib/ee/LICENSE.
-  db/            # drizzle schema + client
-  budgeting/, metering/, identity/, notification/, rate-limit/, spike-protection/, event-bundle/, detection/, plans/, ...
-drizzle/         # migrations + seed/setup scripts
-tests/           # all tests (audits, unit, integration, billing fakes, ...)
-public/
+  budgeting/ metering/ pricing/ notification/ rate-limit/ ...   the engine
+  ee/          source-available Enterprise module (billing); see lib/ee/LICENSE
+  db/          drizzle schema + client
+drizzle/         migrations + seed
+tests/           audits, unit, integration
 ```
 
-Product docs live in the sibling `site/docs/` (rendered at bursora.com/docs).
+Stack: Next.js 16 (App Router + Turbopack), Drizzle on Postgres, ClickHouse for usage events, better-auth. Product docs (concepts, SDK, recipes) live in the sibling `site/` repo and render at bursora.com/docs.
 
-## Run
+## The EE boundary
 
-- `bun install`
-- `bun run dev` — start Next dev server on port 3000.
-- `bun run typecheck` — `next typegen && tsc --noEmit`.
-- `bun run lint` — `eslint .`.
-- `bun test` — run the test suite.
+`lib/ee/` is source-available, not Apache 2.0. You can read it; production use needs a Bursora Cloud subscription or a commercial agreement, and you can't build a competing service on it. Everything else stays Apache 2.0.
 
-## Database
-
-- `bun run db:generate` — emit a migration from schema diff.
-- `bun run db:migrate` — apply pending migrations.
-- `bun run db:seed` — load development pricing rows.
-- `bun run db:reset` — drop, migrate, seed.
-
-## Builds
-
-- `bun run build` — Turbopack production build with EE billing wired in.
-- `bun run build:oss` — `OSS_BUILD=true next build`. The EE module is dropped via runtime guards (`process.env.OSS_BUILD === "true"`) and dynamic-import branches, so `lib/ee/` symbols don't land in the bundle.
-
-## Boundaries
-
-`bursora/lib/ee/` is source-available, not Apache 2.0. Only an allowlist of callers may import `@/lib/ee/*` (enforced by ESLint `no-restricted-imports`): the settings page, the Lemon Squeezy webhook route, the cron scheduler (for the billing-webhook-prune job), EE-scoped tests, and code inside `lib/ee/`.
-
-## Community edition (self-host)
-
-The Apache 2.0 portion (everything outside `lib/ee/`) is the community edition you self-host. Run `bun run build:oss` for a build without the billing module. Community-supported, no SLA. See [`docs/get-started/self-host.md`](docs/get-started/self-host.md).
+The OSS build drops it entirely; runtime guards plus dynamic imports keep `lib/ee/` symbols out of the bundle, and only an allowlist of callers may import it (ESLint-enforced). `scripts/verify-oss-build.sh` proves it by grepping the built output.
 
 ## License
 
-Apache 2.0 for everything except `lib/ee/`. [`lib/ee/LICENSE`](lib/ee/LICENSE) governs the Enterprise module: free for development and evaluation; production use requires a Bursora Cloud subscription or signed commercial agreement.
+Apache 2.0, except `lib/ee/`, which is governed by [`lib/ee/LICENSE`](lib/ee/LICENSE): free to develop and evaluate, production needs Cloud or a commercial deal.

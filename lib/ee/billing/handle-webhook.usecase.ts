@@ -23,7 +23,7 @@ const REFUND_WINDOW_DAYS = 30;
  * events. The user is resolved from the checkout `custom_data` user id on
  * first activation, or by provider customer id on every later event. The row
  * is upserted, so no row need pre-exist. Behaviour by event type:
- *   - subscription.activated   → store customer/sub ids, stamp
+ *   - subscription.activated   → store customer/sub/variant ids, stamp
  *                                subscribed_at + refund_eligible_until
  *                                (signup + 30 days). Subscription status
  *                                is taken from the event payload when
@@ -136,7 +136,7 @@ async function onSubscriptionActivated(
         userId,
         // Write ids only when the event carries them, so a present id is never
         // clobbered with null (the activation event always carries both).
-        ...providerIds(event),
+        ...providerIdentifiers(event),
         subscriptionStatus: statusFromEvent,
         // Stamp subscribed_at only on the first checkout. Re-checkouts after
         // a cancel keep the original signup timestamp; refund window does NOT
@@ -157,7 +157,11 @@ async function onSubscriptionStatusChange(
 ): Promise<void> {
     const userId = await resolveUserId(event, users);
     if (!userId) return;
-    await users.upsert({ userId, subscriptionStatus: event.status ?? null, ...providerIds(event) });
+    await users.upsert({
+        userId,
+        subscriptionStatus: event.status ?? null,
+        ...providerIdentifiers(event),
+    });
 }
 
 async function onSubscriptionCanceled(
@@ -175,13 +179,13 @@ async function onPaymentSucceeded(
 ): Promise<void> {
     const userId = await resolveUserId(event, users);
     if (!userId) return;
-    await users.upsert({ userId, subscriptionStatus: "active", ...providerIds(event) });
+    await users.upsert({ userId, subscriptionStatus: "active", ...providerIdentifiers(event) });
 }
 
 async function onPaymentFailed(event: WebhookEvent, users: UserBillingRepository): Promise<void> {
     const userId = await resolveUserId(event, users);
     if (!userId) return;
-    await users.upsert({ userId, subscriptionStatus: "past_due", ...providerIds(event) });
+    await users.upsert({ userId, subscriptionStatus: "past_due", ...providerIdentifiers(event) });
 }
 
 async function onOrderRefunded(event: WebhookEvent, users: UserBillingRepository): Promise<void> {
@@ -194,20 +198,24 @@ async function onOrderRefunded(event: WebhookEvent, users: UserBillingRepository
 }
 
 /**
- * Customer + subscription ids to backfill from any event that carries them, so
- * a row never ends up active (or past_due) with a null id when LS delivers an
- * `updated` / `payment` event before — or instead of — the activation event.
- * Only present ids are written; the upsert leaves untouched fields alone. A
+ * Customer + subscription + variant ids to backfill from any event that
+ * carries them, so a row never ends up active (or past_due) with a null id when
+ * LS delivers an `updated` / `payment` event before — or instead of — the
+ * activation event. The variant id rides every `subscription.*` event, so a
+ * plan switch made through the provider portal is picked up here too. Only
+ * present ids are written; the upsert leaves untouched fields alone. A
  * null/absent id is never written, so it can't clobber ids a prior event
  * already stored.
  */
-function providerIds(event: WebhookEvent): {
+function providerIdentifiers(event: WebhookEvent): {
     providerCustomerId?: string;
     providerSubscriptionId?: string;
+    providerVariantId?: string;
 } {
     return {
         ...(event.customerId ? { providerCustomerId: event.customerId } : {}),
         ...(event.subscriptionId ? { providerSubscriptionId: event.subscriptionId } : {}),
+        ...(event.variantId ? { providerVariantId: event.variantId } : {}),
     };
 }
 

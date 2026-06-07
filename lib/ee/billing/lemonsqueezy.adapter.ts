@@ -269,6 +269,12 @@ export function mapLemonSqueezyEvent(
         attributes.customer_id !== undefined && attributes.customer_id !== null
             ? String(attributes.customer_id)
             : null;
+    // `variant_id` rides `subscriptions`-type payloads (created/updated/...),
+    // identifying the monthly vs annual SKU. Payment/invoice payloads omit it.
+    const variantId =
+        attributes.variant_id !== undefined && attributes.variant_id !== null
+            ? String(attributes.variant_id)
+            : null;
     const status = typeof attributes.status === "string" ? attributes.status : null;
 
     const subscriptionType = payload.data?.type === "subscriptions";
@@ -292,6 +298,7 @@ export function mapLemonSqueezyEvent(
         userId,
         customerId,
         subscriptionId,
+        variantId,
         status,
         ...(invoiceId !== null ? { invoiceId } : {}),
     };

@@ -17,6 +17,8 @@ import { cache } from "react";
 export interface OnboardingPlanPrice {
     readonly price: string;
     readonly interval: BillingInterval;
+    /** Provider variant id, used to match a subscription back to its plan. */
+    readonly variantId: string;
 }
 
 export interface OnboardingPlanView {
@@ -62,7 +64,13 @@ const priceFor = (
     interval: BillingInterval,
 ): OnboardingPlanPrice | null => {
     const plan = plans.find((p) => p.interval === interval);
-    return plan ? { price: formatPlanPrice(plan.priceCents, plan.currency), interval } : null;
+    return plan
+        ? {
+              price: formatPlanPrice(plan.priceCents, plan.currency),
+              interval,
+              variantId: plan.lsVariantId,
+          }
+        : null;
 };
 
 /**

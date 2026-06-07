@@ -106,6 +106,9 @@ export const verification = pgTable("verification", {
 // `provider_customer_id` is NOT unique — one provider customer (a single
 // billing email) can back several Bursora accounts the same person owns — so
 // it carries a plain index used only to open that customer's billing portal.
+// `provider_variant_id` records which plan variant (monthly vs annual) the
+// user actually bought, so the billing UI shows the real price and interval
+// instead of assuming monthly.
 export const userSubscriptions = pgTable(
     "user_subscriptions",
     {
@@ -114,6 +117,7 @@ export const userSubscriptions = pgTable(
             .references(() => users.id, { onDelete: "cascade" }),
         providerCustomerId: text("provider_customer_id"),
         providerSubscriptionId: text("provider_subscription_id"),
+        providerVariantId: text("provider_variant_id"),
         subscriptionStatus: text("subscription_status"),
         subscribedAt: timestamp("subscribed_at", { withTimezone: true }),
         refundEligibleUntil: timestamp("refund_eligible_until", { withTimezone: true }),

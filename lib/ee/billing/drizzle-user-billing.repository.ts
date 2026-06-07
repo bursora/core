@@ -52,6 +52,9 @@ export class DrizzleUserBillingRepository implements UserBillingRepository {
         if (input.providerSubscriptionId !== undefined) {
             set.providerSubscriptionId = input.providerSubscriptionId;
         }
+        if (input.providerVariantId !== undefined) {
+            set.providerVariantId = input.providerVariantId;
+        }
         if (input.subscriptionStatus !== undefined) {
             set.subscriptionStatus = input.subscriptionStatus;
         }
@@ -101,6 +104,7 @@ function toRecord(row: Row): UserBillingRecord {
         userId: row.userId,
         providerCustomerId: row.providerCustomerId ?? null,
         providerSubscriptionId: row.providerSubscriptionId ?? null,
+        providerVariantId: row.providerVariantId ?? null,
         subscriptionStatus: row.subscriptionStatus ?? null,
         subscribedAt: row.subscribedAt ?? null,
         refundEligibleUntil: row.refundEligibleUntil ?? null,

@@ -14,6 +14,7 @@ import { getCronStatus } from "@/lib/cron/scheduler";
 import { db } from "@/lib/db";
 import { env } from "@/lib/env";
 import { defaultSmtpMailer } from "@/lib/notification";
+import { getOnboardingPlan } from "@/lib/onboarding/plan-view";
 import { redisClient } from "@/lib/redis/client";
 import * as Sentry from "@sentry/nextjs";
 import { sql } from "drizzle-orm";
@@ -138,6 +139,12 @@ export function sentryHealth(): ServiceHealth {
  * cheap authenticated read it runs at boot) through the allowlisted
  * dynamic-import seam, so the Lemon Squeezy wire details stay in the EE module
  * and out of OSS builds.
+ *
+ * A passing creds check is not enough: the subscribe-first paywall fails OPEN
+ * when no billable plan is synced (the wizard lets the owner through rather than
+ * trap them on an unrenderable step), so an unseeded plan table silently gives
+ * every cloud user a free workspace. Surface that here as a hard failure so the
+ * operator sees it on the status page instead of discovering it in the revenue.
  */
 async function billingHealth(): Promise<ServiceHealth> {
     const label = "Billing (Lemon Squeezy)";
@@ -149,15 +156,26 @@ async function billingHealth(): Promise<ServiceHealth> {
         const { billingDeps } = await import("@/lib/ee/billing/server");
         const result = await withTimeout(billingDeps().provider.verifyCredentials(), label);
         const latencyMs = Date.now() - startedAt;
-        return result.ok
-            ? {
-                  key: "billing",
-                  label,
-                  status: "ok",
-                  latencyMs,
-                  detail: `Mode: ${env().LEMONSQUEEZY_MODE}`,
-              }
-            : { key: "billing", label, status: "down", latencyMs, error: "API key rejected" };
+        if (!result.ok) {
+            return { key: "billing", label, status: "down", latencyMs, error: "API key rejected" };
+        }
+        const plan = await getOnboardingPlan();
+        if (!plan) {
+            return {
+                key: "billing",
+                label,
+                status: "down",
+                latencyMs,
+                error: "No billable plan synced — checkout open to all",
+            };
+        }
+        return {
+            key: "billing",
+            label,
+            status: "ok",
+            latencyMs,
+            detail: `Mode: ${env().LEMONSQUEEZY_MODE}`,
+        };
     } catch (error: unknown) {
         console.error("system-health.billing.down", error);
         return {

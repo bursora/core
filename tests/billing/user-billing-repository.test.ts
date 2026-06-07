@@ -33,6 +33,7 @@ describe("UserBillingRepository", () => {
             userId: USER_ID,
             providerCustomerId: "cus_1",
             providerSubscriptionId: "sub_1",
+            providerVariantId: null,
             subscriptionStatus: "active",
             subscribedAt,
             refundEligibleUntil: null,

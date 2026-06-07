@@ -16,12 +16,16 @@
  * customer claims the guarantee.
  *
  * `subscribedAt` is when the user first completed Checkout.
+ *
+ * `providerVariantId` is the plan variant the user bought (monthly vs annual),
+ * read back by the billing UI to show the real price and interval.
  */
 
 export interface UserBillingRecord {
     readonly userId: string;
     readonly providerCustomerId: string | null;
     readonly providerSubscriptionId: string | null;
+    readonly providerVariantId: string | null;
     readonly subscriptionStatus: string | null;
     readonly subscribedAt: Date | null;
     readonly refundEligibleUntil: Date | null;
@@ -31,6 +35,7 @@ export interface UserBillingUpsert {
     readonly userId: string;
     readonly providerCustomerId?: string | null;
     readonly providerSubscriptionId?: string | null;
+    readonly providerVariantId?: string | null;
     readonly subscriptionStatus?: string | null;
     readonly subscribedAt?: Date | null;
     readonly refundEligibleUntil?: Date | null;

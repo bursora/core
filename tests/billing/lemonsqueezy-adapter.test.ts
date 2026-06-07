@@ -242,6 +242,7 @@ describe("LemonSqueezyApiAdapter.verifyAndParseEvent", () => {
             attributes: {
                 store_id: 1,
                 customer_id: 99,
+                variant_id: 777,
                 status: "active",
             },
         },
@@ -257,6 +258,8 @@ describe("LemonSqueezyApiAdapter.verifyAndParseEvent", () => {
         expect(event.userId).toBe(USER_ID);
         expect(event.customerId).toBe("99");
         expect(event.subscriptionId).toBe("12345");
+        // The variant id identifies the bought SKU (monthly vs annual).
+        expect(event.variantId).toBe("777");
     });
 
     test("rejects a tampered body", () => {
@@ -324,6 +327,8 @@ describe("LemonSqueezyApiAdapter.verifyAndParseEvent", () => {
         expect(event.userId).toBe(USER_ID);
         expect(event.customerId).toBe("99");
         expect(event.invoiceId).toBe("in_1");
+        // Invoice payloads carry no variant id; only subscription events do.
+        expect(event.variantId).toBeNull();
     });
 
     test("maps subscription_cancelled to subscription.canceled", () => {

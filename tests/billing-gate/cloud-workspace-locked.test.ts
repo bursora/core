@@ -24,6 +24,7 @@ const record = (subscriptionStatus: string | null): UserBillingRecord => ({
     userId: OWNER_USER_ID,
     providerCustomerId: "cus_1",
     providerSubscriptionId: "sub_1",
+    providerVariantId: null,
     subscriptionStatus,
     subscribedAt: new Date("2026-01-01T00:00:00.000Z"),
     refundEligibleUntil: null,

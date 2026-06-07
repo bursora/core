@@ -24,8 +24,8 @@ beforeAll(() => {
 
 const PLAN: OnboardingPlanView = {
     name: "Bursora Cloud",
-    monthly: { price: "$29", interval: "month" },
-    annual: { price: "$290", interval: "year" },
+    monthly: { price: "$29", interval: "month", variantId: "variant_month" },
+    annual: { price: "$290", interval: "year", variantId: "variant_year" },
     features: ["5M events / month"],
 };
 
@@ -42,6 +42,7 @@ async function render(
             returnedActive={opts.returnedActive ?? false}
             awaitingActivation={opts.awaitingActivation ?? false}
             nextPath={"/workspace/new" as never}
+            selfHostUrl="https://bursora.com/docs/get-started/self-host"
         />,
     );
 }

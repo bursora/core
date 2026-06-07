@@ -37,6 +37,8 @@ interface PlanStepProps {
     /** Returned from checkout but not yet active — poll until the webhook lands. */
     readonly awaitingActivation: boolean;
     readonly nextPath: Route;
+    /** Docs link to the free self-host path, the escape hatch for the paywall. */
+    readonly selfHostUrl: string;
 }
 
 const AUTO_ADVANCE_MS = 1000;
@@ -99,6 +101,7 @@ export function PlanStep({
     returnedActive,
     awaitingActivation,
     nextPath,
+    selfHostUrl,
 }: PlanStepProps) {
     const router = useRouter();
     const [refreshing, startRefresh] = useTransition();
@@ -235,6 +238,19 @@ export function PlanStep({
                     </SubmitButton>
                 </form>
             </div>
+
+            <p className="mt-4 text-center text-xs text-muted-foreground">
+                Prefer to run it yourself?{" "}
+                <a
+                    href={selfHostUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="font-medium underline underline-offset-2 hover:text-foreground"
+                >
+                    Self-host free
+                </a>
+                .
+            </p>
         </section>
     );
 }

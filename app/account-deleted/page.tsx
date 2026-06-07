@@ -14,9 +14,7 @@ export default function AccountDeletedPage() {
             description="Your account is suspended and you've been signed out. We'll permanently delete it, along with any workspace you alone own, 24 hours from now."
             footer={
                 <Button asChild variant="link" className="h-auto p-0">
-                    <a href={process.env.NEXT_PUBLIC_SITE_URL ?? "https://bursora.com"}>
-                        Back to bursora.com
-                    </a>
+                    <a href={process.env.NEXT_PUBLIC_SITE_URL}>Back to bursora.com</a>
                 </Button>
             }
         >

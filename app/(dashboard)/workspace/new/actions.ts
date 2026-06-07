@@ -9,8 +9,9 @@
  * only be set inside a Server Action, so the key is issued here rather than in
  * the step ② render; the plaintext is shown once on entry to step ②.
  *
- * The continue action clears the flash and advances to step ③ so the secret
- * isn't re-shown on a back-navigation.
+ * The continue action advances to step ③ without clearing the flash, so the
+ * wrap snippet there is copy-paste-ready with the real key; the flash clears
+ * via its 5-minute TTL or the step-② "I've saved it" dismiss.
  */
 
 import {
@@ -123,9 +124,8 @@ export async function continueToConnectAction(formData: FormData): Promise<void>
     const workspaceId = String(formData.get("ws") ?? "").trim();
     if (workspaceId.length === 0) redirect(wizardStepPath(1));
 
-    // Clear the one-time secret so a back-navigation to step ② doesn't re-show it.
-    const jar = await cookies();
-    jar.set(ISSUED_KEY_COOKIE, "", { maxAge: 0, path: "/" });
-
+    // Keep the issued-key flash alive into step ③ so the wrap snippet renders
+    // copy-paste-ready with the real key; it clears via its TTL or the step-②
+    // "I've saved it" dismiss.
     redirect(wizardStepPath(3, workspaceId));
 }

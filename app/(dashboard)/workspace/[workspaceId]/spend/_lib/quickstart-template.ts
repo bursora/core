@@ -1,6 +1,6 @@
 /**
  * Renders an SDK quickstart template by replacing sentinel literals with the
- * caller's workspace id and most-recent api key id. The example files keep
+ * caller's workspace id and api key plaintext. The example files keep
  * the sentinels as plain string literals so the .ts files still type-check
  * (e.g. `apiKey: "__BURSORA_API_KEY__"`).
  *

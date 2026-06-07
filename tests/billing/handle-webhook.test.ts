@@ -60,6 +60,7 @@ describe("handleWebhookUseCase", () => {
                 userId: USER_ID,
                 customerId: "cus_99",
                 subscriptionId: "sub_99",
+                variantId: "var_annual",
             },
             users,
         );
@@ -69,8 +70,37 @@ describe("handleWebhookUseCase", () => {
         expect(row?.subscriptionStatus).toBe("active");
         expect(row?.providerCustomerId).toBe("cus_99");
         expect(row?.providerSubscriptionId).toBe("sub_99");
+        expect(row?.providerVariantId).toBe("var_annual");
         expect(row?.subscribedAt).not.toBeNull();
         expect(row?.refundEligibleUntil).not.toBeNull();
+    });
+
+    test("backfills the variant id from a later subscription.updated event", async () => {
+        // A row activated before the variant id was captured (legacy, or an
+        // activation event without it) gets the variant backfilled when LS next
+        // delivers a subscription event carrying it.
+        const users = new InMemoryUserBillingRepository();
+        users.seed({
+            userId: USER_ID,
+            providerCustomerId: "cus_99",
+            providerSubscriptionId: "sub_99",
+            subscriptionStatus: "active",
+        });
+        expect((await users.findByUserId(USER_ID))?.providerVariantId).toBeNull();
+
+        await runWebhook(
+            {
+                id: "evt_updated_variant",
+                type: "subscription.updated",
+                customerId: "cus_99",
+                subscriptionId: "sub_99",
+                variantId: "var_annual",
+                status: "active",
+            },
+            users,
+        );
+
+        expect((await users.findByUserId(USER_ID))?.providerVariantId).toBe("var_annual");
     });
 
     test("subscription.activated writes the provider-reported status verbatim", async () => {

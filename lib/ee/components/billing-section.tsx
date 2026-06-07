@@ -64,6 +64,14 @@ export async function BillingSection({ userId, status, children }: BillingSectio
     const isPastDue = record?.subscriptionStatus === "past_due";
     const pill = STATUS_PILL[record?.subscriptionStatus ?? ""] ?? INACTIVE_PILL;
 
+    // Show the price for the plan the user actually bought (monthly vs annual),
+    // matched by the variant id on their subscription. Falls back to the monthly
+    // headline before checkout, and for legacy rows with no variant on file.
+    const subscribed = [plan?.monthly, plan?.annual].find(
+        (p) => p != null && p.variantId === record?.providerVariantId,
+    );
+    const displayPrice = subscribed ?? plan?.monthly ?? null;
+
     return (
         <div className="space-y-6">
             {isPastDue ? <PastDueBanner /> : null}
@@ -80,13 +88,13 @@ export async function BillingSection({ userId, status, children }: BillingSectio
                                         {pill.label}
                                     </StatusTag>
                                 </div>
-                                {plan?.monthly ? (
+                                {displayPrice ? (
                                     <p className="flex items-baseline gap-1.5">
                                         <span className="text-2xl font-semibold tabular-nums">
-                                            {plan.monthly.price}
+                                            {displayPrice.price}
                                         </span>
                                         <span className="text-sm text-muted-foreground">
-                                            / month
+                                            / {displayPrice.interval}
                                         </span>
                                     </p>
                                 ) : null}

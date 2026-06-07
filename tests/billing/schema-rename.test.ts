@@ -53,6 +53,7 @@ describe("billing schema rename", () => {
             userId: "user_1",
             providerCustomerId: "cus_1",
             providerSubscriptionId: "sub_1",
+            providerVariantId: null,
             subscriptionStatus: "active",
             subscribedAt: null,
             refundEligibleUntil: null,

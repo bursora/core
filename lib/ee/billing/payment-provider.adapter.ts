@@ -37,6 +37,13 @@ export interface WebhookEvent {
     readonly userId?: string | null;
     readonly customerId?: string | null;
     readonly subscriptionId?: string | null;
+    /**
+     * Provider variant id of the subscribed plan — which SKU (monthly vs
+     * annual) the user bought. Rides every `subscription.*` event; absent on
+     * payment/invoice events. Stored so the billing UI renders the real price
+     * and interval rather than assuming monthly.
+     */
+    readonly variantId?: string | null;
     readonly status?: string | null;
     /** Set on payment.* events. Provider invoice id. */
     readonly invoiceId?: string | null;

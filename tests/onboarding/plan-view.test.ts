@@ -34,8 +34,8 @@ describe("toOnboardingPlanView", () => {
         ]);
 
         expect(view?.name).toBe("Bursora Cloud");
-        expect(view?.monthly).toEqual({ price: "$29", interval: "month" });
-        expect(view?.annual).toEqual({ price: "$290", interval: "year" });
+        expect(view?.monthly).toEqual({ price: "$29", interval: "month", variantId: "variant_1" });
+        expect(view?.annual).toEqual({ price: "$290", interval: "year", variantId: "variant_2" });
         expect(view?.features).toContain("5M events / month");
         expect(view?.features).toContain("Spike alerts");
     });
@@ -43,7 +43,7 @@ describe("toOnboardingPlanView", () => {
     test("monthly-only plans expose a null annual", () => {
         const view = toOnboardingPlanView([plan({ interval: "month", priceCents: 2900 })]);
 
-        expect(view?.monthly).toEqual({ price: "$29", interval: "month" });
+        expect(view?.monthly).toEqual({ price: "$29", interval: "month", variantId: "variant_1" });
         expect(view?.annual).toBeNull();
     });
 

@@ -81,6 +81,7 @@ export default async function NewWorkspacePage({ searchParams }: NewWorkspacePag
                     returnedActive={returnedActive}
                     awaitingActivation={awaitingActivation}
                     nextPath={wizardStepPath(1)}
+                    selfHostUrl={`${process.env.NEXT_PUBLIC_SITE_URL}/docs/get-started/self-host`}
                 />
             </OnboardingShell>
         );
@@ -155,12 +156,12 @@ async function KeyStepSection({ workspaceId }: { readonly workspaceId: string })
 }
 
 async function ConnectStepSection({ workspaceId }: { readonly workspaceId: string }) {
-    const keys = await listApiKeys(workspaceId);
+    const [keys, issued] = await Promise.all([listApiKeys(workspaceId), readIssuedKey()]);
     const liveKey = keys
         .filter((k) => k.revokedAt === null)
         .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0];
     // No live key means step ② was skipped or the key was revoked; send the user
-    // back to issue one rather than render a snippet with no key id.
+    // back to issue one rather than render a snippet with no key.
     if (!liveKey) redirect(wizardStepPath(2, workspaceId));
-    return <ConnectStep workspaceId={workspaceId} apiKeyId={liveKey.id} />;
+    return <ConnectStep workspaceId={workspaceId} issuedPlaintext={issued} />;
 }

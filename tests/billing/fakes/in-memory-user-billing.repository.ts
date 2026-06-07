@@ -8,6 +8,7 @@ type Row = {
     userId: string;
     providerCustomerId: string | null;
     providerSubscriptionId: string | null;
+    providerVariantId: string | null;
     subscriptionStatus: string | null;
     subscribedAt: Date | null;
     refundEligibleUntil: Date | null;
@@ -21,6 +22,7 @@ export class InMemoryUserBillingRepository implements UserBillingRepository {
             userId: row.userId,
             providerCustomerId: row.providerCustomerId ?? null,
             providerSubscriptionId: row.providerSubscriptionId ?? null,
+            providerVariantId: row.providerVariantId ?? null,
             subscriptionStatus: row.subscriptionStatus ?? null,
             subscribedAt: row.subscribedAt ?? null,
             refundEligibleUntil: row.refundEligibleUntil ?? null,
@@ -66,6 +68,7 @@ export class InMemoryUserBillingRepository implements UserBillingRepository {
             userId: input.userId,
             providerCustomerId: null,
             providerSubscriptionId: null,
+            providerVariantId: null,
             subscriptionStatus: null,
             subscribedAt: null,
             refundEligibleUntil: null,
@@ -80,6 +83,10 @@ export class InMemoryUserBillingRepository implements UserBillingRepository {
                 input.providerSubscriptionId === undefined
                     ? base.providerSubscriptionId
                     : input.providerSubscriptionId,
+            providerVariantId:
+                input.providerVariantId === undefined
+                    ? base.providerVariantId
+                    : input.providerVariantId,
             subscriptionStatus:
                 input.subscriptionStatus === undefined
                     ? base.subscriptionStatus

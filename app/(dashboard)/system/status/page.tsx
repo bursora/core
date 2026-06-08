@@ -40,6 +40,16 @@ function formatUptime(totalSeconds: number): string {
     return parts.join(" ");
 }
 
+/** How long the last run took. A job that suddenly jumps from ms to seconds is
+ *  the canary for something going wrong. */
+function formatDurationMs(ms: number): string {
+    if (ms < 1_000) return `${ms} ms`;
+    if (ms < 60_000) return `${(ms / 1_000).toFixed(1)}s`;
+    const minutes = Math.floor(ms / 60_000);
+    const seconds = Math.round((ms % 60_000) / 1_000);
+    return `${minutes}m ${seconds}s`;
+}
+
 interface MetricProps {
     label: string;
     children: ReactNode;
@@ -200,6 +210,7 @@ export default async function SystemStatusPage() {
                                         <TableHead>Schedule</TableHead>
                                         <TableHead>Next run</TableHead>
                                         <TableHead>Last run</TableHead>
+                                        <TableHead>Duration</TableHead>
                                         <TableHead>Status</TableHead>
                                     </TableRow>
                                 </TableHeader>
@@ -221,6 +232,11 @@ export default async function SystemStatusPage() {
                                                 {job.lastRunAt
                                                     ? formatRelativeTime(job.lastRunAt)
                                                     : "Not yet run"}
+                                            </TableCell>
+                                            <TableCell className="tabular-nums text-muted-foreground">
+                                                {job.lastDurationMs !== null
+                                                    ? formatDurationMs(job.lastDurationMs)
+                                                    : "—"}
                                             </TableCell>
                                             <TableCell>
                                                 <CronJobBadge job={job} />

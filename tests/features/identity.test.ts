@@ -80,6 +80,7 @@ describe("@/lib/identity public API", () => {
         const accepted = await acceptInviteUseCase({
             token: invited.token,
             userId: "invited-user",
+            email: "t@acme.test",
             invites,
             members,
         });

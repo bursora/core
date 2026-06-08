@@ -3,7 +3,6 @@ import { actionFail, actionOk, type ActionResult } from "@/lib/action-result";
 import { getRequestSession, requireSessionUI } from "@/lib/auth";
 import type { MemberRole } from "@/lib/identity";
 import {
-    assertWorkspaceMember,
     assertWorkspaceOwner,
     cancelPendingInvite,
     changeWorkspaceMemberRole,
@@ -54,7 +53,7 @@ export default async function MembersPage({ params }: PageProps) {
             const session = await getRequestSession();
             if (!session) return { error: "Sign in required.", invitedEmail: null };
 
-            await assertWorkspaceMember({ workspaceId, userId: session.user.id });
+            await assertWorkspaceOwner({ workspaceId, userId: session.user.id });
             await inviteMember({
                 workspaceId,
                 email,
@@ -78,7 +77,7 @@ export default async function MembersPage({ params }: PageProps) {
         try {
             const s = await getRequestSession();
             if (!s) return actionFail("Sign in required.");
-            await assertWorkspaceMember({ workspaceId, userId: s.user.id });
+            await assertWorkspaceOwner({ workspaceId, userId: s.user.id });
             await cancelPendingInvite({ workspaceId, email });
             revalidatePath(buildWorkspacePath(workspaceId, "members"));
             return actionOk();

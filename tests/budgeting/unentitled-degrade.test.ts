@@ -1,11 +1,17 @@
 /**
- * Admin-owned workspaces bypass the budget block.
+ * Lapsed cloud subscriptions degrade budget enforcement gracefully.
  *
- * `decideBudget` (composition root) resolves whether the workspace is
- * admin-owned and, if so, lifts a block decision to allow (mode `notify`) and
- * skips stamping the blocked usage row. A non-admin-owned workspace keeps the
- * normal block + blocked-row write. Both paths run against injected fakes via
- * `setBudgetingDepsForTesting` — no DB, no resolver query.
+ * `decideBudget` (composition root) resolves whether the workspace is entitled
+ * (`cloudWorkspaceUnentitled`). An unentitled cloud workspace — owner's
+ * subscription lapsed out of {active, past_due, unpaid} — keeps ingesting but
+ * loses paid enforcement: a `block` decision lifts to allow+notify and no
+ * blocked usage row is stamped (same path admin-owned workspaces take). An
+ * entitled workspace keeps the normal block + blocked-row write. Both run
+ * against injected fakes via `setBudgetingDepsForTesting` — no DB, no resolver.
+ *
+ * Self-host and admin-owned cases are covered by the entitlement helper's own
+ * suite; here `cloudWorkspaceUnentitled` is injected directly so this suite
+ * stays focused on the decide path.
  */
 
 import type { BudgetRepository, RawBudget, SpendAggregator } from "@/lib/budgeting";
@@ -15,7 +21,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 const WORKSPACE = "11111111-2222-3333-4444-555555555555";
 
 // A block-mode budget with $10 cap; the aggregator reports $25 spent, so it
-// would deny a non-admin workspace.
+// would deny an entitled workspace.
 const blockBudget: RawBudget = {
     id: "b-ws",
     workspaceId: WORKSPACE,
@@ -60,7 +66,7 @@ const decideInput = {
     workflowId: null,
 };
 
-const setup = (isAdminOwned: boolean): { blockedCount: () => number } => {
+const setup = (unentitled: boolean): { blockedCount: () => number } => {
     let blocked = 0;
     setBudgetingDepsForTesting({
         budgets: new FakeBudgetRepo(),
@@ -69,10 +75,8 @@ const setup = (isAdminOwned: boolean): { blockedCount: () => number } => {
         recordBlocked: async () => {
             blocked += 1;
         },
-        isAdminOwnedWorkspace: async () => isAdminOwned,
-        // Entitlement is exercised in unentitled-degrade.test.ts; pin it here so
-        // the non-admin case keeps the normal block instead of degrading.
-        cloudWorkspaceUnentitled: async () => false,
+        isAdminOwnedWorkspace: async () => false,
+        cloudWorkspaceUnentitled: async () => unentitled,
     });
     return { blockedCount: () => blocked };
 };
@@ -81,20 +85,18 @@ afterEach(() => {
     setBudgetingDepsForTesting(null);
 });
 
-describe("decideBudget — admin-owned bypass", () => {
-    test("admin-owned workspace is allowed past a block budget, with no blocked row", async () => {
+describe("decideBudget — lapsed cloud subscription degrade", () => {
+    test("unentitled workspace is allowed past a block budget, with no blocked row", async () => {
         const { blockedCount } = setup(true);
 
         const decision = await decideBudget(decideInput);
-        // Let any fire-and-forget recordBlocked settle before asserting.
-        await new Promise((resolve) => setImmediate(resolve));
 
         expect(decision.allow).toBe(true);
         expect(decision.mode).toBe("notify");
         expect(blockedCount()).toBe(0);
     });
 
-    test("non-admin-owned workspace still blocks and records a blocked row", async () => {
+    test("entitled workspace still blocks and records a blocked row", async () => {
         const { blockedCount } = setup(false);
 
         const decision = await decideBudget(decideInput);

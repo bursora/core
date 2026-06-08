@@ -23,6 +23,8 @@ import { getRequestSession } from "@/lib/auth";
 import { isActiveSubscriptionStatus } from "@/lib/billing-status";
 import type { UserBillingRecord } from "@/lib/ee/billing/user-billing.repository";
 import { env } from "@/lib/env";
+import { errMessage } from "@/lib/error-message";
+import { isAdminOwnedWorkspace } from "@/lib/identity/server";
 import { USER_ROLE } from "@/lib/identity/user-role";
 
 export interface BillingGateDeps {
@@ -38,6 +40,13 @@ export interface BillingGateDeps {
      * the session role; tests omit it (non-admin) or inject a fake.
      */
     readonly isCurrentUserAdmin?: () => Promise<boolean>;
+    /**
+     * True when the workspace owner is a platform admin (operator dogfood
+     * tenant). The entitlement check uses this owner axis — not the
+     * session-admin check above — because the SDK ingest path has no session.
+     * Optional: production falls back to the real resolver; tests inject a fake.
+     */
+    readonly isAdminOwnedWorkspace?: (workspaceId: string) => Promise<boolean>;
 }
 
 let testOverride: BillingGateDeps | null = null;
@@ -62,6 +71,7 @@ function billingGateDeps(): BillingGateDeps {
             const session = await getRequestSession();
             return session?.user?.role === USER_ROLE.admin;
         },
+        isAdminOwnedWorkspace,
         readBilling: async (workspaceId) => {
             // Unreachable in the OSS build: that bundle is self-host, so
             // `isCloud` is false and this read is never called.
@@ -87,5 +97,38 @@ export async function cloudWorkspaceLocked(workspaceId: string): Promise<boolean
     // admin skips it entirely.
     if (await deps.isCurrentUserAdmin?.()) return false;
     const record = await deps.readBilling(workspaceId);
+    return !isActiveSubscriptionStatus(record?.subscriptionStatus);
+}
+
+/**
+ * True when a cloud workspace has lost paid budget enforcement because its
+ * owner's subscription lapsed out of the active set. Drives the SDK graceful
+ * degrade: ingest stays up, but a `block` budget decision is returned as an
+ * allow (SDK `notify` mode); no budget-crossing alert is dispatched.
+ *
+ * Always `false` off cloud (self-host has no subscription) and for admin-owned
+ * dogfood tenants. Uses the workspace-owner admin axis, not the session-admin
+ * check `cloudWorkspaceLocked` uses, because the SDK ingest path has no
+ * session. The admin check runs before the billing read so a dogfood tenant
+ * skips it entirely.
+ *
+ * A billing-read failure defaults to entitled (`false`): this read sits on the
+ * hot `/api/v1/budget` preflight, and a transient billing-DB blip must not 500
+ * the endpoint or silently disable enforcement — normal budgets keep applying.
+ */
+export async function cloudWorkspaceUnentitled(workspaceId: string): Promise<boolean> {
+    const deps = billingGateDeps();
+    if (!deps.isCloud) return false;
+    if (await (deps.isAdminOwnedWorkspace ?? isAdminOwnedWorkspace)(workspaceId)) return false;
+    let record: UserBillingRecord | null;
+    try {
+        record = await deps.readBilling(workspaceId);
+    } catch (err) {
+        console.warn("billing_gate.entitlement_read_failed", {
+            workspaceId,
+            err: errMessage(err),
+        });
+        return false;
+    }
     return !isActiveSubscriptionStatus(record?.subscriptionStatus);
 }

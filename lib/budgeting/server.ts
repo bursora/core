@@ -10,6 +10,7 @@
  * run against in-memory fakes without DB or Redis.
  */
 
+import { cloudWorkspaceUnentitled } from "@/lib/billing-gate/server";
 import { clickhouseClient, type ClickHouse } from "@/lib/clickhouse/client";
 import { db, schema } from "@/lib/db";
 import { isAdminOwnedWorkspace } from "@/lib/identity/server";
@@ -53,6 +54,12 @@ export interface BudgetingDeps {
      * Optional: production falls back to the real resolver; tests inject a fake.
      */
     readonly isAdminOwnedWorkspace?: (workspaceId: string) => Promise<boolean>;
+    /**
+     * Resolves whether a cloud workspace has lost paid enforcement because its
+     * owner's subscription lapsed. Optional: production falls back to the real
+     * entitlement helper; tests inject a fake. Always false off cloud.
+     */
+    readonly cloudWorkspaceUnentitled?: (workspaceId: string) => Promise<boolean>;
 }
 
 let testOverride: BudgetingDeps | null = null;
@@ -113,11 +120,18 @@ export async function decideBudget(input: {
     intendedModel?: string | null;
 }): Promise<Decision> {
     const deps = budgetingDeps();
-    // Admin-owned workspaces (operator dogfood tenants) never block on budget.
-    // Resolve first so we can skip the blocked-row write and the crossing alert.
+    // Two cases never block on budget: admin-owned workspaces (operator dogfood
+    // tenants), and lapsed cloud workspaces whose owner's subscription dropped
+    // out of the active set (graceful degrade — ingest stays up, enforcement
+    // does not). Resolve both first so we can skip the blocked-row write and the
+    // crossing alert, then lift the block to an allow (`notify` mode); no alert
+    // fires for an unenforced workspace.
     const adminOwned = await (deps.isAdminOwnedWorkspace ?? isAdminOwnedWorkspace)(
         input.workspaceId,
     );
+    const unenforced =
+        adminOwned ||
+        (await (deps.cloudWorkspaceUnentitled ?? cloudWorkspaceUnentitled)(input.workspaceId));
 
     const result = await decideBudgetUseCase({
         workspaceId: input.workspaceId,
@@ -129,24 +143,25 @@ export async function decideBudget(input: {
         now: deps.now(),
         budgets: deps.budgets,
         spend: deps.spend,
-        // An admin-owned workspace is never blocked, so don't stamp a blocked row.
-        ...(adminOwned || deps.recordBlocked === undefined
+        // An unenforced workspace is never blocked, so don't stamp a blocked row.
+        ...(unenforced || deps.recordBlocked === undefined
             ? {}
             : { recordBlocked: deps.recordBlocked }),
         ...(deps.ttlSeconds === undefined ? {} : { ttlSeconds: deps.ttlSeconds }),
     });
 
-    if (!adminOwned && result.trigger !== undefined) {
+    if (!unenforced && result.trigger !== undefined) {
         await dispatchBudgetCrossing(result.trigger, deps);
     }
 
-    return adminOwned ? liftBlock(result.decision) : result.decision;
+    return unenforced ? liftBlock(result.decision) : result.decision;
 }
 
 /**
- * Flips a block decision to allow for an admin-owned workspace, leaving the
- * headroom snapshot (`remainingUsd`/`resetAt`) intact so the SDK self-degrade
- * path still sees real numbers. Mode drops to `notify` so the SDK never throws.
+ * Flips a block decision to allow for an unenforced workspace (admin-owned or
+ * lapsed cloud), leaving the headroom snapshot (`remainingUsd`/`resetAt`)
+ * intact so the SDK self-degrade path still sees real numbers. Mode drops to
+ * `notify` so the SDK never throws.
  */
 function liftBlock(decision: Decision): Decision {
     if (decision.allow) return decision;

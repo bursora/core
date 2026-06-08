@@ -1,43 +1,41 @@
 /**
- * Tests for `isAdminOwnedWorkspaceUseCase` — the resolver that says whether a
- * workspace's owner is a platform admin. Drives the rate-limit and fair-use
- * exemptions for admin-run workspaces. Pure: repo injected, no DB.
+ * Tests for workspace owner resolution — the single deterministic owner the
+ * budget preflight resolves once and reads both ways (platform role for the
+ * admin-owned bypass, user id for the billing read). A workspace can have two
+ * owners, so the resolution must be stable: an admin owner always wins,
+ * otherwise the oldest, then the lowest id. Pure: in-memory repo, no DB.
  */
 
-import { isAdminOwnedWorkspaceUseCase } from "@/lib/identity";
+import { USER_ROLE } from "@/lib/identity";
 import { describe, expect, test } from "bun:test";
 import { InMemoryMemberRepository } from "./fakes/in-memory-member.repository";
 
-describe("isAdminOwnedWorkspaceUseCase", () => {
-    test("owner is a platform admin → true", async () => {
+describe("findOwner", () => {
+    test("admin owner resolves with id and platform role", async () => {
         const members = new InMemoryMemberRepository();
         await members.addMember({ workspaceId: "ws-1", userId: "u1", role: "owner" });
         members.setUserRole("u1", "admin");
 
-        const result = await isAdminOwnedWorkspaceUseCase({ workspaceId: "ws-1", members });
-        expect(result).toBe(true);
+        expect(await members.findOwner("ws-1")).toEqual({ userId: "u1", role: USER_ROLE.admin });
     });
 
-    test("owner is a regular user → false", async () => {
+    test("regular owner resolves with the user platform role", async () => {
         const members = new InMemoryMemberRepository();
         await members.addMember({ workspaceId: "ws-1", userId: "u1", role: "owner" });
         members.setUserRole("u1", "user");
 
-        const result = await isAdminOwnedWorkspaceUseCase({ workspaceId: "ws-1", members });
-        expect(result).toBe(false);
+        expect(await members.findOwner("ws-1")).toEqual({ userId: "u1", role: USER_ROLE.user });
     });
 
-    test("no owner row found → false", async () => {
+    test("no owner row found → null", async () => {
         const members = new InMemoryMemberRepository();
-
-        const result = await isAdminOwnedWorkspaceUseCase({ workspaceId: "ws-1", members });
-        expect(result).toBe(false);
+        expect(await members.findOwner("ws-1")).toBeNull();
     });
 
     // A workspace can have two owners (the invite form allows a second). The
-    // bypass must not flip based on which owner row the DB returns first: an
+    // resolved owner must not flip based on which row the DB returns first: an
     // admin owner always wins, regardless of insertion order.
-    test("two owners, one admin → true regardless of insertion order", async () => {
+    test("two owners, admin wins regardless of insertion order", async () => {
         for (const adminFirst of [true, false]) {
             const members = new InMemoryMemberRepository();
             const ws = "ws-multi";
@@ -50,18 +48,19 @@ describe("isAdminOwnedWorkspaceUseCase", () => {
             members.setUserRole("admin-user", "admin");
             members.setUserRole("regular-user", "user");
 
-            const result = await isAdminOwnedWorkspaceUseCase({ workspaceId: ws, members });
-            expect(result).toBe(true);
+            expect(await members.findOwner(ws)).toEqual({
+                userId: "admin-user",
+                role: USER_ROLE.admin,
+            });
         }
     });
 
-    test("two non-admin owners → false", async () => {
+    test("two non-admin owners resolve to the oldest with the user role", async () => {
         const members = new InMemoryMemberRepository();
         const ws = "ws-regular";
         await members.addMember({ workspaceId: ws, userId: "u1", role: "owner" });
         await members.addMember({ workspaceId: ws, userId: "u2", role: "owner" });
 
-        const result = await isAdminOwnedWorkspaceUseCase({ workspaceId: ws, members });
-        expect(result).toBe(false);
+        expect(await members.findOwner(ws)).toEqual({ userId: "u1", role: USER_ROLE.user });
     });
 });

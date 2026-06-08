@@ -42,8 +42,8 @@ beforeAll(() => {
     }));
     mock.module("@/lib/identity/drizzle-member.repository", () => ({
         DrizzleMemberRepository: class {
-            async findOwnerUserRole(): Promise<string | null> {
-                return ownerRole;
+            async findOwner(): Promise<{ userId: string; role: string } | null> {
+                return ownerRole === null ? null : { userId: "owner-user", role: ownerRole };
             }
         },
     }));

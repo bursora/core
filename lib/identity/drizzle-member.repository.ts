@@ -4,8 +4,13 @@ import type { Db } from "@/lib/db";
 import { requireInsertedRow, schema } from "@/lib/db";
 import { and, asc, count, desc, eq, gt, isNull } from "drizzle-orm";
 import type { Invite, MemberRole, WorkspaceMember } from "./member";
-import type { InviteRepository, MemberListRow, MemberRepository } from "./member.repository";
-import { USER_ROLE, type UserRole } from "./user-role";
+import type {
+    InviteRepository,
+    MemberListRow,
+    MemberRepository,
+    WorkspaceOwner,
+} from "./member.repository";
+import { USER_ROLE } from "./user-role";
 import { USER_STATUS, type UserStatus } from "./user-status";
 
 export class DrizzleMemberRepository implements MemberRepository {
@@ -120,13 +125,15 @@ export class DrizzleMemberRepository implements MemberRepository {
         return rows.map((r) => r.userId);
     }
 
-    async findOwnerUserRole(workspaceId: string): Promise<UserRole | null> {
+    async findOwner(workspaceId: string): Promise<WorkspaceOwner | null> {
         // A workspace may have multiple owners. It counts as admin-owned when
         // any owner is a platform admin, so sort an admin owner first; fall back
-        // to a stable order (oldest, then id) so the resolved role never flips
-        // between calls when no admin owner exists.
+        // to a stable order (oldest, then id) so the resolved owner never flips
+        // between calls when no admin owner exists. One query projects both the
+        // user id (for the billing read) and the platform role (for the
+        // admin-owned bypass) so the preflight resolves the owner once.
         const [row] = await this.db
-            .select({ role: schema.users.role })
+            .select({ userId: schema.workspaceMembers.userId, role: schema.users.role })
             .from(schema.workspaceMembers)
             .innerJoin(schema.users, eq(schema.workspaceMembers.userId, schema.users.id))
             .where(
@@ -141,34 +148,14 @@ export class DrizzleMemberRepository implements MemberRepository {
                 asc(schema.workspaceMembers.userId),
             )
             .limit(1);
+        if (!row) return null;
         // `users.role` is a text column, so narrow it to the platform-role union
         // at this boundary: the column only ever holds admin|user (default +
-        // input:false), and the sole caller checks admin-vs-rest.
-        if (!row) return null;
-        return row.role === USER_ROLE.admin ? USER_ROLE.admin : USER_ROLE.user;
-    }
-
-    async findOwnerUserId(workspaceId: string): Promise<string | null> {
-        // Same single-owner resolution as `findOwnerUserRole`: admin owner
-        // first, then oldest, then id, so the resolved owner never flips
-        // between calls.
-        const [row] = await this.db
-            .select({ userId: schema.workspaceMembers.userId })
-            .from(schema.workspaceMembers)
-            .innerJoin(schema.users, eq(schema.workspaceMembers.userId, schema.users.id))
-            .where(
-                and(
-                    eq(schema.workspaceMembers.workspaceId, workspaceId),
-                    eq(schema.workspaceMembers.role, "owner"),
-                ),
-            )
-            .orderBy(
-                desc(eq(schema.users.role, USER_ROLE.admin)),
-                asc(schema.workspaceMembers.createdAt),
-                asc(schema.workspaceMembers.userId),
-            )
-            .limit(1);
-        return row?.userId ?? null;
+        // input:false), and callers check admin-vs-rest.
+        return {
+            userId: row.userId,
+            role: row.role === USER_ROLE.admin ? USER_ROLE.admin : USER_ROLE.user,
+        };
     }
 }
 

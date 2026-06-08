@@ -51,8 +51,8 @@ beforeAll(() => {
     // still fires for this workspace.
     mock.module("@/lib/identity/drizzle-member.repository", () => ({
         DrizzleMemberRepository: class {
-            async findOwnerUserRole(): Promise<string | null> {
-                return "user";
+            async findOwner(): Promise<{ userId: string; role: string } | null> {
+                return { userId: "owner-user", role: "user" };
             }
         },
     }));

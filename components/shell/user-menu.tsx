@@ -1,5 +1,6 @@
 "use client";
 
+import { Badge } from "@/components/ui/badge";
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -25,9 +26,19 @@ interface UserMenuProps {
     showBilling?: boolean;
     /** Platform admins get the operator-only system status entry. */
     isAdmin?: boolean;
+    /** Cloud only: beta accounts get a free-access badge in the menu header. */
+    isBeta?: boolean;
 }
 
-export function UserMenu({ userId, name, email, image, showBilling, isAdmin }: UserMenuProps) {
+export function UserMenu({
+    userId,
+    name,
+    email,
+    image,
+    showBilling,
+    isAdmin,
+    isBeta,
+}: UserMenuProps) {
     const router = useRouter();
     const [signingOut, setSigningOut] = useState(false);
 
@@ -61,7 +72,16 @@ export function UserMenu({ userId, name, email, image, showBilling, isAdmin }: U
                 <div className="flex items-center gap-2 px-2 py-1.5">
                     <UserAvatar size="md" userId={userId} name={name} email={email} image={image} />
                     <div className="min-w-0 flex-1">
-                        <div className="ph-no-capture truncate text-sm font-medium">{name}</div>
+                        <div className="flex items-center gap-1.5">
+                            <span className="ph-no-capture truncate text-sm font-medium">
+                                {name}
+                            </span>
+                            {isBeta ? (
+                                <Badge variant="secondary" className="px-1.5 py-0">
+                                    Beta
+                                </Badge>
+                            ) : null}
+                        </div>
                         <div className="ph-no-capture truncate text-xs text-muted-foreground">
                             {email}
                         </div>

@@ -36,7 +36,7 @@ import { requestAccountDeletionUseCase } from "./request-account-deletion.usecas
 import { revealApiKeyUseCase, type RevealApiKeyResult } from "./reveal-api-key.usecase";
 import { revokeApiKeyUseCase } from "./revoke-api-key.usecase";
 import { setWorkspaceEnvironmentUseCase } from "./set-workspace-environment.usecase";
-import { USER_ROLE } from "./user-role";
+import { roleGrantsFreeAccess, USER_ROLE } from "./user-role";
 
 const workspaces = () => new DrizzleWorkspaceRepository(db());
 const members = () => new DrizzleMemberRepository(db());
@@ -239,6 +239,15 @@ export async function runAccountPurgeCron(now: Date): Promise<{ purged: number; 
     return { purged, failed };
 }
 
+/**
+ * The user's global platform role (`admin` | `beta` | `user`), or null when the
+ * user is unknown. Read on the onboarding entry to let a beta account skip the
+ * pay-step. A plain identity read — never touches billing/EE.
+ */
+export async function getUserRole(userId: string) {
+    return users().getRole(userId);
+}
+
 export async function acceptInvite(input: { token: string; userId: string; email: string }) {
     return acceptInviteUseCase({
         token: input.token,
@@ -375,6 +384,17 @@ export async function getWorkspaceOwnerUserId(workspaceId: string): Promise<stri
  */
 export async function isAdminOwnedWorkspace(workspaceId: string): Promise<boolean> {
     return (await getWorkspaceOwner(workspaceId))?.role === USER_ROLE.admin;
+}
+
+/**
+ * True when the workspace owner is a beta account. Drives ONLY the cloud
+ * view-paywall bypass — a beta-owned workspace renders real data without a
+ * subscription. Deliberately separate from `isAdminOwnedWorkspace`: beta keeps
+ * budget enforcement, rate limits, and the fair-use cap fully live, so it must
+ * not feed those bypasses. Reads from the shared per-request owner cache.
+ */
+export async function isBetaOwnedWorkspace(workspaceId: string): Promise<boolean> {
+    return roleGrantsFreeAccess((await getWorkspaceOwner(workspaceId))?.role);
 }
 
 /**

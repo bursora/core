@@ -13,7 +13,7 @@ import { WORKSPACE_COOKIE, resolveActiveWorkspaceId } from "@/components/shell/a
 import { requireSessionUI } from "@/lib/auth";
 import { env } from "@/lib/env";
 import { listWorkspacesForUser } from "@/lib/identity/workspaces-for-user";
-import { isUserSubscribed } from "@/lib/onboarding/plan-entry";
+import { userHasCloudAccess } from "@/lib/onboarding/plan-entry";
 import {
     planStepReturnedActivePath,
     wizardStepPath,
@@ -40,10 +40,14 @@ export default async function WorkspaceEntryPage({ searchParams }: WorkspaceEntr
             // so the flag must outlive an unsubscribed check; the step polls until
             // it activates. Dropping it here strands the user on the buy card.
             if (billing === "ok") redirect(planStepReturnedActivePath());
-            const subscribed = await isUserSubscribed(session.user.id);
+            const hasCloudAccess = await userHasCloudAccess(session.user.id);
             // Subscribe-first: an unsubscribed cloud owner must pass the plan
-            // step before reaching workspace creation.
-            redirect(wizardStepPath(workspaceCreationGate({ isCloud: true, subscribed })));
+            // step before reaching workspace creation. Admin/beta clear it too.
+            redirect(
+                wizardStepPath(
+                    workspaceCreationGate({ isCloud: true, subscribed: hasCloudAccess }),
+                ),
+            );
         }
         redirect(wizardStepPath(1));
     }

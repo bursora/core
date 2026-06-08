@@ -27,6 +27,18 @@ describe("findOwner", () => {
         expect(await members.findOwner("ws-1")).toEqual({ userId: "u1", role: USER_ROLE.user });
     });
 
+    // A beta owner drives the cloud paywall bypass via `roleGrantsFreeAccess`,
+    // so `findOwner` must carry `beta` through unchanged — never collapse it to
+    // `user`. The Drizzle path narrows `users.role` with `toUserRole`, which
+    // round-trips beta; this asserts the resolved owner keeps it.
+    test("beta owner resolves with the beta platform role (not collapsed to user)", async () => {
+        const members = new InMemoryMemberRepository();
+        await members.addMember({ workspaceId: "ws-1", userId: "u1", role: "owner" });
+        members.setUserRole("u1", "beta");
+
+        expect(await members.findOwner("ws-1")).toEqual({ userId: "u1", role: USER_ROLE.beta });
+    });
+
     test("no owner row found → null", async () => {
         const members = new InMemoryMemberRepository();
         expect(await members.findOwner("ws-1")).toBeNull();

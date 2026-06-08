@@ -1,6 +1,29 @@
 import { resetEnvCacheForTesting } from "@/lib/env";
-import { getCheckoutAction, isUserSubscribed } from "@/lib/onboarding/plan-entry";
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { getCheckoutAction, userHasCloudAccess } from "@/lib/onboarding/plan-entry";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
+
+// The cloud beta-bypass reads the user's global role through identity before it
+// ever reaches EE billing. Mock that read so the role-driven branch is exercised
+// without a DB; the EE billing module must not be touched on the beta path.
+let mockRole: string | null = null;
+let realIdentity: Record<string, unknown>;
+
+beforeAll(async () => {
+    // Snapshot real exports BEFORE mocking. `await import` returns a live
+    // namespace object mock.module mutates in place, so spread into a plain
+    // object to freeze the real values for restoration in afterAll.
+    realIdentity = { ...(await import("@/lib/identity/server")) };
+    mock.module("@/lib/identity/server", () => ({
+        ...realIdentity,
+        getUserRole: async () => mockRole,
+    }));
+});
+
+// mock.module is process-global; restore at file end so the getUserRole stub
+// doesn't leak into later files that import the real identity server.
+afterAll(() => {
+    mock.module("@/lib/identity/server", () => realIdentity);
+});
 
 // The EE boundary guards are the point of this module: off cloud (or in an OSS
 // build) it must answer without reaching @/lib/ee, so Lemon Squeezy never lands
@@ -48,6 +71,7 @@ afterEach(() => {
     }
     snapshot.clear();
     resetEnvCacheForTesting();
+    mockRole = null;
 });
 
 function applyEnv(vars: Record<string, string>): void {
@@ -55,15 +79,32 @@ function applyEnv(vars: Record<string, string>): void {
     resetEnvCacheForTesting();
 }
 
-describe("isUserSubscribed", () => {
+describe("userHasCloudAccess", () => {
     test("is false off cloud without reaching EE billing", async () => {
         applyEnv(BASE); // IS_CLOUD unset → self-host
-        expect(await isUserSubscribed("user-1")).toBe(false);
+        expect(await userHasCloudAccess("user-1")).toBe(false);
     });
 
     test("is false in an OSS build even on cloud, without reaching EE billing", async () => {
         applyEnv({ ...CLOUD, OSS_BUILD: "true" });
-        expect(await isUserSubscribed("user-1")).toBe(false);
+        expect(await userHasCloudAccess("user-1")).toBe(false);
+    });
+
+    test("is true on cloud for a beta user without reaching EE billing", async () => {
+        applyEnv(CLOUD);
+        mockRole = "beta";
+        // A beta account clears the pay-step. The role short-circuit runs before
+        // the EE billing read, so this resolves without an active subscription.
+        expect(await userHasCloudAccess("beta-user")).toBe(true);
+    });
+
+    test("is true on cloud for an admin (operator) without reaching EE billing", async () => {
+        applyEnv(CLOUD);
+        mockRole = "admin";
+        // The operator never owes a subscription: admin clears the pay-step the
+        // same way beta does, short-circuiting before the EE billing read so the
+        // first workspace can be created on prod without paying.
+        expect(await userHasCloudAccess("admin-user")).toBe(true);
     });
 });
 

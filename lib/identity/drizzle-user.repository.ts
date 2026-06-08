@@ -3,11 +3,25 @@ import "server-only";
 import type { Db } from "@/lib/db";
 import { schema } from "@/lib/db";
 import { and, eq, isNotNull, lte } from "drizzle-orm";
+import { toUserRole, type UserRole } from "./user-role";
 import { USER_STATUS, type UserStatus } from "./user-status";
 import type { UserRepository } from "./user.repository";
 
 export class DrizzleUserRepository implements UserRepository {
     constructor(private readonly db: Db) {}
+
+    async getRole(userId: string): Promise<UserRole | null> {
+        const [row] = await this.db
+            .select({ role: schema.users.role })
+            .from(schema.users)
+            .where(eq(schema.users.id, userId))
+            .limit(1);
+        // No row → the user is gone; signal that with null. Otherwise narrow the
+        // raw `users.role` text column (admin|beta|user) through the validated
+        // `toUserRole` rather than asserting it with a cast.
+        if (!row) return null;
+        return toUserRole(row.role);
+    }
 
     async delete(userId: string): Promise<void> {
         await this.db.delete(schema.users).where(eq(schema.users.id, userId));

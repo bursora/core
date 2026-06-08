@@ -1,6 +1,13 @@
-import { USER_STATUS, type UserRepository, type UserStatus } from "@/lib/identity";
+import {
+    USER_ROLE,
+    USER_STATUS,
+    type UserRepository,
+    type UserRole,
+    type UserStatus,
+} from "@/lib/identity";
 
 interface UserState {
+    role: UserRole;
     status: UserStatus;
     deletionScheduledAt: Date | null;
     sessions: number;
@@ -13,6 +20,7 @@ export class InMemoryUserRepository implements UserRepository {
     /** Test-only: register a user (active, with a live session, by default). */
     seed(userId: string, state?: Partial<UserState>): void {
         this.users.set(userId, {
+            role: state?.role ?? USER_ROLE.user,
             status: state?.status ?? USER_STATUS.active,
             deletionScheduledAt: state?.deletionScheduledAt ?? null,
             sessions: state?.sessions ?? 1,
@@ -26,6 +34,10 @@ export class InMemoryUserRepository implements UserRepository {
     async delete(userId: string): Promise<void> {
         this.deleted.push(userId);
         this.users.delete(userId);
+    }
+
+    async getRole(userId: string): Promise<UserRole | null> {
+        return this.users.get(userId)?.role ?? null;
     }
 
     async getStatus(userId: string): Promise<UserStatus | null> {
@@ -64,6 +76,7 @@ export class InMemoryUserRepository implements UserRepository {
         const existing = this.users.get(userId);
         if (existing) return existing;
         const created: UserState = {
+            role: USER_ROLE.user,
             status: USER_STATUS.active,
             deletionScheduledAt: null,
             sessions: 1,

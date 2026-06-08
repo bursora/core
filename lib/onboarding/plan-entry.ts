@@ -10,13 +10,29 @@ import "server-only";
 
 import { isActiveSubscriptionStatus } from "@/lib/billing-status";
 import { env } from "@/lib/env";
+import { getUserRole } from "@/lib/identity/server";
+import { roleGrantsFreeAccess, USER_ROLE } from "@/lib/identity/user-role";
 
 /**
- * Whether the signed-in user already has an active Bursora Cloud subscription.
- * Always false off cloud, so the plan step never surfaces on self-host.
+ * Whether the signed-in user clears the onboarding pay-step — an active Bursora
+ * Cloud subscription, an admin (operator) account, or a beta account (free,
+ * full-featured comp). Always false off cloud, so the plan step never surfaces
+ * on self-host.
+ *
+ * Admin is checked explicitly rather than folded into `roleGrantsFreeAccess`:
+ * that predicate is beta-only (the dashboard "Beta" badge keys off it, and
+ * admin's enforcement exemptions run through separate owner/session axes). For
+ * the subscribe-step both admin and beta skip paying, mirroring the view
+ * paywall, which lets an admin session through and unlocks beta-owned spaces.
+ *
+ * The role read runs before the billing read so an admin/beta user skips the EE
+ * billing query entirely; it's a plain identity read, so the OSS build still
+ * never pulls EE into a self-host bundle.
  */
-export async function isUserSubscribed(userId: string): Promise<boolean> {
+export async function userHasCloudAccess(userId: string): Promise<boolean> {
     if (!env().IS_CLOUD || process.env.OSS_BUILD === "true") return false;
+    const role = await getUserRole(userId);
+    if (role === USER_ROLE.admin || roleGrantsFreeAccess(role)) return true;
     const { getUserBillingRecord } = await import("@/lib/ee/billing/server");
     const record = await getUserBillingRecord(userId);
     return isActiveSubscriptionStatus(record?.subscriptionStatus ?? null);

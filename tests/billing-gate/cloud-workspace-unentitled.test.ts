@@ -118,4 +118,21 @@ describe("cloudWorkspaceUnentitled", () => {
             expect(reads).toBe(0);
         },
     );
+
+    test.each(["canceled", "expired", null])(
+        "cloud beta-owned workspace with %s subscription stays unentitled (budgets keep applying)",
+        async (status) => {
+            // Beta bypasses the view paywall, NOT enforcement. A beta-owned
+            // workspace whose owner never subscribed must still degrade like any
+            // other lapsed cloud tenant — so the gate ignores the beta axis
+            // entirely and reads the (inactive) subscription.
+            setBillingGateDepsForTesting({
+                isCloud: true,
+                isAdminOwnedWorkspace: async () => false,
+                isBetaOwnedWorkspace: async () => true,
+                readBilling: async () => record(status),
+            });
+            expect(await cloudWorkspaceUnentitled(WORKSPACE_ID)).toBe(true);
+        },
+    );
 });

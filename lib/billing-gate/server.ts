@@ -24,7 +24,7 @@ import { isActiveSubscriptionStatus } from "@/lib/billing-status";
 import type { UserBillingRecord } from "@/lib/ee/billing/user-billing.repository";
 import { env } from "@/lib/env";
 import { errMessage } from "@/lib/error-message";
-import { isAdminOwnedWorkspace } from "@/lib/identity/server";
+import { isAdminOwnedWorkspace, isBetaOwnedWorkspace } from "@/lib/identity/server";
 import { USER_ROLE } from "@/lib/identity/user-role";
 
 export interface BillingGateDeps {
@@ -47,6 +47,14 @@ export interface BillingGateDeps {
      * Optional: production falls back to the real resolver; tests inject a fake.
      */
     readonly isAdminOwnedWorkspace?: (workspaceId: string) => Promise<boolean>;
+    /**
+     * True when the workspace owner is a beta account. Used ONLY by the
+     * view-paywall lock (the owner is who pays / gates the workspace), never by
+     * the entitlement check — beta keeps budgets, rate limits, and the fair-use
+     * cap fully enforced. Optional: production falls back to the real resolver;
+     * tests inject a fake.
+     */
+    readonly isBetaOwnedWorkspace?: (workspaceId: string) => Promise<boolean>;
 }
 
 let testOverride: BillingGateDeps | null = null;
@@ -72,6 +80,7 @@ function billingGateDeps(): BillingGateDeps {
             return session?.user?.role === USER_ROLE.admin;
         },
         isAdminOwnedWorkspace,
+        isBetaOwnedWorkspace,
         readBilling: async (workspaceId) => {
             // Unreachable in the OSS build: that bundle is self-host, so
             // `isCloud` is false and this read is never called.
@@ -96,6 +105,12 @@ export async function cloudWorkspaceLocked(workspaceId: string): Promise<boolean
     // open regardless of subscription. Checked before the billing read so an
     // admin skips it entirely.
     if (await deps.isCurrentUserAdmin?.()) return false;
+    // Beta-owned workspaces are free, full-featured comps: the owner gates the
+    // workspace, so a beta owner unlocks every member's view without a
+    // subscription. Owner axis (not the session) — same reason the entitlement
+    // check uses the owner. Budget enforcement is untouched: this is only the
+    // view paywall. Checked before the billing read so beta skips it entirely.
+    if (await deps.isBetaOwnedWorkspace?.(workspaceId)) return false;
     const record = await deps.readBilling(workspaceId);
     return !isActiveSubscriptionStatus(record?.subscriptionStatus);
 }

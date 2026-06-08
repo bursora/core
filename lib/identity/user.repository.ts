@@ -1,6 +1,10 @@
+import type { UserRole } from "./user-role";
 import type { UserStatus } from "./user-status";
 
 export interface UserRepository {
+    /** Global platform role (`admin` | `beta` | `user`), or null when unknown. */
+    getRole(userId: string): Promise<UserRole | null>;
+
     /**
      * Deletes the user row. Postgres cascades remove the user's sessions,
      * OAuth accounts, subscription, workspace memberships, sent invites, and

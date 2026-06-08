@@ -27,7 +27,7 @@ import { anonymousId, captureServerEvent } from "@/lib/analytics/server-capture"
 import { getRequestSession } from "@/lib/auth";
 import { env } from "@/lib/env";
 import { createWorkspace, issueApiKey, listApiKeys } from "@/lib/identity/server";
-import { isUserSubscribed } from "@/lib/onboarding/plan-entry";
+import { userHasCloudAccess } from "@/lib/onboarding/plan-entry";
 import { getOnboardingPlan } from "@/lib/onboarding/plan-view";
 import { wizardStepPath, workspaceCreationGate } from "@/lib/onboarding/wizard-step";
 import { cookies } from "next/headers";
@@ -46,9 +46,9 @@ export async function createWorkspaceAction(
     // Subscribe-first gate, enforced at the mutation (not just the page render).
     // Mirrors the step-1 gate in `page.tsx`: on cloud an unsubscribed owner with
     // a configured plan belongs on the plan step until checkout completes.
-    const subscribed = await isUserSubscribed(session.user.id);
+    const hasCloudAccess = await userHasCloudAccess(session.user.id);
     if (
-        workspaceCreationGate({ isCloud: env().IS_CLOUD, subscribed }) === 0 &&
+        workspaceCreationGate({ isCloud: env().IS_CLOUD, subscribed: hasCloudAccess }) === 0 &&
         (await getOnboardingPlan())
     ) {
         redirect(wizardStepPath(0));

@@ -14,6 +14,9 @@ class FakeUserRepository implements UserRepository {
         this.onDelete?.();
         this.deleted.push(userId);
     }
+    async getRole(): Promise<null> {
+        return null;
+    }
     async getStatus(): Promise<null> {
         return null;
     }

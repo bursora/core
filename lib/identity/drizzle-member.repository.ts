@@ -10,7 +10,7 @@ import type {
     MemberRepository,
     WorkspaceOwner,
 } from "./member.repository";
-import { USER_ROLE } from "./user-role";
+import { toUserRole, USER_ROLE } from "./user-role";
 import { USER_STATUS, type UserStatus } from "./user-status";
 
 export class DrizzleMemberRepository implements MemberRepository {
@@ -149,12 +149,13 @@ export class DrizzleMemberRepository implements MemberRepository {
             )
             .limit(1);
         if (!row) return null;
-        // `users.role` is a text column, so narrow it to the platform-role union
-        // at this boundary: the column only ever holds admin|user (default +
-        // input:false), and callers check admin-vs-rest.
+        // `users.role` is a text column holding admin|beta|user (all
+        // operator-granted, input:false). Narrow it through `toUserRole` so the
+        // owner carries `beta` — the cloud paywall bypass reads it via
+        // `roleGrantsFreeAccess` — instead of collapsing beta to user.
         return {
             userId: row.userId,
-            role: row.role === USER_ROLE.admin ? USER_ROLE.admin : USER_ROLE.user,
+            role: toUserRole(row.role),
         };
     }
 }

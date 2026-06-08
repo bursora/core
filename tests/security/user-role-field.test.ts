@@ -1,6 +1,6 @@
 /**
  * Locks the global platform `role` on users: schema column + better-auth
- * field config. `role` is admin|user, defaults to "user", and is NOT
+ * field config. `role` is admin|beta|user, defaults to "user", and is NOT
  * client-writable (`input: false`) so signup/profile/API input can never set
  * it. Distinct from the per-workspace `workspace_members.role` (owner/member).
  */

@@ -91,7 +91,7 @@ export type {
     MemberRepository,
     WorkspaceOwner,
 } from "./member.repository";
-export { USER_ROLE, type UserRole } from "./user-role";
+export { USER_ROLE, roleGrantsFreeAccess, toUserRole, type UserRole } from "./user-role";
 
 export type { Workspace } from "./workspace";
 export type { WorkspaceCreateInput, WorkspaceRepository } from "./workspace.repository";

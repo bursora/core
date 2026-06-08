@@ -10,6 +10,7 @@ import { UserMenu } from "@/components/shell/user-menu";
 import { Logo } from "@/components/ui/brand/logo";
 import { requireSessionUI } from "@/lib/auth";
 import { env } from "@/lib/env";
+import { roleGrantsFreeAccess } from "@/lib/identity/user-role";
 import type { ReactNode } from "react";
 
 export async function OnboardingShell({ children }: { readonly children: ReactNode }) {
@@ -29,6 +30,7 @@ export async function OnboardingShell({ children }: { readonly children: ReactNo
                         email={session.user.email}
                         image={session.user.image}
                         showBilling={env().IS_CLOUD}
+                        isBeta={env().IS_CLOUD && roleGrantsFreeAccess(session.user.role)}
                     />
                 </div>
             </header>

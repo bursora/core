@@ -4,7 +4,7 @@ import { requireSessionUI } from "@/lib/auth";
 import { env } from "@/lib/env";
 import { assertWorkspaceMemberOrNotFound, listApiKeys } from "@/lib/identity/server";
 import { listWorkspacesForUser } from "@/lib/identity/workspaces-for-user";
-import { getCheckoutAction, isUserSubscribed } from "@/lib/onboarding/plan-entry";
+import { getCheckoutAction, userHasCloudAccess } from "@/lib/onboarding/plan-entry";
 import { getOnboardingPlan } from "@/lib/onboarding/plan-view";
 import {
     parseWizardStep,
@@ -56,16 +56,16 @@ export default async function NewWorkspacePage({ searchParams }: NewWorkspacePag
     // Step ⓪ Plan is the mandatory, cloud-only subscribe step.
     if (step === 0 && !isCloud) redirect(wizardStepPath(1));
     if (step === 0) {
-        const subscribed = await isUserSubscribed(session.user.id);
+        const hasCloudAccess = await userHasCloudAccess(session.user.id);
         const returnedFromCheckout = billing === "ok";
-        const returnedActive = subscribed && returnedFromCheckout;
-        // Already subscribed and just browsing back here: nothing to do, send
-        // them on to create a workspace.
-        if (subscribed && !returnedFromCheckout) redirect(wizardStepPath(1));
+        const returnedActive = hasCloudAccess && returnedFromCheckout;
+        // Already cleared (subscribed, or an admin/beta comp) and just browsing
+        // back here: nothing to do, send them on to create a workspace.
+        if (hasCloudAccess && !returnedFromCheckout) redirect(wizardStepPath(1));
         // Returned from a successful checkout but the activation webhook hasn't
         // landed yet — render the plan step in its polling "finalizing" state
         // so it self-updates the moment the subscription activates.
-        const awaitingActivation = returnedFromCheckout && !subscribed;
+        const awaitingActivation = returnedFromCheckout && !hasCloudAccess;
         const plan = await getOnboardingPlan();
         // No active plan configured — let the user through rather than trap them
         // on a step we can't render.
@@ -95,8 +95,11 @@ export default async function NewWorkspacePage({ searchParams }: NewWorkspacePag
     // plan is configured there's nothing to subscribe to (the plan step bails
     // the same way), so let creation through rather than loop step 1 ↔ step 0.
     if (step === 1 && isCloud) {
-        const subscribed = await isUserSubscribed(session.user.id);
-        if (workspaceCreationGate({ isCloud, subscribed }) === 0 && (await getOnboardingPlan())) {
+        const hasCloudAccess = await userHasCloudAccess(session.user.id);
+        if (
+            workspaceCreationGate({ isCloud, subscribed: hasCloudAccess }) === 0 &&
+            (await getOnboardingPlan())
+        ) {
             redirect(wizardStepPath(0));
         }
     }

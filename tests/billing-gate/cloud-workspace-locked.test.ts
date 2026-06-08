@@ -106,3 +106,34 @@ describe("cloudWorkspaceLocked — platform admin bypass", () => {
         expect(await cloudWorkspaceLocked(WORKSPACE_ID)).toBe(true);
     });
 });
+
+describe("cloudWorkspaceLocked — beta owner bypass", () => {
+    test.each(["canceled", "expired", "paused", null])(
+        "cloud beta-owned workspace is unlocked with %s subscription without reading billing",
+        async (status) => {
+            let reads = 0;
+            setBillingGateDepsForTesting({
+                isCloud: true,
+                isCurrentUserAdmin: async () => false,
+                isBetaOwnedWorkspace: async () => true,
+                readBilling: async () => {
+                    reads += 1;
+                    return record(status);
+                },
+            });
+            expect(await cloudWorkspaceLocked(WORKSPACE_ID)).toBe(false);
+            // Beta short-circuits before the billing read, like admin does.
+            expect(reads).toBe(0);
+        },
+    );
+
+    test("cloud non-beta owner with no subscription stays locked", async () => {
+        setBillingGateDepsForTesting({
+            isCloud: true,
+            isCurrentUserAdmin: async () => false,
+            isBetaOwnedWorkspace: async () => false,
+            readBilling: async () => null,
+        });
+        expect(await cloudWorkspaceLocked(WORKSPACE_ID)).toBe(true);
+    });
+});

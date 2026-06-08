@@ -84,6 +84,7 @@ describe("invite + accept flow", () => {
         const accepted = await acceptInviteUseCase({
             token: invite.token,
             userId: INVITED_USER,
+            email: "teammate@acme.test",
             invites,
             members,
         });
@@ -96,6 +97,63 @@ describe("invite + accept flow", () => {
         expect(stored?.acceptedAt).not.toBeNull();
     });
 
+    test("acceptInvite rejects when the session email differs from the invited email", async () => {
+        const invites = new InMemoryInviteRepository();
+        const members = new InMemoryMemberRepository();
+        const mailer = new CapturingMailer();
+
+        const invite = await inviteMemberUseCase({
+            workspaceId: WORKSPACE,
+            email: "teammate@acme.test",
+            invitedBy: OWNER,
+            role: "member",
+            invites,
+            mailer,
+            acceptUrl: (t) => `/invite/${t}`,
+        });
+
+        await expect(
+            acceptInviteUseCase({
+                token: invite.token,
+                userId: INVITED_USER,
+                email: "intruder@acme.test",
+                invites,
+                members,
+            }),
+        ).rejects.toThrow("this invite was sent to a different email");
+
+        // No membership created, and the invite is not claimed.
+        const membership = await members.findMembership(WORKSPACE, INVITED_USER);
+        expect(membership).toBeNull();
+        const stored = await invites.findByToken(invite.token);
+        expect(stored?.acceptedAt).toBeNull();
+    });
+
+    test("acceptInvite matches the invited email case-insensitively", async () => {
+        const invites = new InMemoryInviteRepository();
+        const members = new InMemoryMemberRepository();
+
+        await invites.create({
+            token: "mixed-case-token",
+            workspaceId: WORKSPACE,
+            email: "alice@x.com",
+            invitedBy: OWNER,
+            role: "member",
+            expiresAt: new Date(Date.now() + 60_000),
+        });
+
+        const accepted = await acceptInviteUseCase({
+            token: "mixed-case-token",
+            userId: INVITED_USER,
+            email: "Alice@x.com",
+            invites,
+            members,
+        });
+
+        expect(accepted.membership.workspaceId).toBe(WORKSPACE);
+        expect(accepted.membership.role).toBe("member");
+    });
+
     test("acceptInvite rejects an unknown token", async () => {
         const invites = new InMemoryInviteRepository();
         const members = new InMemoryMemberRepository();
@@ -104,6 +162,7 @@ describe("invite + accept flow", () => {
             acceptInviteUseCase({
                 token: "totally-bogus",
                 userId: INVITED_USER,
+                email: "teammate@acme.test",
                 invites,
                 members,
             }),
@@ -128,6 +187,7 @@ describe("invite + accept flow", () => {
         await acceptInviteUseCase({
             token: invite.token,
             userId: INVITED_USER,
+            email: "teammate@acme.test",
             invites,
             members,
         });
@@ -136,6 +196,7 @@ describe("invite + accept flow", () => {
             acceptInviteUseCase({
                 token: invite.token,
                 userId: "someone-else",
+                email: "teammate@acme.test",
                 invites,
                 members,
             }),
@@ -159,6 +220,7 @@ describe("invite + accept flow", () => {
             acceptInviteUseCase({
                 token: "expired-token",
                 userId: INVITED_USER,
+                email: "teammate@acme.test",
                 invites,
                 members,
             }),
@@ -201,12 +263,14 @@ describe("invite + accept flow", () => {
             acceptInviteUseCase({
                 token: "race-token",
                 userId: "user-a",
+                email: "teammate@acme.test",
                 invites,
                 members,
             }),
             acceptInviteUseCase({
                 token: "race-token",
                 userId: "user-b",
+                email: "teammate@acme.test",
                 invites,
                 members,
             }),

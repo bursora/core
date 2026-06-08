@@ -115,6 +115,9 @@ const setupHarness = (opts: {
         budgets: repo,
         spend: agg,
         now: () => new Date("2025-05-10T12:00:00.000Z"),
+        // Pin entitlement so block decisions enforce normally (not degraded);
+        // the degrade path is covered in unentitled-degrade.test.ts.
+        cloudWorkspaceUnentitled: async () => false,
         ...(opts.ttlSeconds === undefined ? {} : { ttlSeconds: opts.ttlSeconds }),
     });
     setSetupErrorsDepsForTesting({

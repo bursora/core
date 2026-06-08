@@ -22,7 +22,11 @@ async function acceptAction(
 
     let workspaceId: string;
     try {
-        const result = await acceptInvite({ token, userId: session.user.id });
+        const result = await acceptInvite({
+            token,
+            userId: session.user.id,
+            email: session.user.email,
+        });
         workspaceId = result.workspaceId;
     } catch (err: unknown) {
         return {

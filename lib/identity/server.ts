@@ -238,10 +238,11 @@ export async function runAccountPurgeCron(now: Date): Promise<{ purged: number; 
     return { purged, failed };
 }
 
-export async function acceptInvite(input: { token: string; userId: string }) {
+export async function acceptInvite(input: { token: string; userId: string; email: string }) {
     return acceptInviteUseCase({
         token: input.token,
         userId: input.userId,
+        email: input.email,
         invites: invites(),
         members: members(),
     });

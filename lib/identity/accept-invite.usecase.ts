@@ -4,6 +4,7 @@ import type { InviteRepository, MemberRepository } from "./member.repository";
 export interface AcceptInviteInput {
     readonly token: string;
     readonly userId: string;
+    readonly email: string;
     readonly invites: InviteRepository;
     readonly members: MemberRepository;
 }
@@ -23,6 +24,12 @@ export async function acceptInviteUseCase(input: AcceptInviteInput): Promise<Acc
     }
     if (invite.expiresAt.getTime() <= Date.now()) {
         throw new Error("invite expired");
+    }
+    // Bind acceptance to the invited address: the token alone must not let any
+    // signed-in account join. Invite email is lowercased at creation; normalize
+    // both sides defensively.
+    if (invite.email.toLowerCase() !== input.email.trim().toLowerCase()) {
+        throw new Error("this invite was sent to a different email");
     }
 
     // Atomic claim: a single UPDATE with WHERE accepted_at IS NULL. Without

@@ -13,6 +13,17 @@ export interface MemberListRow {
     readonly createdAt: Date;
 }
 
+/**
+ * The single deterministic owner of a workspace: the member whose workspace
+ * role is `owner`, resolved admin-first then by a stable order. Carries both
+ * the user id (for the cloud billing read) and the platform role (for the
+ * admin-owned bypass) so one query feeds both.
+ */
+export interface WorkspaceOwner {
+    readonly userId: string;
+    readonly role: UserRole;
+}
+
 export interface MemberRepository {
     addMember(input: {
         workspaceId: string;
@@ -48,21 +59,14 @@ export interface MemberRepository {
     listMemberUserIds(workspaceId: string): Promise<readonly string[]>;
 
     /**
-     * Returns the platform role (`admin` | `user`) of the workspace owner —
-     * the `users.role` of the member whose workspace role is `owner` — or
-     * `null` when the workspace has no owner row. Drives the admin-owned
-     * workspace exemptions (rate limit, fair-use cap).
+     * Resolves the workspace owner once, returning the deterministic owner's
+     * user id and platform role together, or `null` when the workspace has no
+     * owner row. A workspace may have multiple owners; an admin owner wins,
+     * then the oldest, then the lowest id, so the resolved owner never flips
+     * between calls. Feeds both the admin-owned bypass (rate limit, fair-use
+     * cap) and the cloud billing gate from a single query.
      */
-    findOwnerUserRole(workspaceId: string): Promise<UserRole | null>;
-
-    /**
-     * Returns the `user_id` of the workspace owner (the member whose workspace
-     * role is `owner`) or `null` when the workspace has no owner row. Used by
-     * the cloud billing gate to resolve whose subscription gates the workspace.
-     * Resolves to a single stable owner with the same ordering as
-     * `findOwnerUserRole`.
-     */
-    findOwnerUserId(workspaceId: string): Promise<string | null>;
+    findOwner(workspaceId: string): Promise<WorkspaceOwner | null>;
 }
 
 export interface InviteRepository {

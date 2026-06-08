@@ -68,8 +68,8 @@ beforeAll(() => {
     // rate limiter and records bundle usage as normal.
     mock.module("@/lib/identity/drizzle-member.repository", () => ({
         DrizzleMemberRepository: class {
-            async findOwnerUserRole(): Promise<string | null> {
-                return "user";
+            async findOwner(): Promise<{ userId: string; role: string } | null> {
+                return { userId: "owner-user", role: "user" };
             }
         },
     }));

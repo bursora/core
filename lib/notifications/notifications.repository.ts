@@ -139,7 +139,7 @@ export function drizzleNotificationsRepository(db: Db): NotificationsRepository 
                 // Cloud bell feed: surface a workspace only when the SAME single
                 // owner the view-paywall gate locks against has an active
                 // subscription. The gate resolves ONE deterministic owner
-                // (admin-first, then oldest, then id; see `findOwnerUserId`) and
+                // (admin-first, then oldest, then id; see `findOwner`) and
                 // checks only that owner's status, so the bell must rank owners
                 // by that exact order and test rank 1. Filtering against any
                 // owner would leak a locked workspace's alert content whenever a

@@ -22,12 +22,12 @@ import { DrizzleInviteRepository, DrizzleMemberRepository } from "./drizzle-memb
 import { DrizzleUserRepository } from "./drizzle-user.repository";
 import { DrizzleWorkspaceRepository } from "./drizzle-workspace.repository";
 import { inviteMemberUseCase } from "./invite-member.usecase";
-import { isAdminOwnedWorkspaceUseCase } from "./is-admin-owned-workspace.usecase";
 import { issueApiKeyUseCase } from "./issue-api-key.usecase";
 import { listApiKeysUseCase } from "./list-api-keys.usecase";
 import { listMembersUseCase } from "./list-members.usecase";
 import { lookupApiKeyUseCase } from "./lookup-api-key.usecase";
 import type { MemberRole } from "./member";
+import type { WorkspaceOwner } from "./member.repository";
 import { reactivateAccountUseCase } from "./reactivate-account.usecase";
 import { removeMemberUseCase } from "./remove-member.usecase";
 import { renameApiKeyUseCase } from "./rename-api-key.usecase";
@@ -36,6 +36,7 @@ import { requestAccountDeletionUseCase } from "./request-account-deletion.usecas
 import { revealApiKeyUseCase, type RevealApiKeyResult } from "./reveal-api-key.usecase";
 import { revokeApiKeyUseCase } from "./revoke-api-key.usecase";
 import { setWorkspaceEnvironmentUseCase } from "./set-workspace-environment.usecase";
+import { USER_ROLE } from "./user-role";
 
 const workspaces = () => new DrizzleWorkspaceRepository(db());
 const members = () => new DrizzleMemberRepository(db());
@@ -348,25 +349,33 @@ export const findMembership = cache(async (workspaceId: string, userId: string) 
 );
 
 /**
+ * The single deterministic workspace owner: id + platform role from one query,
+ * memoised per request. Every owner-derived read on the hot `/api/v1/budget`
+ * preflight routes through here — the admin-owned bypass reads the role, the
+ * cloud billing gate reads the id — so the preflight resolves the owner once.
+ */
+export const getWorkspaceOwner = cache(
+    async (workspaceId: string): Promise<WorkspaceOwner | null> => members().findOwner(workspaceId),
+);
+
+/**
  * The user id of the workspace's owner — the single member whose Bursora Cloud
  * subscription gates the workspace (see the billing gate). Used to decide
  * whether the viewer is the one who can unlock it by subscribing.
  */
-export const getWorkspaceOwnerUserId = cache(
-    async (workspaceId: string): Promise<string | null> => members().findOwnerUserId(workspaceId),
-);
+export async function getWorkspaceOwnerUserId(workspaceId: string): Promise<string | null> {
+    return (await getWorkspaceOwner(workspaceId))?.userId ?? null;
+}
 
 /**
  * True when the workspace owner is a platform admin. Drives the rate-limit
- * and fair-use exemptions for the operator's own dogfood tenants.
- *
- * Memoised per request: the SDK ingest path resolves this on every event, so
- * cache the owner-role read to keep it a single query within a request.
+ * and fair-use exemptions for the operator's own dogfood tenants. Derives from
+ * the shared per-request owner cache, so the SDK ingest path that resolves this
+ * on every event still issues a single owner query.
  */
-export const isAdminOwnedWorkspace = cache(
-    async (workspaceId: string): Promise<boolean> =>
-        isAdminOwnedWorkspaceUseCase({ workspaceId, members: members() }),
-);
+export async function isAdminOwnedWorkspace(workspaceId: string): Promise<boolean> {
+    return (await getWorkspaceOwner(workspaceId))?.role === USER_ROLE.admin;
+}
 
 /**
  * Asserts the authenticated user is a member of the given workspace and

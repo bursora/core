@@ -9,6 +9,7 @@ import {
     type UserRole,
     type UserStatus,
     type WorkspaceMember,
+    type WorkspaceOwner,
 } from "@/lib/identity";
 
 const key = (workspaceId: string, userId: string) => `${workspaceId}:${userId}`;
@@ -18,7 +19,7 @@ export class InMemoryMemberRepository implements MemberRepository {
     private readonly userRoles = new Map<string, UserRole>();
     private readonly userStatuses = new Map<string, UserStatus>();
 
-    /** Test-only: set a user's platform role so `findOwnerUserRole` can resolve it. */
+    /** Test-only: set a user's platform role so `findOwner` can resolve it. */
     setUserRole(userId: string, role: UserRole): void {
         this.userRoles.set(userId, role);
     }
@@ -88,12 +89,9 @@ export class InMemoryMemberRepository implements MemberRepository {
             .map((m) => m.userId);
     }
 
-    async findOwnerUserRole(workspaceId: string): Promise<UserRole | null> {
-        return this.resolveOwner(workspaceId)?.platformRole ?? null;
-    }
-
-    async findOwnerUserId(workspaceId: string): Promise<string | null> {
-        return this.resolveOwner(workspaceId)?.userId ?? null;
+    async findOwner(workspaceId: string): Promise<WorkspaceOwner | null> {
+        const owner = this.resolveOwner(workspaceId);
+        return owner ? { userId: owner.userId, role: owner.platformRole } : null;
     }
 
     /** Mirror the Drizzle repo: prefer an admin owner, else a stable order. */

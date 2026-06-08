@@ -12,7 +12,7 @@ import "server-only";
 
 import { db } from "@/lib/db";
 import { env } from "@/lib/env";
-import { DrizzleMemberRepository } from "@/lib/identity/drizzle-member.repository";
+import { getWorkspaceOwner } from "@/lib/identity/server";
 import { drizzlePlanRepository } from "@/lib/plans/drizzle-plan.repository";
 import type { BillingInterval } from "@/lib/plans/plan";
 import * as Sentry from "@sentry/nextjs";
@@ -232,12 +232,16 @@ export const getUserBillingRecord = cache(
  * Resolve the owner of a workspace and read their billing record. The cloud
  * view-paywall gate calls this: a workspace is unlocked iff its owner has an
  * active subscription. Returns `null` when the workspace has no owner row.
+ *
+ * Resolves the owner through the shared per-request cache (`getWorkspaceOwner`)
+ * so a budget preflight that also runs the admin-owned bypass shares one
+ * owner-resolution query instead of issuing a second.
  */
 export const getWorkspaceOwnerBillingRecord = cache(
     async (workspaceId: string): Promise<UserBillingRecord | null> => {
-        const ownerUserId = await new DrizzleMemberRepository(db()).findOwnerUserId(workspaceId);
-        if (!ownerUserId) return null;
-        return getUserBillingRecord(ownerUserId);
+        const owner = await getWorkspaceOwner(workspaceId);
+        if (!owner) return null;
+        return getUserBillingRecord(owner.userId);
     },
 );
 

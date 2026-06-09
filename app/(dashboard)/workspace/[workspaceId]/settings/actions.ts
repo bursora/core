@@ -29,6 +29,7 @@ import {
     createPricingOverrideForWorkspace,
     deletePricingOverrideForWorkspace,
     saveAlertChannelsForWorkspace,
+    sendChannelTestForWorkspace,
     updatePricingOverrideForWorkspace,
 } from "@/lib/compose/settings";
 import { emailSchema } from "@/lib/email";
@@ -42,6 +43,8 @@ import {
     setWorkspaceEnvironment,
 } from "@/lib/identity/server";
 import type { AlertChannelsInput } from "@/lib/notification";
+import { rateLimitDeps } from "@/lib/rate-limit/server";
+import type { RateLimitConfig } from "@/lib/rate-limit/types";
 import { buildWorkspacePath } from "@/lib/routes";
 import { saveSpikeSettings } from "@/lib/spike-protection/server";
 import type { Route } from "next";
@@ -49,11 +52,18 @@ import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { ISSUED_KEY_COOKIE, ISSUED_KEY_COOKIE_MAX_AGE } from "./issued-key-cookie";
+import { validateChannelTestTarget } from "./validation";
 
 const settingsHref = (workspaceId: string, query?: Record<string, string>): Route =>
     buildWorkspacePath(workspaceId, "settings", query);
 
 const MAX_KEY_NAME_LENGTH = 60;
+
+// Loose enough for a human confirming a channel (a few clicks), tight enough to
+// cap branded outbound mail/webhooks if the action is scripted. Enforced only
+// when rate limiting is enabled (Cloud, or self-host wired to Redis) — the
+// default self-host in-memory limiter isn't shared across requests.
+const TEST_CHANNEL_RATE_LIMIT: RateLimitConfig = { limit: 5, windowMs: 60_000 };
 const normalizeKeyName = (raw: FormDataEntryValue | null): string =>
     typeof raw === "string" ? raw.trim().slice(0, MAX_KEY_NAME_LENGTH) : "";
 
@@ -383,6 +393,50 @@ export const saveAlertChannelsAction = withWorkspace(
             rethrowRedirect(err);
             const message = err instanceof Error ? err.message : "Failed to save channels.";
             return actionFail(message);
+        }
+    },
+    { getWorkspaceId: workspaceIdFromForm },
+);
+
+// Fires one ping to the destination the member just typed (not a persisted
+// channel) so they can confirm the wire before saving. withWorkspace gates it
+// to members; the shape is re-validated here before any network I/O.
+export const testAlertChannelAction = withWorkspace(
+    async (ctx, formData: FormData): Promise<ActionResult> => {
+        try {
+            // Read kind leniently so a missing/garbage value gets the validator's
+            // "Unknown channel." message instead of a thrown required-field error.
+            const kind = optionalField(formData, "kind") ?? "";
+            const target = (optionalField(formData, "target") ?? "").trim();
+
+            const validation = validateChannelTestTarget(kind, target);
+            if (!validation.ok) return actionFail(validation.error);
+
+            // The test sends Bursora-branded email/webhooks to an arbitrary
+            // target, so cap on-demand sends per user. Skipped when rate
+            // limiting is off (self-host default), matching the ingest path.
+            const rl = rateLimitDeps();
+            if (rl.enabled) {
+                const decision = await rl.limiter.check({
+                    key: `test-channel:${ctx.session.user.id}`,
+                    nowMs: rl.now().getTime(),
+                    config: TEST_CHANNEL_RATE_LIMIT,
+                });
+                if (!decision.allowed) {
+                    return actionFail("Too many tests. Wait a minute and try again.");
+                }
+            }
+
+            await sendChannelTestForWorkspace({ kind: validation.kind, target });
+            return actionOk();
+        } catch (err: unknown) {
+            rethrowRedirect(err);
+            // The detail can carry SSRF-guard / SMTP internals, so it stays
+            // server-side; the client gets a fixed, non-leaky message.
+            console.warn("settings.test_channel_failed", {
+                error: err instanceof Error ? err.message : String(err),
+            });
+            return actionFail("Test failed to send. Check the destination and try again.");
         }
     },
     { getWorkspaceId: workspaceIdFromForm },

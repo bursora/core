@@ -15,7 +15,10 @@ import {
     shouldPulse,
     type PulseState,
 } from "@/app/(dashboard)/workspace/[workspaceId]/settings/_lib/pulse-feedback";
-import { saveAlertChannelsAction } from "@/app/(dashboard)/workspace/[workspaceId]/settings/actions";
+import {
+    saveAlertChannelsAction,
+    testAlertChannelAction,
+} from "@/app/(dashboard)/workspace/[workspaceId]/settings/actions";
 import {
     DISCORD_HINT,
     EMAIL_HINT,
@@ -39,6 +42,7 @@ import {
 import { useInflight } from "@/components/ui/hooks/use-inflight";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
+import type { TestChannelKind } from "@/lib/notification/send-channel-test.usecase";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Mail } from "lucide-react";
 import { useEffect, useRef, useState, useTransition } from "react";
@@ -99,6 +103,7 @@ export function AlertChannelsForm({
     userEmail,
 }: AlertChannelsFormProps) {
     const [isPending, startTransition] = useTransition();
+    const [testing, setTesting] = useState<TestChannelKind | null>(null);
     const [pulse, setPulse] = useState<PulseState>("idle");
     const pulseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
     const form = useForm<FormValues>({
@@ -159,6 +164,30 @@ export function AlertChannelsForm({
         startTransition(() => submit(values));
     };
 
+    // Pings the value currently in the field — lets you confirm a webhook
+    // before saving. Server re-validates the shape and gates on membership.
+    const runTest = async (kind: TestChannelKind, target: string) => {
+        if (target.trim().length === 0) {
+            toast.error("Add a destination first.");
+            return;
+        }
+        setTesting(kind);
+        try {
+            const fd = new FormData();
+            fd.set("workspaceId", workspaceId);
+            fd.set("kind", kind);
+            fd.set("target", target);
+            const result = await testAlertChannelAction(fd);
+            if (result.ok) {
+                toast.success("Test sent");
+            } else {
+                toast.error(result.error ?? "Test failed to send.");
+            }
+        } finally {
+            setTesting(null);
+        }
+    };
+
     return (
         <Form {...form}>
             <form
@@ -214,6 +243,16 @@ export function AlertChannelsForm({
                                     </FormItem>
                                 )}
                             />
+                            <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="mt-3"
+                                disabled={isPending || testing !== null}
+                                onClick={() => void runTest("slack", form.getValues("slackUrl"))}
+                            >
+                                {testing === "slack" ? "Sending…" : "Send test"}
+                            </Button>
                         </div>
                     ) : null}
                 </div>
@@ -265,6 +304,18 @@ export function AlertChannelsForm({
                                     </FormItem>
                                 )}
                             />
+                            <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="mt-3"
+                                disabled={isPending || testing !== null}
+                                onClick={() =>
+                                    void runTest("discord", form.getValues("discordUrl"))
+                                }
+                            >
+                                {testing === "discord" ? "Sending…" : "Send test"}
+                            </Button>
                         </div>
                     ) : null}
                 </div>
@@ -317,6 +368,18 @@ export function AlertChannelsForm({
                                     </FormItem>
                                 )}
                             />
+                            <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="mt-3"
+                                disabled={isPending || testing !== null}
+                                onClick={() =>
+                                    void runTest("email", form.getValues("emailAddress"))
+                                }
+                            >
+                                {testing === "email" ? "Sending…" : "Send test"}
+                            </Button>
                         </div>
                     ) : null}
                 </div>

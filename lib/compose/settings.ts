@@ -29,9 +29,19 @@ import {
     saveAlertChannels,
     type AlertChannelsInput,
 } from "../notification/save-alert-channels.usecase";
+import { defaultSmtpMailer } from "../notification/send";
+import {
+    sendChannelTest,
+    type SendChannelTestInput,
+} from "../notification/send-channel-test.usecase";
+import { createHttpWebhookSender } from "../notification/webhook-sender.adapter";
 
 const pricing = () => drizzlePricingRepository(db());
 const alertChannels = () => drizzleAlertChannelRepository(db());
+
+// The "Send test" button wants a fast pass/fail; skip the dispatcher's
+// retry/backoff so a dead webhook fails in one attempt, not ~30s later.
+const testWebhookSender = createHttpWebhookSender({ retries: 0 });
 
 export interface CreatePricingOverrideArgs {
     workspaceId: string;
@@ -78,4 +88,8 @@ export async function saveAlertChannelsForWorkspace(args: {
     input: AlertChannelsInput;
 }) {
     return saveAlertChannels({ channels: alertChannels(), ...args });
+}
+
+export async function sendChannelTestForWorkspace(input: SendChannelTestInput): Promise<void> {
+    return sendChannelTest({ sender: testWebhookSender, mailer: defaultSmtpMailer() }, input);
 }

@@ -4,6 +4,7 @@
  */
 
 import { isValidEmail } from "@/lib/email";
+import type { TestChannelKind } from "@/lib/notification/send-channel-test.usecase";
 
 const SLACK_PREFIX = "https://hooks.slack.com/";
 const DISCORD_PREFIXES = [
@@ -31,6 +32,38 @@ export function isValidSlackUrl(url: string): boolean {
 
 export function isValidDiscordUrl(url: string): boolean {
     return url.length === 0 || DISCORD_PREFIXES.some((p) => url.startsWith(p));
+}
+
+export type ChannelTestValidation =
+    | { readonly ok: true; readonly kind: TestChannelKind }
+    | { readonly ok: false; readonly error: string };
+
+/**
+ * Validates a "Send test" request: known channel kind + a non-empty target
+ * whose shape matches that kind. Returns the narrowed kind on success or a
+ * user-facing message on failure. The server action calls this before any
+ * network/SMTP I/O; the same prefix/email checks back the live save path.
+ */
+export function validateChannelTestTarget(kind: string, target: string): ChannelTestValidation {
+    if (target.trim().length === 0) {
+        return { ok: false, error: "Add a destination before testing." };
+    }
+    if (kind === "slack") {
+        return isValidSlackUrl(target)
+            ? { ok: true, kind }
+            : { ok: false, error: "That isn't a Slack webhook URL." };
+    }
+    if (kind === "discord") {
+        return isValidDiscordUrl(target)
+            ? { ok: true, kind }
+            : { ok: false, error: "That isn't a Discord webhook URL." };
+    }
+    if (kind === "email") {
+        return isValidEmail(target)
+            ? { ok: true, kind }
+            : { ok: false, error: "That isn't a valid email address." };
+    }
+    return { ok: false, error: "Unknown channel." };
 }
 
 export interface PricingRangeInput {

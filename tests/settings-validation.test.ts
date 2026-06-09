@@ -3,6 +3,7 @@ import {
     isValidDiscordUrl,
     isValidEffectiveRange,
     isValidSlackUrl,
+    validateChannelTestTarget,
 } from "@/app/(dashboard)/workspace/[workspaceId]/settings/validation";
 import { describe, expect, test } from "bun:test";
 
@@ -80,5 +81,54 @@ describe("isValidEffectiveRange", () => {
                 effectiveTo: "2025-02-01T00:00",
             }),
         ).toBe(true);
+    });
+});
+
+describe("validateChannelTestTarget", () => {
+    test("rejects an empty target", () => {
+        expect(validateChannelTestTarget("slack", "   ")).toEqual({
+            ok: false,
+            error: "Add a destination before testing.",
+        });
+    });
+
+    test("rejects an unknown channel kind", () => {
+        const result = validateChannelTestTarget("telegram", "anything");
+        expect(result.ok).toBe(false);
+        if (!result.ok) expect(result.error).toBe("Unknown channel.");
+    });
+
+    test("accepts a valid Slack URL and narrows the kind", () => {
+        expect(
+            validateChannelTestTarget("slack", "https://hooks.slack.com/services/T/B/x"),
+        ).toEqual({ ok: true, kind: "slack" });
+    });
+
+    test("rejects a Slack kind pointed at a non-Slack host", () => {
+        const result = validateChannelTestTarget("slack", "https://evil.example.com/");
+        expect(result.ok).toBe(false);
+    });
+
+    test("rejects a Discord URL submitted under the Slack kind", () => {
+        const result = validateChannelTestTarget("slack", "https://discord.com/api/webhooks/1/x");
+        expect(result.ok).toBe(false);
+    });
+
+    test("accepts a valid Discord URL", () => {
+        expect(
+            validateChannelTestTarget("discord", "https://discord.com/api/webhooks/1/x"),
+        ).toEqual({ ok: true, kind: "discord" });
+    });
+
+    test("accepts a valid email address", () => {
+        expect(validateChannelTestTarget("email", "ops@acme.test")).toEqual({
+            ok: true,
+            kind: "email",
+        });
+    });
+
+    test("rejects a malformed email address", () => {
+        const result = validateChannelTestTarget("email", "not-an-email");
+        expect(result.ok).toBe(false);
     });
 });

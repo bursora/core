@@ -8,7 +8,18 @@
 
 Bursora sits between your app and the AI provider. Before each call, it checks the budget; over a limit, it blocks; under, the call goes through and Bursora records what it cost. You get live spend grouped by customer, agent, workflow, and model, plus hard limits, alerts, and a kill switch. The SDK wrap is [one line](https://github.com/bursora/sdk); nothing routes through us.
 
+![Bursora dashboard: live spend per customer, a budget filling to its $50 cap, then a blocked call where the SDK throws BudgetExceededError before the provider request goes out](./.github/dashboard-demo.gif)
+
 The full product story, in plain English, is at **[bursora.com/docs](https://bursora.com/docs)**. This README is for people running or hacking on the code.
+
+No proxy. Your app still talks straight to the provider; the SDK just asks Bursora for a yes/no first, then reports the cost after.
+
+```
+your code  ──►  wrap(provider)  ──►  OpenAI / Anthropic / Google / DeepSeek
+                     │
+                     ├─► GET  /api/v1/budget   (pre-call, cached 60s)
+                     └─► POST /api/v1/events   (post-call, batched)
+```
 
 ## Self-host
 

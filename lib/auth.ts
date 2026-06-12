@@ -1,10 +1,11 @@
 /**
  * Better-auth instance.
  *
- * Two sign-in flows: email code (OTP) and Google OAuth. One-time codes are
- * mailed via the same SMTP-backed `Mailer` we use for invites; in dev that's
- * Mailhog at `localhost:1025`. Google OAuth lands the user on `/workspace`
- * after consent. No password.
+ * Email code (OTP) is the always-on sign-in flow; Google OAuth is optional and
+ * registered only when its client pair is set (see `GOOGLE_ENABLED`). One-time
+ * codes are mailed via the same SMTP-backed `Mailer` we use for invites; in dev
+ * that's Mailhog. Google OAuth, when on, lands the user on `/workspace` after
+ * consent. No password.
  *
  * Better-auth owns `users`, `session`, `account`, and `verification`. The
  * `users` table (renamed from better-auth's default `user` via `modelName`)
@@ -57,12 +58,16 @@ function buildAuth() {
             },
         },
         emailAndPassword: { enabled: false },
-        socialProviders: {
-            google: {
-                clientId: env().GOOGLE_CLIENT_ID,
-                clientSecret: env().GOOGLE_CLIENT_SECRET,
-            },
-        },
+        // Google is optional: registered only when the OAuth pair is set.
+        // Unset (the self-host default) leaves email codes as the sole flow.
+        socialProviders: env().GOOGLE_ENABLED
+            ? {
+                  google: {
+                      clientId: env().GOOGLE_CLIENT_ID,
+                      clientSecret: env().GOOGLE_CLIENT_SECRET,
+                  },
+              }
+            : {},
         databaseHooks: {
             user: {
                 create: {

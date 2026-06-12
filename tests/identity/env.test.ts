@@ -92,24 +92,36 @@ describe("loadEnv", () => {
         expect(() => loadEnv(partial)).toThrow(/LEMONSQUEEZY_STORE_ID/);
     });
 
-    test("exposes Google OAuth credentials", () => {
+    test("exposes Google OAuth credentials and marks Google enabled when both set", () => {
         const env = loadEnv(BASE);
         expect(env.GOOGLE_CLIENT_ID).toBe("google-client-id");
         expect(env.GOOGLE_CLIENT_SECRET).toBe("google-client-secret");
+        expect(env.GOOGLE_ENABLED).toBe(true);
     });
 
-    test("throws when GOOGLE_CLIENT_ID is missing", () => {
+    test("boots with Google disabled when both credentials are unset", () => {
         const partial = { ...BASE };
         delete (partial as Record<string, string | undefined>).GOOGLE_CLIENT_ID;
+        delete (partial as Record<string, string | undefined>).GOOGLE_CLIENT_SECRET;
 
-        expect(() => loadEnv(partial)).toThrow(/GOOGLE_CLIENT_ID/);
+        const env = loadEnv(partial);
+        expect(env.GOOGLE_ENABLED).toBe(false);
+        expect(env.GOOGLE_CLIENT_ID).toBe("");
+        expect(env.GOOGLE_CLIENT_SECRET).toBe("");
     });
 
-    test("throws when GOOGLE_CLIENT_SECRET is missing", () => {
+    test("throws when only GOOGLE_CLIENT_ID is set", () => {
         const partial = { ...BASE };
         delete (partial as Record<string, string | undefined>).GOOGLE_CLIENT_SECRET;
 
-        expect(() => loadEnv(partial)).toThrow(/GOOGLE_CLIENT_SECRET/);
+        expect(() => loadEnv(partial)).toThrow(/both set or both empty/);
+    });
+
+    test("throws when only GOOGLE_CLIENT_SECRET is set", () => {
+        const partial = { ...BASE };
+        delete (partial as Record<string, string | undefined>).GOOGLE_CLIENT_ID;
+
+        expect(() => loadEnv(partial)).toThrow(/both set or both empty/);
     });
 
     test("LEMONSQUEEZY_WEBHOOK_SECRET_NEXT is optional in cloud mode and exposed when set", () => {

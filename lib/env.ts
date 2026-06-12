@@ -34,8 +34,6 @@ const ALWAYS_REQUIRED = [
     "SMTP_HOST",
     "SMTP_PORT",
     "NEXT_PUBLIC_APP_URL",
-    "GOOGLE_CLIENT_ID",
-    "GOOGLE_CLIENT_SECRET",
     "REDIS_URL",
     "CLICKHOUSE_URL",
 ] as const;
@@ -67,8 +65,15 @@ export interface Env {
     /** Empty when SMTP relay is unauthenticated. */
     readonly SMTP_PASS: string;
     readonly NEXT_PUBLIC_APP_URL: string;
+    /**
+     * Optional Google OAuth pair. Empty when Google sign-in is off (the
+     * self-host default); both must be set together to enable it. Email
+     * sign-in works without them. `GOOGLE_ENABLED` is the derived flag the
+     * auth config and login page read.
+     */
     readonly GOOGLE_CLIENT_ID: string;
     readonly GOOGLE_CLIENT_SECRET: string;
+    readonly GOOGLE_ENABLED: boolean;
     readonly IS_CLOUD: boolean;
     /** Empty string when `IS_CLOUD=false`. */
     readonly LEMONSQUEEZY_API_KEY: string;
@@ -198,6 +203,16 @@ export function loadEnv(source: Record<string, string | undefined>): Env {
         throw new Error("SMTP_USER and SMTP_PASS must be both set or both empty");
     }
 
+    // Google sign-in is optional: unset both to run on email codes alone.
+    // Setting exactly one is a misconfiguration that would register a broken
+    // social provider, so fail at boot rather than at the consent callback.
+    const googleClientId = source.GOOGLE_CLIENT_ID ?? "";
+    const googleClientSecret = source.GOOGLE_CLIENT_SECRET ?? "";
+    if (googleClientId.length > 0 !== googleClientSecret.length > 0) {
+        throw new Error("GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET must be both set or both empty");
+    }
+    const googleEnabled = googleClientId.length > 0;
+
     const getAlways = (k: AlwaysKey): string => {
         const v = source[k];
         if (v === undefined) throw new Error(`Missing env: ${k}`); // unreachable after check above
@@ -235,8 +250,9 @@ export function loadEnv(source: Record<string, string | undefined>): Env {
         SMTP_USER: smtpUser,
         SMTP_PASS: smtpPass,
         NEXT_PUBLIC_APP_URL: getAlways("NEXT_PUBLIC_APP_URL"),
-        GOOGLE_CLIENT_ID: getAlways("GOOGLE_CLIENT_ID"),
-        GOOGLE_CLIENT_SECRET: getAlways("GOOGLE_CLIENT_SECRET"),
+        GOOGLE_CLIENT_ID: googleClientId,
+        GOOGLE_CLIENT_SECRET: googleClientSecret,
+        GOOGLE_ENABLED: googleEnabled,
         IS_CLOUD: isCloud,
         LEMONSQUEEZY_API_KEY: getCloud("LEMONSQUEEZY_API_KEY"),
         LEMONSQUEEZY_WEBHOOK_SECRET: getCloud("LEMONSQUEEZY_WEBHOOK_SECRET"),

@@ -79,12 +79,25 @@ async function timedCheck(
     }
 }
 
-/** Reachability of Google's OAuth identity provider, one of the two sign-in paths. */
+/** Reachability of Google's OAuth identity provider, one of the sign-in paths. */
 async function googleOAuthProbe(): Promise<void> {
     const response = await fetch(GOOGLE_OIDC_PROBE_URL, {
         signal: AbortSignal.timeout(CHECK_TIMEOUT_MS),
     });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
+}
+
+/**
+ * Google OAuth health, gated on the optional client pair: unset (the self-host
+ * default) renders "disabled" since email sign-in is the only path; a
+ * configured pair probes Google's identity provider live.
+ */
+async function googleHealth(): Promise<ServiceHealth> {
+    const label = "Google OAuth";
+    if (!env().GOOGLE_ENABLED) {
+        return { key: "google", label, status: "disabled", detail: "Not configured" };
+    }
+    return timedCheck("google", label, googleOAuthProbe);
 }
 
 /**
@@ -207,7 +220,7 @@ export async function collectSystemHealth(): Promise<SystemHealth> {
             timedCheck("clickhouse", "ClickHouse", () => clickhouseClient().ping()),
             timedCheck("redis", "Redis", () => redisClient(env().REDIS_URL).ping()),
             timedCheck("smtp", "SMTP", () => defaultSmtpMailer().verify()),
-            timedCheck("google", "Google OAuth", googleOAuthProbe),
+            googleHealth(),
             Promise.resolve(sentryHealth()),
             posthogHealth(),
             billingHealth(),

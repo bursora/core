@@ -45,7 +45,12 @@ const codeFormSchema = z.object({
 type EmailValues = z.infer<typeof emailFormSchema>;
 type CodeValues = z.infer<typeof codeFormSchema>;
 
-export function LoginForm() {
+interface LoginFormProps {
+    /** Render the Google sign-in button. False when the OAuth pair is unset. */
+    googleEnabled: boolean;
+}
+
+export function LoginForm({ googleEnabled }: LoginFormProps) {
     const [sentTo, setSentTo] = useState<string | null>(null);
     const [googlePending, setGooglePending] = useState(false);
     const [redirecting, setRedirecting] = useState(false);
@@ -200,25 +205,29 @@ export function LoginForm() {
             }
         >
             <div className="flex flex-col gap-4">
-                <Button
-                    type="button"
-                    variant="outline"
-                    className="w-full"
-                    onClick={signInWithGoogle}
-                    disabled={googlePending}
-                >
-                    {googlePending ? (
-                        <Loader2 className="animate-spin" aria-hidden />
-                    ) : (
-                        <GoogleIcon />
-                    )}
-                    {googlePending ? "Redirecting…" : "Continue with Google"}
-                </Button>
-                <div className="flex items-center gap-3 text-xs uppercase tracking-wide text-muted-foreground">
-                    <Separator className="flex-1" />
-                    <span>or</span>
-                    <Separator className="flex-1" />
-                </div>
+                {googleEnabled && (
+                    <>
+                        <Button
+                            type="button"
+                            variant="outline"
+                            className="w-full"
+                            onClick={signInWithGoogle}
+                            disabled={googlePending}
+                        >
+                            {googlePending ? (
+                                <Loader2 className="animate-spin" aria-hidden />
+                            ) : (
+                                <GoogleIcon />
+                            )}
+                            {googlePending ? "Redirecting…" : "Continue with Google"}
+                        </Button>
+                        <div className="flex items-center gap-3 text-xs uppercase tracking-wide text-muted-foreground">
+                            <Separator className="flex-1" />
+                            <span>or</span>
+                            <Separator className="flex-1" />
+                        </div>
+                    </>
+                )}
                 <Form {...emailForm}>
                     <form
                         onSubmit={emailForm.handleSubmit(requestCode)}

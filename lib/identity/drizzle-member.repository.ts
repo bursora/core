@@ -2,6 +2,7 @@ import "server-only";
 
 import type { Db } from "@/lib/db";
 import { requireInsertedRow, schema } from "@/lib/db";
+import { isUuid } from "@/lib/uuid";
 import { and, asc, count, desc, eq, gt, isNull } from "drizzle-orm";
 import type { Invite, MemberRole, WorkspaceMember } from "./member";
 import type {
@@ -33,6 +34,7 @@ export class DrizzleMemberRepository implements MemberRepository {
     }
 
     async findMembership(workspaceId: string, userId: string): Promise<WorkspaceMember | null> {
+        if (!isUuid(workspaceId)) return null;
         const [row] = await this.db
             .select()
             .from(schema.workspaceMembers)
@@ -126,6 +128,8 @@ export class DrizzleMemberRepository implements MemberRepository {
     }
 
     async findOwner(workspaceId: string): Promise<WorkspaceOwner | null> {
+        // BUR-96: pages can resolve billing before the layout rejects an invalid URL.
+        if (!isUuid(workspaceId)) return null;
         // A workspace may have multiple owners. It counts as admin-owned when
         // any owner is a platform admin, so sort an admin owner first; fall back
         // to a stable order (oldest, then id) so the resolved owner never flips

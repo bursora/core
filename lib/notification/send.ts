@@ -20,6 +20,7 @@ import "server-only";
 import { env } from "../env";
 import type { AlertRaisedEvent } from "../event-bus";
 import { formatRelativeTime } from "../format";
+import { assertEmailDomainAcceptsMail } from "./email-domain";
 import { AccountDeletionEmail } from "./emails/account-deletion";
 import { AlertEmail } from "./emails/alert";
 import { InviteEmail } from "./emails/invite";
@@ -48,6 +49,8 @@ export interface SmtpMailerConfig {
     readonly from: string;
     readonly user?: string;
     readonly pass?: string;
+    /** Cloud production checks DNS; private relays and local catchers can skip it. */
+    readonly checkRecipientDomain?: boolean;
 }
 
 /**
@@ -59,6 +62,7 @@ export interface SmtpMailerConfig {
 export class SmtpMailer implements Mailer {
     private readonly transporter: Transporter;
     private readonly from: string;
+    private readonly checkRecipientDomain: boolean;
 
     constructor(config: SmtpMailerConfig) {
         const auth =
@@ -72,9 +76,11 @@ export class SmtpMailer implements Mailer {
             ...(auth ? { auth } : {}),
         });
         this.from = config.from;
+        this.checkRecipientDomain = config.checkRecipientDomain ?? false;
     }
 
     async send(message: MailMessage): Promise<void> {
+        if (this.checkRecipientDomain) await assertEmailDomainAcceptsMail(message.to);
         await this.transporter.sendMail({
             from: this.from,
             to: message.to,
@@ -127,6 +133,7 @@ export function defaultSmtpMailer(opts?: {
         host,
         port,
         from: opts?.from ?? DEFAULT_FROM,
+        checkRecipientDomain: env().IS_CLOUD && process.env.NODE_ENV === "production",
         ...(user.length > 0 && pass.length > 0 ? { user, pass } : {}),
     });
 

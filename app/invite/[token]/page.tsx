@@ -16,7 +16,12 @@ async function acceptAction(
 ): Promise<AcceptInviteState> {
     "use server";
 
-    const token = String(formData.get("token") ?? "");
+    // BUR-96: direct Server Action calls need not contain the form rendered by the UI.
+    if (!(formData instanceof FormData)) return { error: "Invalid invitation request" };
+    const token = formData.get("token");
+    if (typeof token !== "string" || token.length === 0) {
+        return { error: "Invalid invitation request" };
+    }
     const session = await getRequestSession();
     if (!session) redirect(`/login?next=/invite/${token}` as Route);
 

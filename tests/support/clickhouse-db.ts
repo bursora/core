@@ -101,7 +101,7 @@ export async function createTestClickHouse(
 }
 
 /**
- * Apply every `.sql` file in `folder`, lexically ordered, one statement at a
+ * Apply self-host `.sql` files in `folder`, lexically ordered, one statement at a
  * time (the native `command` runs a single statement). A missing folder is a
  * no-op so the harness stays usable before any migrations exist.
  */
@@ -113,7 +113,10 @@ async function applyMigrations(native: NativeClient, folder: string): Promise<vo
         if (error instanceof Error && "code" in error && error.code === "ENOENT") return;
         throw error;
     }
-    for (const file of entries.filter((f) => f.endsWith(".sql")).sort()) {
+    // BUR-96: repository fixtures use fixed dates and must not expire with the
+    // wall clock. Cloud migration selection and retention have dedicated tests.
+    const files = entries.filter((f) => f.endsWith(".sql") && !f.endsWith(".cloud.sql"));
+    for (const file of files.sort()) {
         const sql = await readFile(join(folder, file), "utf8");
         for (const statement of splitStatements(sql)) {
             await native.command({ query: statement });

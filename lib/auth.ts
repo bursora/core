@@ -16,12 +16,15 @@
 import "server-only";
 
 import { db, schema } from "@/lib/db";
+import { isValidEmail } from "@/lib/email";
 import { env } from "@/lib/env";
 import { USER_ROLE } from "@/lib/identity/user-role";
 import { defaultSmtpMailer, sendOtpEmail } from "@/lib/notification";
+import { assertEmailDomainAcceptsMail, EmailDomainError } from "@/lib/notification/email-domain";
 import * as Sentry from "@sentry/nextjs";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
+import { APIError, createAuthMiddleware } from "better-auth/api";
 import { nextCookies } from "better-auth/next-js";
 import { emailOTP } from "better-auth/plugins";
 import { headers } from "next/headers";
@@ -58,6 +61,28 @@ function buildAuth() {
             },
         },
         emailAndPassword: { enabled: false },
+        hooks: {
+            before: createAuthMiddleware(async (ctx) => {
+                if (
+                    ctx.path !== "/email-otp/send-verification-otp" ||
+                    !env().IS_CLOUD ||
+                    process.env.NODE_ENV !== "production"
+                )
+                    return;
+                const email: unknown = ctx.body?.email;
+                if (typeof email !== "string" || !isValidEmail(email)) return;
+                // BUR-96: Better Auth swallows mail callback errors; reject here so
+                // the login form does not claim a code was sent to a blocked domain.
+                try {
+                    await assertEmailDomainAcceptsMail(email);
+                } catch (error: unknown) {
+                    if (error instanceof EmailDomainError) {
+                        throw new APIError("BAD_REQUEST", { message: error.message });
+                    }
+                    throw error;
+                }
+            }),
+        },
         // Google is optional: registered only when the OAuth pair is set.
         // Unset (the self-host default) leaves email codes as the sole flow.
         socialProviders: env().GOOGLE_ENABLED
